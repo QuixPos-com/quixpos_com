@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.js",
     "dev:spa": "vite",
-    "build": "tsc && vite build && vite build --ssr src/entry-server.tsx --outDir dist/server && node ./scripts/prerender.js && node ./scripts/generate-llms-txt.cjs",
+    "build": "tsc && vite build && vite build --ssr src/entry-server.tsx --outDir dist/server && node ./scripts/prerender.js && node ./scripts/generate-llms-txt.cjs && node ./scripts/generate-sitemap.cjs",
     "dist": "rsync -avzP -e \"ssh -p 2234\" dist/ ubuntu@a3.sebgreen.net:/home/ubuntu/src/webtest.quixpos.com/dist/",
     "preview": "vite preview",
     "copy-assets": "node ./scripts/copy-screenshots.cjs"

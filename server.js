@@ -51,6 +51,7 @@ async function startServer() {
       url.startsWith('/favicon') ||
       url.startsWith('/.well-known') ||
       url === '/robots.txt' ||
+      url === '/sitemap.xml' ||
       url === '/llms.txt' ||
       url === '/llms-full.txt' ||
       url === '/ai-catalog.json' ||
