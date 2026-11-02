@@ -1,0 +1,9 @@
+.legal-page { min-height: 100vh; background: var(--paper); color: var(--ink); font-family: var(--font-body); }
+.legal-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; }
+.legal-main { max-width: 760px; margin: 0 auto; padding: 1rem 1.5rem 4rem; line-height: 1.65; }
+.legal-main h1 { font-family: var(--font-display); }
+.legal-main h2 { font-family: var(--font-display); font-size: 1.2rem; margin-top: 2rem; }
+.legal-main a { color: var(--teal-deep); text-decoration: underline; }
+.legal-main ul { padding-left: 1.25rem; }
+.legal-meta { color: var(--ink-soft); font-size: .9rem; }
+

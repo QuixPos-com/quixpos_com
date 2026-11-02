@@ -1,0 +1,26 @@
+{
+  "name": "quixpos-com",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "dev:spa": "vite",
+    "build": "tsc && vite build && vite build --ssr src/entry-server.tsx --outDir dist/server && node ./scripts/prerender.js && node ./scripts/generate-llms-txt.cjs",
+    "dist": "rsync -avzP -e \"ssh -p 2234\" dist/ ubuntu@a3.sebgreen.net:/home/ubuntu/src/webtest.quixpos.com/dist/",
+    "preview": "vite preview",
+    "copy-assets": "node ./scripts/copy-screenshots.cjs"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.5.1",
+    "sharp": "^0.35.4",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  },
+  "dependencies": {
+    "preact": "^10.29.8",
+    "preact-render-to-string": "^6.7.0"
+  }
+}

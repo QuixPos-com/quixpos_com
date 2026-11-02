@@ -1,0 +1,24 @@
+.account-page { min-height: 100vh; background: var(--paper); color: var(--ink); font-family: var(--font-body); }
+.account-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; }
+.account-user { display: flex; align-items: center; gap: .75rem; }
+.account-user img { border-radius: 50%; }
+.account-main { max-width: 640px; margin: 0 auto; padding: 1rem 1.5rem 4rem; }
+.account-main h1 { font-family: var(--font-display); }
+.acc-card { background: var(--mist); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; }
+.acc-card label { display: block; font-weight: 600; margin-bottom: .35rem; }
+.acc-card input { width: 100%; box-sizing: border-box; padding: .65rem .8rem; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+.acc-btn { background: var(--teal); color: #fff; border: 0; border-radius: 10px; padding: .65rem 1.1rem; font: inherit; font-weight: 600; cursor: pointer; }
+.acc-btn:hover:not(:disabled) { background: var(--teal-deep); }
+.acc-btn:disabled { opacity: .5; cursor: not-allowed; }
+.acc-btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.acc-msg { padding: .7rem 1rem; border-radius: 10px; }
+.acc-msg.error { background: #fde8e8; color: #9b1c1c; }
+.acc-msg.ok { background: #def7ec; color: #03543f; }
+.hint { font-size: .9rem; color: var(--ink-soft); }
+.hint.free { color: var(--teal-deep); }
+.hint.taken, .hint.invalid { color: #9b1c1c; }
+.acc-states { list-style: none; padding: 0; display: grid; gap: .4rem; }
+.pill { padding: .1rem .6rem; border-radius: 999px; background: var(--paper-deep); font-size: .85rem; }
+.pill.ready, .pill.running, .pill.active { background: #def7ec; color: #03543f; }
+.pill.pending { background: #fef3c7; color: #92400e; }
+
