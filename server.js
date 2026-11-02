@@ -41,7 +41,7 @@ async function startServer() {
       return
     }
 
-    // Let Vite handle internal / assets / dependencies
+    // Let Vite handle internal / assets / dependencies / static manifests
     if (
       url.startsWith('/@') ||
       url.startsWith('/src') ||
@@ -49,6 +49,11 @@ async function startServer() {
       url.startsWith('/public') ||
       url.startsWith('/docs/images') ||
       url.startsWith('/favicon') ||
+      url.startsWith('/.well-known') ||
+      url === '/robots.txt' ||
+      url === '/llms.txt' ||
+      url === '/llms-full.txt' ||
+      url === '/ai-catalog.json' ||
       (/\.[a-zA-Z0-9]+$/.test(url) && !url.endsWith('.html'))
     ) {
       vite.middlewares(req, res, () => {

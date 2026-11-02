@@ -1,10 +1,12 @@
 /**
  * generate-llms-txt.cjs
  *
- * Generates dist/llms.txt from src/docs/content/**
+ * Generates llms.txt and llms-full.txt from src/docs/content/**
  * following the llms.txt convention (https://llmstxt.org/).
  *
- * Run after `vite build`, e.g.:
+ * Writes to dist/ (for production builds) and public/ (for dev/preview).
+ *
+ * Run via:
  *   node ./scripts/generate-llms-txt.cjs
  */
 
@@ -17,7 +19,8 @@ const path = require('path');
 
 const ROOT        = path.resolve(__dirname, '..');
 const CONTENT_DIR = path.join(ROOT, 'src', 'docs', 'content');
-const OUT_FILE    = path.join(ROOT, 'dist', 'llms.txt');
+const DIST_DIR    = path.join(ROOT, 'dist');
+const PUBLIC_DIR  = path.join(ROOT, 'public');
 
 const SITE_TITLE       = 'QuixPOS Dokumentation';
 const SITE_DESCRIPTION =
@@ -51,7 +54,8 @@ function parseFrontmatter(raw) {
   };
 }
 
-function sortKey(name) {
+function sortKey(item) {
+  const name = typeof item === 'string' ? item : item?.name ?? '';
   const m = name.match(/^(\d+)-/);
   return m ? parseInt(m[1], 10) : 9999;
 }
@@ -80,6 +84,25 @@ function stripMarkdown(md) {
     .trim();
 }
 
+function writeToTargets(filename, content) {
+  const targets = [
+    path.join(PUBLIC_DIR, filename),
+  ];
+  if (fs.existsSync(DIST_DIR)) {
+    targets.push(path.join(DIST_DIR, filename));
+  }
+
+  for (const target of targets) {
+    const dir = path.dirname(target);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(target, content, 'utf8');
+    const kb = (fs.statSync(target).size / 1024).toFixed(1);
+    console.log(`${filename} written to ${target} (${kb} KB)`);
+  }
+}
+
 // -- Build
 
 function build() {
@@ -98,52 +121,81 @@ function build() {
     const mdFiles = fs
       .readdirSync(folderPath)
       .filter((f) => f.endsWith('.md'))
-      .sort((a, b) => sortKey(a) - sortKey(b));
+      .sort((a, b) => sortKey(a.name) - sortKey(b.name));
 
     const pages = [];
     for (const mdFile of mdFiles) {
       const raw = stripBom(fs.readFileSync(path.join(folderPath, mdFile), 'utf8'));
-      const { title, description, body } = parseFrontmatter(raw);
-      pages.push({ title, description, body });
+      const { id, title, description, body } = parseFrontmatter(raw);
+      pages.push({ id, title, description, body });
     }
 
     if (pages.length === 0) continue;
     sections.push({ catTitle: catMeta.title, pages });
   }
 
-  const lines = [];
-  lines.push('# ' + SITE_TITLE);
-  lines.push('');
-  lines.push('> ' + SITE_DESCRIPTION);
-  lines.push('');
-  lines.push('Source: ' + SITE_URL);
-  lines.push('');
-  lines.push('---');
-  lines.push('');
+  // 1. Generate llms.txt (Standard curated index with links)
+  const indexLines = [];
+  indexLines.push('# ' + SITE_TITLE);
+  indexLines.push('');
+  indexLines.push('> ' + SITE_DESCRIPTION);
+  indexLines.push('');
+  indexLines.push('Source: ' + SITE_URL + '/docs');
+  indexLines.push('');
+  indexLines.push('## Übersicht & Einstieg');
+  indexLines.push('');
+  indexLines.push(`- [Startseite](${SITE_URL}/): QuixPOS – Das Kassensystem für den Ladenalltag.`);
+  indexLines.push(`- [Dokumentation](${SITE_URL}/docs): Handbücher, Anleitungen und Schnellstart.`);
+  indexLines.push('');
 
   for (const { catTitle, pages } of sections) {
-    lines.push('## ' + catTitle);
-    lines.push('');
-    for (const { title, description, body } of pages) {
-      lines.push('### ' + title);
+    indexLines.push('## ' + catTitle);
+    indexLines.push('');
+    for (const { id, title, description } of pages) {
+      const url = `${SITE_URL}/docs/${id}`;
+      const desc = description ? `: ${description}` : '';
+      indexLines.push(`- [${title}](${url})${desc}`);
+    }
+    indexLines.push('');
+  }
+
+  indexLines.push('## Optional');
+  indexLines.push('');
+  indexLines.push(`- [Vollständige Dokumentation](${SITE_URL}/llms-full.txt): Der komplette Text aller Dokumentationsseiten zusammengefasst.`);
+  indexLines.push('');
+
+  writeToTargets('llms.txt', indexLines.join('\n'));
+
+  // 2. Generate llms-full.txt (Full content for in-depth retrieval)
+  const fullLines = [];
+  fullLines.push('# ' + SITE_TITLE + ' (Volltext)');
+  fullLines.push('');
+  fullLines.push('> ' + SITE_DESCRIPTION);
+  fullLines.push('');
+  fullLines.push('Source: ' + SITE_URL + '/docs');
+  fullLines.push('');
+  fullLines.push('---');
+  fullLines.push('');
+
+  for (const { catTitle, pages } of sections) {
+    fullLines.push('## ' + catTitle);
+    fullLines.push('');
+    for (const { id, title, description, body } of pages) {
+      const url = `${SITE_URL}/docs/${id}`;
+      fullLines.push(`### [${title}](${url})`);
       if (description) {
-        lines.push('');
-        lines.push(description);
+        fullLines.push('');
+        fullLines.push(description);
       }
-      lines.push('');
-      lines.push(stripMarkdown(body));
-      lines.push('');
+      fullLines.push('');
+      fullLines.push(stripMarkdown(body));
+      fullLines.push('');
+      fullLines.push('---');
+      fullLines.push('');
     }
   }
 
-  const distDir = path.dirname(OUT_FILE);
-  if (!fs.existsSync(distDir)) {
-    fs.mkdirSync(distDir, { recursive: true });
-  }
-
-  fs.writeFileSync(OUT_FILE, lines.join('\n'), 'utf8');
-  const kb = (fs.statSync(OUT_FILE).size / 1024).toFixed(1);
-  console.log('llms.txt written to ' + OUT_FILE + ' (' + kb + ' KB)');
+  writeToTargets('llms-full.txt', fullLines.join('\n'));
 }
 
 build();

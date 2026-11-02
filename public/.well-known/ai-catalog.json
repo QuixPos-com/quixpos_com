@@ -1,0 +1,20 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "QuixPOS",
+    "documentationUrl": "https://quixpos.com/docs"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:quixpos.com:docs:documentation",
+      "displayName": "QuixPOS Dokumentation",
+      "type": "text/plain",
+      "url": "https://quixpos.com/llms.txt",
+      "description": "Maschinenlesbare Dokumentation und Konfigurationsreferenz f\u00fcr das QuixPOS Kassensystem.",
+      "representativeQueries": [
+        "QuixPOS Dokumentation und Handbuch",
+        "QuixPOS JTL-Wawi Kassenanbindung Konfiguration"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,634 @@
+# QuixPOS Dokumentation (Volltext)
+
+> Vollständige Dokumentation für QuixPOS – das modulare Kassensystem für JTL-Wawi. Enthält Installationsanleitungen, Konfigurationsreferenzen und Bedienungshandbücher.
+
+Source: https://quixpos.com/docs
+
+---
+
+## Installation & Downloads
+
+### [Systemübersicht](https://quixpos.com/docs/systemuebersicht)
+
+Überblick über alle Komponenten des QuixPOS-Systems – von der Datenbank bis zum Drucker.
+
+Übersicht
+
+QuixPOS kann seine Daten aus einem JTL Backend beziehen oder aus einer eigenen Artikel- und Auftragsverwaltung.
+
+Architektur auf einen Blick
+
+Komponenten im Detail
+
+🗄️ Microsoft SQL Server
+
+Das Fundament der Artikelverwaltung ist ein Microsoft SQL Server mit JTL-Wawi oder QuixPOS Datenbank.
+
+🔄 QuixPOS2JTL oder QuixSYNC – Dienst
+
+QuixPOS2JTL ist ein Windows-Dienst (alternativ als Linux-Node.js-Prozess), der als Brücke zwischen dem SQL Server und den Kassen-Clients fungiert.
+
+Er stellt eine REST-API bereit, über die QuixPOS folgende Daten synchronisiert:
+
+| Datenkategorie | Richtung | Beschreibung |
+|
+| Artikel | SQL → Kasse | Produktnummern, Bezeichnungen, Barcodes |
+| Preise | SQL → Kasse | Kunden- und Standardpreise |
+| Bilder | SQL → Kasse | Artikelbilder für die Kassenoberfläche |
+| Kunden | SQL → Kasse | Kundenstamm für Kundenbindung & Rechnungen |
+| Bestandsbuchungen | Kasse → SQL | Abgeschlossene Kassiervorgänge |
+| Bons / Tagesabschlüsse | Kasse → Email (Sync–Dienst unabhängig) | Bon-Daten für das Kassenbuch |
+
+💳 SumUp – Kartenzahlung
+
+QuixPOS ist direkt mit der SumUp API integriert und unterstützt folgende gängigen SumUp-Terminals:
+
+- SumUp Air – Bluetooth / WLAN
+- SumUp Solo Lite – Bluetooth / WLAN
+- SumUp Solo – Bluetooth / WLAN oder CloudSDK (dafür muss die Kasse und das Solo für sich mit dem Internet verbunden sein, ohne das beide Geräte direkt verbunden sind)
+
+Der Zahlungsvorgang läuft direkt aus der Kassenoberfläche heraus ab. Die SumUp-Integration erfordert einen SumUp-Händler-Account und wird in den QuixPOS-Einstellungen mit dem API-Key verknüpft. QuixPOS Web funktionier nur mit SumUp Solo / CloudSDK.
+
+🔐 Technische Sicherheitseinrichtung
+
+In Deutschland ist jede Kasse gesetzlich verpflichtet eine Technische Sicherheitseinrichtung (TSE) zu verwenden. QuixPOS unterstützt TSE Module auf SD Karte oder USB Stick.
+
+🖨️ Epson Bon-Drucker
+
+QuixPOS unterstützt Epson ESC/POS-kompatible Thermo-Bondrucker (z. B. Epson TM-T30iii, TM-T88-Serie) über Netzwerk (LAN/WLAN)
+
+---
+
+### [Downloads & Releases](https://quixpos.com/docs/downloads-releases)
+
+Offizielle Releases herunterladen: Android APK, Windows Installer und Web-App.
+
+Downloads & GitHub Releases
+
+Hier findest du alle aktuellen Installationspakete, Release-Builds und Direktdownloads für QuixPOS und QuixPOS2JTL.
+
+Offizielle GitHub Release-Links
+
+| Paket | Plattform | Beschreibung | Download-Link |
+|
+| QuixPOS Android App | Android (ab 11) | APK-Paket für POS-Tablets, Handhelds & Smartphones | QuixPOS APK |
+| QuixPOS2JTL Windows Setup | Windows 10/11 / Server | Standalone Installer (.exe) mit Windows-Dienst & Tray-App | QuixPOS2JTL Installer Download |
+| QuixPOS Web Kasse | Jeder Browser | Sofort im Browser kassieren ohne Installation | pos.quixpos.com |
+| CloudTSE | Linux | Verbindet TSE SD Karte oder USB Stick | CloudTSE GitHub |
+
+> [!TIP]
+> Die Windows-Installationspakete von QuixPOS2JTL werden automatisiert über GitHub Actions gebaut. Alle Downloads können auf Integrität geprüft werden: GitHub Attestations
+
+QuixPOS2JTL Video-Anleitung
+
+Schau dir die Schritt-für-Schritt-Videoanleitung zur Einrichtung auf YouTube an:
+
+[](https://youtu.be/leFwsiL4jsc)
+(Klicke auf das Bild, um das YouTube-Video zu öffnen)
+
+Systemanforderungen
+
+- Android Kasse: Android 11+ , 9" oder mehr empfohlen
+- Web-Anwendung: Google Chrome empfohlen
+- QuixPOS2JTL Sync Server: Windows 10 / 11 / Windows Server 2016+ oder Linux
+- Drucker: ESC/POS-kompatible Bon-Drucker
+- Kartenterminals: SumUp Air, Solo, Lite oder OPI-kompatible Terminals
+
+---
+
+## QuixPOS2JTL
+
+### [Überblick](https://quixpos.com/docs/quixpos2jtl-uebersicht)
+
+Wie QuixPOS2JTL die Kasse mit der JTL-Warenwirtschaft verbindet.
+
+QuixPOS2JTL - Überblick
+
+QuixPOS2JTL ist das Verbindungsglied zwischen deinem QuixPOS Kassensystem und der JTL-Wawi Datenbank.
+
+Nach dem auswählen der Datenbank müssen JTL-Mandant, Verkaufskanal und Benutzer ausgewählt werden.
+
+QuixPOS2JTL kann als Windows Service installiert werden.
+
+Funktionen
+
+- kompatibel zu JTL-POS
+- Automatische Synchronisation:
+  - Artikeldaten, Preise, Barcodes und Kategorieen direkt aus MSSQL.
+  - Produktbilder werden on-the-fly skaliert.
+  - Kassenbelege werden sofort in JTL verbucht.
+  - Bestände werden in Echtzeit abgeglichen.
+- Flexible Betriebsmodi:
+  - System Tray App: Schlanker Betrieb im Hintergrund der Windows-Taskleiste.
+  - Windows-Hintergrunddienst (LocalSystem): Dauerhafter Systemdienst für den Produktivbetrieb vor dem Login.
+  - Linux / Docker CLI: Headless-Betrieb auf POS-Servern für automatisierte Umgebungen.
+
+---
+
+### [Konfiguration & Pairing](https://quixpos.com/docs/quixpos2jtl-konfiguration)
+
+Die 7 Einstellungs-Tabs in QuixPOS2JTL: Datenbank, Netzwerk, Zertifikate und Kassen-Pairing.
+
+Konfiguration & Kassen-Pairing
+
+Klicke auf das QuixPOS2JTL Tray-Symbol um den Konfigurationsdialog zu öffnen.
+
+1. Database (MSSQL)
+- Host / Server: IP oder Rechnername des Microsoft SQL Servers (z.B. localhost oder 192.168.1.50).
+- Instanz: Optionaler Instanzname (z.B. JTLWAWI).
+- Datenbank: Name der JTL-Datenbank (Standard: eazybusiness).
+- Benutzer & Passwort: SQL-Benutzerdaten (z.B. sa oder dedizierter POS-User).
+
+2. Shop & Filiale
+- Auswahl der JTL-Filiale und des Mandanten.
+
+3. Network & Ports
+- HTTP Port: Standard: 8087
+- HTTPS Port: Standard: 4447 (empfohlen für verschlüsselte POS-Kommunikation)
+
+4. Certificate (TLS/SSL)
+- Erstellung selbstsignierter SSL-Zertifikate oder Import bestehender Zertifikate.
+
+5. Pairing (Kassen-Kopplung)
+- PIN-Generierung: Erzeuge einen 6-stelligen Pairing-PIN für neue Kassen.
+- Autorisierte Geräte: Liste aller gekoppelten Kassen
+
+6. Service Manager
+- Statusanzeige des Hintergrunddienstes (Läuft / Gestoppt).
+- Starten, Stoppen, Installieren und Deinstallieren des Windows-Dienstes.
+
+7. Live Logs
+
+---
+
+## Grundlagen & Schnellstart
+
+### [Kassenoberfläche & Schnelleinstieg](https://quixpos.com/docs/kassenuebersicht)
+
+Aufbau der Kassenansicht, Bon-Ticket, Statusleiste und Schnellwahltasten.
+
+Kassenoberfläche & Schnelleinstieg
+
+QuixPOS bietet eine aufgeräumte, touchoptimierte Kassenoberfläche für den effektiven Verkauf am Tresen.
+
+Aufbau des Kassenbildschirms
+
+Die Oberfläche gliedert sich in drei zentrale Arbeitsbereiche:
+
+1. Statusleiste:
+   - Status-Indikatoren: für TSE, Drucker, Sync, Backups, Tagesabschluss und EC-Terminal.
+2. Bonbereich (links):
+   - Auflistung aller erfassten Positionen mit Menge, Einzelpreis, Steuersatz und Rabatt.
+   - Tasten für Parken, Storno und Zahlung.
+3. Katalogtasten (rechts):
+   - Übersichtliche Kategorie und Artikel-Kacheln
+   - Suchfeld
+
+> [!TIP]
+> Die Kachelgröße lässt sich in den Einstellungen anpassen
+
+Schnelleinstieg in den Kassiervorgang
+
+1. Artikel über die Kacheln anklicken/antippen oder Barcode einscannen.
+2. Bei Bedarf Dialog für Menge oder Rabatt per Klick/Tipp auf der Bonzeile aufrufen.
+3. Auf [kbd:Bar] oder [kbd:Karte] tippen, um den Beleg abzuschließen.
+4. Der Bon wird automatisch signiert (KassenSichV TSE) und per Tipp auf den Bon auf dem Bondrucker ausgegeben.
+
+---
+
+### [Tastatur, Scanner & Touch](https://quixpos.com/docs/bedienung-navigation)
+
+Effizientes Arbeiten an der Kasse per Tastatureingabe, Barcodescanner und Touchscreen.
+
+Tastatur, Scanner & Bedienung
+
+QuixPOS ist so konzipiert, dass Kassiervorgänge blitzschnell per Tastatur, Barcode-Handscanner oder Touchscreen durchgeführt werden können – ohne zeitraubendes Klicken oder manuelles Fokussieren von Eingabefeldern.
+
+Tastatureingabe & Artikelsuche
+
+Beim Arbeiten mit der Tastatur muss das Suchfeld nicht erst mit der Maus angeklickt werden:
+
+- Automatische Sucheingabe (Type-to-Search): Sobald Zahlen oder Buchstaben auf der Tastatur eingetippt werden, landen diese automatisch im Artikelsuchfeld.
+- [kbd:Enter] – Artikel übernehmen & Text markieren: Liefert die Suche genau ein eindeutiges Ergebnis, fügt ein Druck auf [kbd:Enter] diesen Artikel direkt zum Kassenbeleg hinzu. Gleichzeitig markiert [kbd:Enter] den gesamten Text im Suchfeld vollständig. Jeder darauffolgende Tastendruck überschreibt den bisherigen Inhalt sofort und beginnt einen neuen Suchbegriff, ohne dass das Feld manuell gelöscht werden muss.
+- [kbd:ESC] – Sucheingabe schließen: Durch Drücken der Taste [kbd:ESC] wird die Sucheingabe beendet und das Suchfeld geschlossen bzw. geleert.
+
+| Taste / Eingabe | Funktion | Beschreibung |
+|
+| [kbd:A]–[kbd:Z] / [kbd:0]–[kbd:9] | Automatische Suche | Eingaben werden ohne vorheriges Anklicken sofort in das Artikelsuchfeld übernommen |
+| [kbd:Enter] | Übernehmen & Text markieren | Übernimmt den Artikel bei eindeutigem Treffer und markiert das Textfeld vollständig für die nächste Sucheingabe |
+| [kbd:ESC] | Suche schließen | Schließt das Sucheingabefeld und setzt die Suche zurück |
+
+Barcodescanner
+
+Über USB oder Bluetooth angebundene Barcodescanner fügen sich nahtlos in diesen Ablauf ein:
+
+- Direkte Erfassung: Auch der Barcodescanner füllt direkt das Artikelsuchfeld mit dem erfassten Code.
+- Automatisches Bonieren: Ist der gescannte Code eindeutig, wird der zugehörige Artikel sofort automatisch auf den Beleg gebucht (Handscanner senden nach dem Barcode standardmäßig ein [kbd:Enter]-Signal).
+- Unterbrechungsfreier Scanablauf: Weil [kbd:Enter] den Suchfeldtext automatisch vollständig markiert, überschreibt jeder nachfolgende Barcodescan (oder Tastendruck) den vorherigen Code unmittelbar.
+
+> [!TIP]
+> Dadurch lassen sich mehrere Artikel mit Barcode hintereinander in Sekundenschnelle erfassen, ohne dass der Bildschirm oder die Maus berührt werden müssen, dennoch bleibt der gescannte Barcode im Textfeld sichtbar.
+
+Touchscreen- & Mausbedienung
+
+Alternativ oder ergänzend zur Tastatur und zum Scanner lässt sich QuixPOS vollständig per Touch bedienen.
+
+---
+
+## Kassieren & Belegabwicklung
+
+### [Barzahlung & Wechselgeldrechner](https://quixpos.com/docs/zahlung-bar)
+
+Barzahlungen entgegennehmen, passende Beträge wählen und Wechselgeld berechnen.
+
+Barzahlung & Wechselgeldrechner
+
+Beim Klick oder Tipp auf Bar öffnet sich der Barzahlungs-Dialog.
+
+Funktionen des Barzahlungsdialogs
+
+- Nummerisches Tastenfeld: Direkte Eingabe beliebiger Beträge über das integrierte Tastenfeld.
+- Automatische Wechselgeldberechnung: QuixPOS berechnet das fällige Rückgeld.
+- Nach Bestätigung wird die Transaktion an die TSE übergeben und ein KassenSichV-konformer Bon generiert.
+
+> [!TIP]
+> Der auf dem Kassenbeleg aufgedruckte TSE-QR-Code lässt sich mit der App fiskalcheck scannen und verifizieren.
+
+---
+
+### [Kartenzahlung & SumUp Terminals](https://quixpos.com/docs/zahlung-karte)
+
+Kartenzahlung mit SumUp Air, Solo oder stationären O.P.I.-Terminals.
+
+Kartenzahlung & Terminals
+
+QuixPOS unterstützt die nahtlose Integration moderner Kartenterminals wie SumUp (Air, Solo, Lite) sowie standardisierte O.P.I.-Zahlungsterminals.
+
+Ablauf einer Kartenzahlung
+
+1. Im Kassenbeleg auf Karte tippen.
+2. Der Dialog sendet den exakten Zahlungsbetrag an das gekoppelte Terminal.
+3. Der Kunde hält die Girokarte, Kreditkarte oder das Smartphone (Apple Pay / Google Pay) an das Terminal.
+4. Nach erfolgreicher PIN- oder Kontaktlos-Autorisierung meldet das Terminal die Bestätigung an QuixPOS zurück.
+5. Der Beleg wird automatisch abgeschlossen und signiert.
+
+> [!IMPORTANT]
+> Sollte eine Kartenzahlung vom Kunden abgebrochen werden oder das Terminal nicht erreichbar sein, kann der Vorgang über Abbrechen sicher gestoppt werden, ohne den aktuellen Warenkorb zu verlieren.
+
+---
+
+### [Belege parken & Zwischenspeichern](https://quixpos.com/docs/beleg-parken)
+
+Vorgänge für Kundenwechsel oder Tische zwischenspeichern und später fortführen.
+
+Belege parken & Zwischenspeichern
+
+Wenn ein Kunde noch weitere Artikel holen möchte oder eine andere Kassenkraft einen Kunden vorziehen muss, kann der Beleg einfach geparkt werden.
+
+Beleg parken
+
+- Klicke oder tippe im Ticket-Bereich auf Beleg Parken.
+- Der Beleg wird mit Zeitstempel, Positionen und Summe in der Parkliste gesichert.
+- Die Kasse ist sofort wieder leer und bereit für den nächsten Kunden.
+
+Geparkten Beleg wieder aufrufen
+
+1. Klicke auf die Schaltfläche Geparkte Belege in der Menüleiste.
+2. Wähle den gewünschten Beleg aus der Liste aus.
+3. Der Beleg wird 1:1 in das aktive Kassen-Ticket geladen und kann weiter bearbeitet oder kassiert werden.
+
+---
+
+### [Storno, Mengen & Positionsbearbeitung](https://quixpos.com/docs/storno-korrekturen)
+
+Mengen anpassen, Rabatte vergeben, Steuersätze korrigieren oder Positionen stornieren.
+
+Storno & Positionskorrekturen
+
+Jede erfasste Position im Kassen-Ticket kann vor dem Abschluss flexibel angepasst oder storniert werden.
+
+Bearbeitungsmöglichkeiten im Positionsdialog
+
+Tippe auf eine beliebige Zeile im Kassen-Ticket, um den Positionsdialog zu öffnen:
+
+- Menge anpassen: Schnelle Erhöhung oder Verringerung über Plus/Minus-Tasten oder Eingabe einer beliebigen Stückzahl.
+- Einzelpreis überschreiben: Manuelle Preisanpassung (z.B. für beschädigte Ware oder Aktionspreise).
+- Positions-Rabatt: Rabatt in Prozent (z.B. 10 %) oder als Festbetrag (z.B. 5,00 €).
+- Steuersatz ändern: Umschalten zwischen dem regulären Steuersatz (19 %), ermäßigten Satz (7 %) oder steuerfrei (0 %).
+- Position stornieren: Entfernt die Position aus dem Bon.
+
+> [!NOTE]
+> Alle Stornierungen und Rabatte werden gemäß KassenSichV lückenlos im TSE-Journal protokolliert.
+
+---
+
+### [Retouren & Gutschriften](https://quixpos.com/docs/retouren-gutschriften)
+
+Warenrücknahmen erfassen, Belegbezug herstellen und Beträge erstatten.
+
+Retouren & Gutschriften
+
+QuixPOS bietet einen geführten Workflow für Warenrücknahmen und Umtauschvorgänge.
+
+Ablauf einer Retoure
+
+1. Klicke in der Kasse auf das Menü und wähle Retoure erfassen.
+2. Scanne den Barcode des Original-Kassenbelegs oder gib die Belegnummer ein.
+3. Wähle die Artikel aus, die der Kunde zurückgibt.
+4. QuixPOS erstellt eine negative Position (Gutschrift).
+5. Wähle die Erstattungsmethode (Barauszahlung, Rückbuchung oder Verrechnung mit neuen Artikeln).
+
+> [!IMPORTANT]
+> Der erzeugte Rückgabebeleg enthält automatisch die Referenz auf die ursprüngliche Belegnummer und TSE-Transaktions-ID.
+
+---
+
+### [Belegverwaltung & Nachdruck](https://quixpos.com/docs/belegsuche-historie)
+
+Historie aller Kassenbelege durchsuchen, Belege nachdrucken oder Kunden zuweisen.
+
+Belegverwaltung & Historie
+
+In der Belegverwaltung können vergangene Verkäufe eingesehen, gefiltert und erneut gedruckt werden.
+
+Funktionen der Belegliste
+
+- Filter nach Datum & Kasse: Schnelle Suche nach heutigen, gestrigen oder monatlichen Verkäufen.
+- Suche nach Belegnummer & Betrag: Gezieltes Auffinden von Belegen.
+- Belegdetails: Vollständige Anzeige der Positionen, Zahlungsarten und TSE-Signaturdaten.
+- Nachdruck: Beleg als Kopie erneut auf dem Bon-Drucker ausgeben.
+- Kunde zuweisen: Nachträgliche Verknüpfung mit einem Kundenkonto.
+
+---
+
+## Artikel & Katalog
+
+### [Katalogsuche & Kacheln](https://quixpos.com/docs/katalog-suche)
+
+Produktsortiment durchsuchen, Kategorien filtern und Kachellayouts anpassen.
+
+Katalogsuche & Artikelkacheln
+
+Der Katalogbereich bietet schnellen Zugriff auf das gesamte Sortiment deines Ladens.
+
+Suche & Filterung
+
+- Live-Volltextsuche: Tippe im Suchfeld Artikelnamen, EANs oder Artikelnummern ein. Die Liste aktualisiert sich mit jedem Tastendruck.
+- Direkte Übernahme & Weitersuchen: Bei eindeutigem Treffer übernimmt ein Druck auf [kbd:Enter] den Artikel in den Beleg und markiert das Suchfeld komplett, sodass die nächste Eingabe sofort eine neue Suche startet.
+- Kategorie-Filter: Filterung nach Warengruppen (z.B. Getränke, Snacks, Bekleidung).
+- Kachelgrößen: Wähle in den Einstellungen zwischen Kompakt (viele Artikel pro Ansicht) und Groß (optimiert für Touch-Bedienung).
+
+---
+
+### [Varianten- & Attributauswahl](https://quixpos.com/docs/artikel-varianten)
+
+Produkte mit Größen, Farben, Optionen oder individuellen Attributen erfassen.
+
+Varianten & Attribute
+
+Für Artikel mit mehreren Ausprägungen (z.B. Größen S/M/L oder Geschmacksrichtungen) öffnet QuixPOS automatisch den Varianten-Dialog.
+
+Varianten auswählen
+
+1. Klicke auf den Hauptartikel in der Kachelansicht.
+2. Der Varianten-Picker zeigt alle verfügbaren Kombinationen mit Preisen und Beständen an.
+3. Wähle die gewünschte Variante aus.
+4. Der Artikel wird mit der gewählten Variante direkt in das Kassen-Ticket übernommen.
+
+---
+
+### [Freie Positionen & Sonderpreise](https://quixpos.com/docs/freie-positionen)
+
+Manuelle Bon-Einträge ohne vorherigen Artikelstamm bonieren.
+
+Freie Positionen & Sonderverkäufe
+
+Für Spontankäufe, Dienstleistungen oder Artikel, die noch nicht im Sortiment gepflegt sind, können freie Positionen angelegt werden.
+
+Freie Position erfassen
+
+1. Klicke oder tippe im Kassenmenü auf Freie Position.
+2. Gib die Artikelbezeichnung ein (z.B. „Änderungsschneiderei" oder „Sonderposten").
+3. Trage den Brutto-Preis und den passenden Steuersatz (19 %, 7 %, 0 %) ein.
+4. Klicke auf Hinzufügen.
+
+---
+
+## Einstellungen & Konfiguration
+
+### [Stammdaten & Filialangaben](https://quixpos.com/docs/einstellungen-stammdaten)
+
+Kassen-ID, Firmenanschrift, Steuernummern und Bon-Texte konfigurieren.
+
+Stammdaten & Filialangaben
+
+In den Stammdaten werden die grundlegenden Identifikationsdaten der Kassenstation und des Unternehmens hinterlegt.
+
+Wichtige Konfigurationsfelder
+
+| Feld | Typ | Beschreibung |
+|
+| Kassen-ID (cashregisterid) | Text | Eindeutige Kennung dieser Kasse (z.B. KASSE-01). Pflichtfeld für TSE! |
+| Firmenname | Text | Offizieller Unternehmensname für den Kassenbeleg. |
+| Straße / Hausnummer | Text | Anschrift des Ladengeschäfts. |
+| PLZ / Ort | Text | Postleitzahl und Stadt. |
+| Steuernummer / USt-IdNr. | Text | Steuerliche Identifikationsnummer (gesetzliche Pflichtangabe). |
+| Kopfzeile (Bon) | Mehrzeilig | Individuelle Begrüßung oder Hinweise auf dem Bon. |
+| Fußzeile (Bon) | Mehrzeilig | Dankestext, Öffnungszeiten oder Website-Link. |
+
+> [!IMPORTANT]
+> Die Kassen-ID muss innerhalb deines Unternehmens eindeutig sein und darf nach der TSE-Initialisierung nicht mehr beliebig geändert werden.
+
+---
+
+### [TSE & Fiskalisierung (KassenSichV)](https://quixpos.com/docs/einstellungen-tse)
+
+Zertifizierte Technische Sicherheitseinrichtung (USB / SD / Cloud TSE) einrichten.
+
+TSE & KassenSichV Fiskalisierung
+
+QuixPOS erfüllt alle Vorgaben der deutschen Kassensicherungsverordnung (KassenSichV) durch Unterstützung zertifizierter TSE-Module (Technische Sicherheitseinrichtung).
+
+Konfigurationsparameter
+
+- TSE-Server Host (tseserverhost): IP-Adresse oder Hostname des TSE-Dienstes (z.B. 127.0.0.1 oder lokales Netzwerk).
+- TSE-Server Port (tseserverport): Kommunikationsport des TSE-Dienstes (Standard: 8000).
+- TSE Bind PIN (tsebindpin): Sicherheits-PIN zur Koppelung der Kassen-ID mit der TSE.
+- TSE Auth Token (tseauthtoken): Verschlüsselter Authentifizierungsschlüssel.
+
+TSE Status prüfen
+
+Über den Statusdialog kann jederzeit die ordnungsgemäße Funktion der TSE überprüft werden:
+- Seriennummer der TSE
+- Zertifikatsgültigkeit & Ablaufdatum
+- Anzahl signierter Transaktionen
+- Aktueller Selbsttest-Status
+
+> [!NOTE]
+> Jeder Kassenbeleg enthält automatisch den gesetzlich vorgeschriebenen QR-Code mit der kryptografischen Signatur, dem Transaktionszähler und dem Zeitstempel der TSE. Dieser TSE-QR-Code auf dem Beleg kann beispielsweise mit der App fiskalcheck verifiziert werden.
+
+---
+
+### [Bon-Drucker & Druckvorlagen](https://quixpos.com/docs/einstellungen-drucker)
+
+ESC/POS Netzwerk- und USB-Drucker anbinden und Bon-Layouts gestalten.
+
+Bon-Drucker & Druckvorlagen
+
+QuixPOS steuert handelsübliche Thermobondrucker über das standardisierte ESC/POS-Protokoll an (z.B. Epson TM-T88, TM-m30, Star Micronics, Munbyn).
+
+Drucker-Konfiguration
+
+- Drucker-IP (printerip): IP-Adresse des Netzwerk- oder WLAN-Bondruckers im lokalen Netzwerk (z.B. 192.168.1.150).
+- Port: Standardmäßig Port 9100 (RAW Print Port).
+- Automatischer Bon-Schnitt: Papier nach Belegabschluss automatisch schneiden.
+- Kassenschublade öffnen: Impuls zum Öffnen der Kassenschublade bei Barzahlung senden.
+
+Vorlagen-Anpassung
+
+Die Vorlagen für Kassenbelege, Stornobelege und den Tagesabschluss (Z-Bon) können flexibel angepasst und in der Live-Vorschau kontrolliert werden.
+
+---
+
+### [Kartenterminal & SumUp Anbindung](https://quixpos.com/docs/einstellungen-sumup)
+
+SumUp Air / Solo Kartenterminal mit API-Schlüsseln und Merchant-Code koppeln.
+
+Kartenterminal & SumUp Anbindung
+
+Verbinde dein SumUp-Konto direkt mit QuixPOS für vollautomatische Kartenzahlungen ohne manuelle Betragseingabe am Terminal.
+
+Einrichtungs-Schritte
+
+1. Merchant Code (sumupmerchantcode): Trage deinen SumUp Händler-Code ein.
+2. API Key (sumupapikey): Generiere im SumUp Dashboard einen API-Schlüssel und hinterlege ihn hier.
+3. Affiliate Key (sumupaffiliatekey): Optionaler Partnerschlüssel.
+4. Terminal koppeln: Klicke auf „Terminals suchen", um dein SumUp Air (Bluetooth) oder Solo (WLAN/Cloud) zu verbinden.
+
+> [!TIP]
+> Die Beträge werden centgenau übertragen. Tippfehler bei der Betragseingabe am Kartenterminal gehören damit der Vergangenheit an.
+
+---
+
+### [Synchronisation & JTL-Anbindung](https://quixpos.com/docs/einstellungen-sync)
+
+Automatische Synchronisation mit der Warenwirtschaft (JTL-Wawi / Cloud-Backend).
+
+Synchronisation & Backend-Anbindung
+
+QuixPOS synchronisiert Artikel, Bestände, Preise und abgeschlossene Verkäufe automatisch mit deiner Warenwirtschaft oder dem QuixPOS Cloud-Backend.
+
+Verbindungsparameter
+
+- Sync Host (synchost): Serveradresse oder Domain des Sync-Dienstes.
+- Sync Port (syncport): Port für die gesicherte Datenübertragung (HTTPS / WSS).
+- Sync PIN / Auth-Token (syncpin, syncauthtoken): Autorisierungsdaten der Kassenstation.
+- SSL-Zertifikat: Verschlüsselte TLS-Zertifikate zur Absicherung der Kommunikation.
+
+Offline-Fähigkeit
+
+> [!IMPORTANT]
+> Sollte die Internetverbindung unterbrochen sein, bleibt QuixPOS voll einsatzbereit. Alle Verkäufe und TSE-Signaturen werden lokal zwischengespeichert und automatisch synchronisiert, sobald die Verbindung wiederhergestellt ist.
+
+---
+
+### [E-Mail & Digitaler Belegversand](https://quixpos.com/docs/einstellungen-email)
+
+SMTP-Server konfigurieren für den umweltfreundlichen, digitalen Bon-Versand.
+
+E-Mail & Digitaler Belegversand
+
+Biete deinen Kunden an, den Kassenbon papierlos per E-Mail zu erhalten.
+
+Konfiguration des SMTP-Servers
+
+- SMTP Server: Hostname deines E-Mail-Providers (z.B. smtp.deinedomain.de).
+- SMTP Port: Gesicherter Port (Standard: 587 für STARTTLS oder 465 für SSL).
+- Absender-Adresse: E-Mail-Adresse, die als Absender auf dem digitalen Bon erscheint (z.B. kasse@deineladen.de).
+- Benutzername & Passwort: Authentifizierung für den Mailserver.
+
+---
+
+### [Import, Export & QR-Konfiguration](https://quixpos.com/docs/einstellungen-importexport)
+
+Kasseneinstellungen als QR-Code exportieren und auf weiteren Kassen blitzschnell importieren.
+
+Import, Export & QR-Konfiguration
+
+Mit der QR-Code-Konfiguration lassen sich neue Kassen innerhalb von Sekunden einrichten, ohne Passwörter oder Serveradressen manuell abtippen zu müssen.
+
+Einstellungen als QR-Code exportieren
+
+1. Öffne die Einstellungen und wähle QR-Code Export.
+2. Wähle die Konfigurationsgruppen aus (z.B. Drucker, TSE, SumUp, Stammdaten).
+3. QuixPOS generiert einen sicheren QR-Code auf dem Bildschirm.
+
+Konfiguration auf neuer Kasse importieren
+
+1. Öffne auf der neuen Kasse die Einstellungen und wähle QR-Code Scan.
+2. Scanne den QR-Code mit der Kamera des Geräts.
+3. Alle Einstellungen werden sofort übernommen!
+
+---
+
+### [Design, Themes & Kundendisplay](https://quixpos.com/docs/einstellungen-ui-themes)
+
+Farbschemata (Dark, Light, Gruvbox), Kachelgrößen und externes Kundendisplay anpassen.
+
+Design, Themes & Kundendisplay
+
+Passe das Erscheinungsbild von QuixPOS an die Beleuchtung deines Ladens und deine persönlichen Vorlieben an.
+
+Verfügbare Farbschemata
+
+- Dark Theme (Standard): Augenfreundliches dunkles Design mit kontrastreichen Akzenten.
+- Light Theme: Helles, klares Design für sonnige Ladenlokale oder Außenbereiche.
+- Gruvbox Theme: Warmer Retro-Look mit sanften Erdtönen.
+
+Externes Kundendisplay
+
+QuixPOS kann ein zweites Display (z.B. ein angeschlossenes Tablet oder 2nd Screen) als Kundendisplay ansteuern. Der Kunde sieht dort live die bonierten Positionen, den Gesamtbetrag und den KassenSichV QR-Code.
+
+---
+
+## Kassenabschluss & Datensicherheit
+
+### [Tagesabschluss & Kassensturz (Z-Bon)](https://quixpos.com/docs/tagesabschluss-zbon)
+
+Tagesabschluss durchführen, Bargeldbestand zählen und Z-Bon drucken.
+
+Tagesabschluss & Kassensturz (Z-Bon)
+
+Am Ende jedes Verkaufstags wird der gesetzlich vorgeschriebene Tagesabschluss (Z-Bon) durchgeführt.
+
+Ablauf des Tagesabschlusses
+
+1. Klicke im Hauptmenü auf Tagesabschluss / Kassensturz.
+2. Bargeld zählen: Trage die gezählten Münzen und Scheine im Zählprotokoll ein.
+3. QuixPOS berechnet automatisch:
+   - Soll-Bargeldbestand (Anfangsbestand + Bareinnahmen - Barausgaben)
+   - Ist-Bargeldbestand (Gezähltes Bargeld)
+   - Differenz (Kassendifferenz in €)
+4. Prüfe die Umsätze aufgeteilt nach Steuersätzen (19 %, 7 %, 0 %) und Zahlungsarten (Bar, Karte).
+5. Klicke auf Tagesabschluss durchführen.
+
+> [!IMPORTANT]
+> Der Z-Bon wird mit einer speziellen Abschluss-Signatur der TSE versehen und im Fiskalspeicher unveränderbar archiviert. Der Z-Zähler wird um 1 erhöht.
+
+---
+
+### [Datensicherung & Backups](https://quixpos.com/docs/datensicherung-backups)
+
+Lokale Datensicherungen erstellen, Backups exportieren und Kassenstände sichern.
+
+Datensicherung & Backups
+
+Zur Vermeidung von Datenverlusten erstellt QuixPOS automatische und manuelle Backups aller lokalen Datenbanken, Einstellungen und Belegjournale.
+
+Backup-Funktionen
+
+- Automatisches Tages-Backup: Bei jedem Z-Bon wird automatisch ein verschlüsseltes Backup archiviert.
+- Manuelle Sicherung: Erstelle jederzeit mit einem Klick einen vollständigen Export.
+- Wiederherstellung: Im Falle eines Gerätetauschs kann ein bestehendes Backup einfach eingespielt werden.
+
+---

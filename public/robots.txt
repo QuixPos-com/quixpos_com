@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Agentic Resource Discovery
+Agentmap: https://quixpos.com/.well-known/ai-catalog.json

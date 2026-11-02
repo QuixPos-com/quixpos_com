@@ -1,0 +1,60 @@
+# QuixPOS Dokumentation
+
+> Vollständige Dokumentation für QuixPOS – das modulare Kassensystem für JTL-Wawi. Enthält Installationsanleitungen, Konfigurationsreferenzen und Bedienungshandbücher.
+
+Source: https://quixpos.com/docs
+
+## Übersicht & Einstieg
+
+- [Startseite](https://quixpos.com/): QuixPOS – Das Kassensystem für den Ladenalltag.
+- [Dokumentation](https://quixpos.com/docs): Handbücher, Anleitungen und Schnellstart.
+
+## Installation & Downloads
+
+- [Systemübersicht](https://quixpos.com/docs/systemuebersicht): Überblick über alle Komponenten des QuixPOS-Systems – von der Datenbank bis zum Drucker.
+- [Downloads & Releases](https://quixpos.com/docs/downloads-releases): Offizielle Releases herunterladen: Android APK, Windows Installer und Web-App.
+
+## QuixPOS2JTL
+
+- [Überblick](https://quixpos.com/docs/quixpos2jtl-uebersicht): Wie QuixPOS2JTL die Kasse mit der JTL-Warenwirtschaft verbindet.
+- [Konfiguration & Pairing](https://quixpos.com/docs/quixpos2jtl-konfiguration): Die 7 Einstellungs-Tabs in QuixPOS2JTL: Datenbank, Netzwerk, Zertifikate und Kassen-Pairing.
+
+## Grundlagen & Schnellstart
+
+- [Kassenoberfläche & Schnelleinstieg](https://quixpos.com/docs/kassenuebersicht): Aufbau der Kassenansicht, Bon-Ticket, Statusleiste und Schnellwahltasten.
+- [Tastatur, Scanner & Touch](https://quixpos.com/docs/bedienung-navigation): Effizientes Arbeiten an der Kasse per Tastatureingabe, Barcodescanner und Touchscreen.
+
+## Kassieren & Belegabwicklung
+
+- [Barzahlung & Wechselgeldrechner](https://quixpos.com/docs/zahlung-bar): Barzahlungen entgegennehmen, passende Beträge wählen und Wechselgeld berechnen.
+- [Kartenzahlung & SumUp Terminals](https://quixpos.com/docs/zahlung-karte): Kartenzahlung mit SumUp Air, Solo oder stationären O.P.I.-Terminals.
+- [Belege parken & Zwischenspeichern](https://quixpos.com/docs/beleg-parken): Vorgänge für Kundenwechsel oder Tische zwischenspeichern und später fortführen.
+- [Storno, Mengen & Positionsbearbeitung](https://quixpos.com/docs/storno-korrekturen): Mengen anpassen, Rabatte vergeben, Steuersätze korrigieren oder Positionen stornieren.
+- [Retouren & Gutschriften](https://quixpos.com/docs/retouren-gutschriften): Warenrücknahmen erfassen, Belegbezug herstellen und Beträge erstatten.
+- [Belegverwaltung & Nachdruck](https://quixpos.com/docs/belegsuche-historie): Historie aller Kassenbelege durchsuchen, Belege nachdrucken oder Kunden zuweisen.
+
+## Artikel & Katalog
+
+- [Katalogsuche & Kacheln](https://quixpos.com/docs/katalog-suche): Produktsortiment durchsuchen, Kategorien filtern und Kachellayouts anpassen.
+- [Varianten- & Attributauswahl](https://quixpos.com/docs/artikel-varianten): Produkte mit Größen, Farben, Optionen oder individuellen Attributen erfassen.
+- [Freie Positionen & Sonderpreise](https://quixpos.com/docs/freie-positionen): Manuelle Bon-Einträge ohne vorherigen Artikelstamm bonieren.
+
+## Einstellungen & Konfiguration
+
+- [Stammdaten & Filialangaben](https://quixpos.com/docs/einstellungen-stammdaten): Kassen-ID, Firmenanschrift, Steuernummern und Bon-Texte konfigurieren.
+- [TSE & Fiskalisierung (KassenSichV)](https://quixpos.com/docs/einstellungen-tse): Zertifizierte Technische Sicherheitseinrichtung (USB / SD / Cloud TSE) einrichten.
+- [Bon-Drucker & Druckvorlagen](https://quixpos.com/docs/einstellungen-drucker): ESC/POS Netzwerk- und USB-Drucker anbinden und Bon-Layouts gestalten.
+- [Kartenterminal & SumUp Anbindung](https://quixpos.com/docs/einstellungen-sumup): SumUp Air / Solo Kartenterminal mit API-Schlüsseln und Merchant-Code koppeln.
+- [Synchronisation & JTL-Anbindung](https://quixpos.com/docs/einstellungen-sync): Automatische Synchronisation mit der Warenwirtschaft (JTL-Wawi / Cloud-Backend).
+- [E-Mail & Digitaler Belegversand](https://quixpos.com/docs/einstellungen-email): SMTP-Server konfigurieren für den umweltfreundlichen, digitalen Bon-Versand.
+- [Import, Export & QR-Konfiguration](https://quixpos.com/docs/einstellungen-importexport): Kasseneinstellungen als QR-Code exportieren und auf weiteren Kassen blitzschnell importieren.
+- [Design, Themes & Kundendisplay](https://quixpos.com/docs/einstellungen-ui-themes): Farbschemata (Dark, Light, Gruvbox), Kachelgrößen und externes Kundendisplay anpassen.
+
+## Kassenabschluss & Datensicherheit
+
+- [Tagesabschluss & Kassensturz (Z-Bon)](https://quixpos.com/docs/tagesabschluss-zbon): Tagesabschluss durchführen, Bargeldbestand zählen und Z-Bon drucken.
+- [Datensicherung & Backups](https://quixpos.com/docs/datensicherung-backups): Lokale Datensicherungen erstellen, Backups exportieren und Kassenstände sichern.
+
+## Optional
+
+- [Vollständige Dokumentation](https://quixpos.com/llms-full.txt): Der komplette Text aller Dokumentationsseiten zusammengefasst.
