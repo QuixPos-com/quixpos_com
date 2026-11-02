@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [preact()],
   server: {
     proxy: {
-      '/api': { target: 'http://192.168.188.22:4300', changeOrigin: true },
+      '/api': {
+        target: process.env.API_PROXY_TARGET || 'http://localhost:4300',
+        changeOrigin: true,
+      },
     },
   },
   build: {

@@ -1,6 +1,5 @@
 export const API_URL: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ||
-  (import.meta.env.DEV ? '/api' : 'http://192.168.188.22:4300/api')
+  (import.meta.env.VITE_API_URL as string | undefined) || '/api'
 
 export interface ApiUser {
   id: number

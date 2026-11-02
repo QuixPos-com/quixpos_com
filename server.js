@@ -6,7 +6,7 @@ import { createServer } from 'vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const API_TARGET = new URL(process.env.API_PROXY_TARGET || 'http://192.168.188.22:4300')
+const API_TARGET = new URL(process.env.API_PROXY_TARGET || 'http://localhost:4300')
 
 async function startServer() {
   const vite = await createServer({
