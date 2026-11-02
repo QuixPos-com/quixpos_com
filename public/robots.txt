@@ -3,6 +3,3 @@ Allow: /
 
 Sitemap: https://quixpos.com/sitemap.xml
 
-# Agentic Resource Discovery
-Agentmap: https://quixpos.com/.well-known/ai-catalog.json
-
