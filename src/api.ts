@@ -66,10 +66,10 @@ export const checkName = (name: string) =>
   request<{ name: string; available: boolean }>(`/instance/check-name?name=${encodeURIComponent(name)}`)
 
 export const getSubscription = () =>
-  request<{ subscription: Subscription | null; instance: Instance | null }>('/subscription')
+  request<{ subscription: Subscription | null; instance: Instance | null; dashfreeCreated?: boolean }>('/subscription')
 
 export const bookFree = (name: string) =>
-  request<{ subscription: Subscription; instance: Instance }>('/subscription', {
+  request<{ subscription: Subscription; instance: Instance; dashfreeCreated?: boolean }>('/subscription', {
     method: 'POST',
     body: JSON.stringify({ tier: 'free', name }),
   })
@@ -98,3 +98,4 @@ export function pictureSrc(picture?: string): string | undefined {
         : 'image/jpeg'
   return `data:${mime};base64,${picture}`
 }
+

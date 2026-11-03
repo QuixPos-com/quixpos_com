@@ -30,6 +30,7 @@ export function AccountRoute() {
   const [clientId, setClientId] = useState<string>()
   const [sub, setSub] = useState<Subscription | null>(null)
   const [instance, setInstance] = useState<Instance | null>(null)
+  const [dashfreeCreated, setDashfreeCreated] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [name, setName] = useState('')
@@ -41,6 +42,7 @@ export function AccountRoute() {
     const r = await api.getSubscription()
     setSub(r.subscription)
     setInstance(r.instance)
+    setDashfreeCreated(Boolean(r.dashfreeCreated))
   }
 
   // Initial session check
@@ -98,9 +100,11 @@ export function AccountRoute() {
     return () => clearTimeout(t)
   }, [name])
 
-  // Poll instance provisioning until everything is done
+  // Poll instance provisioning until everything is done (only for paid tier; free tier uses dash.quixpos.com)
   const provisioning =
-    instance && !(instance.domainstate === 'ready' && instance.certstate === 'ready' && instance.dockerstate === 'running')
+    sub?.tier !== 'free' &&
+    instance &&
+    !(instance.domainstate === 'ready' && instance.certstate === 'ready' && instance.dockerstate === 'running')
   useEffect(() => {
     if (!sub || !provisioning) return
     const id = setInterval(() => {
@@ -131,6 +135,7 @@ export function AccountRoute() {
       const r = await api.bookFree(name)
       setSub(r.subscription)
       setInstance(r.instance)
+      setDashfreeCreated(Boolean(r.dashfreeCreated))
     })
   }
 
@@ -208,7 +213,23 @@ export function AccountRoute() {
                 Um 6 Monate verlängern
               </button>
             </section>
-            {instance && (
+            {sub.tier === 'free' || dashfreeCreated ? (
+              <section class="acc-card">
+                <h2>Instanz: "dash.quixpos.com"</h2>
+                <p>Account "{user?.email}"</p>
+                <p>
+                  <a
+                    class="acc-btn secondary"
+                    href="https://dash.quixpos.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-block', textDecoration: 'none', marginTop: '0.5rem' }}
+                  >
+                    dash.quixpos.com öffnen
+                  </a>
+                </p>
+              </section>
+            ) : instance ? (
               <section class="acc-card">
                 <h2>Instanz: {instance.name}</h2>
                 <ul class="acc-states">
@@ -218,7 +239,7 @@ export function AccountRoute() {
                 </ul>
                 {provisioning && <p class="hint">Wird eingerichtet – Status wird automatisch aktualisiert.</p>}
               </section>
-            )}
+            ) : null}
           </>
         ) : (
           <section class="acc-card">
