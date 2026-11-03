@@ -67,7 +67,8 @@ export function OAuthAuthorizeRoute() {
             btn.click()
           } else if (window.google?.accounts?.id?.prompt) {
             window.google.accounts.id.prompt((notification: any) => {
-              if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
+              const type = notification?.getMomentType?.()
+              if (type === 'skipped' || type === 'dismissed') {
                 setFedcmBlocked(true)
               }
             })
@@ -106,6 +107,7 @@ export function OAuthAuthorizeRoute() {
         if (cancelled || !btnRef.current) return
         window.google.accounts.id.initialize({
           client_id: clientId,
+          use_fedcm_for_prompt: true,
           callback: async (resp: { credential: string }) => {
             try {
               setError('')
