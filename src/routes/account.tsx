@@ -256,13 +256,7 @@ export function AccountRoute() {
                 </svg>
                 <span>Mit Google anmelden</span>
               </button>
-              {acceptedTerms && (
-                <div
-                  ref={btnRef}
-                  style={{ position: 'fixed', top: -9999, left: -9999, width: 250, height: 44, pointerEvents: 'none' }}
-                  aria-hidden="true"
-                />
-              )}
+              <div ref={btnRef} class="acc-google-hidden" aria-hidden="true" />
             </div>
             <label class="acc-terms-label">
               <input

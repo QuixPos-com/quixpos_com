@@ -59,6 +59,15 @@
   display: block;
 }
 
+.acc-google-hidden {
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  width: 250px !important;
+  height: 44px !important;
+  overflow: hidden !important;
+}
+
 .acc-terms-label {
   display: flex !important;
   align-items: flex-start;
