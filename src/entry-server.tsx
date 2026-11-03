@@ -10,7 +10,7 @@ export interface RenderResult {
 
 export function getRoutes(): string[] {
   const pages = getAllPages()
-  const routes = ['/', '/docs', '/account', '/privacypolicy', '/terms']
+  const routes = ['/', '/docs', '/account', '/oauth/authorize', '/privacypolicy', '/terms']
   for (const p of pages) {
     routes.push(`/docs/${p.id}`)
   }
@@ -25,7 +25,10 @@ export function render(url: string): RenderResult {
   let description =
     'QuixPOS - das deutsche Kassensystem für den Ladenalltag. Demo am POS testen oder Artikel kostenlos verwalten.'
 
-  if (cleanUrl === '/privacypolicy') {
+  if (cleanUrl === '/oauth/authorize') {
+    title = 'Anmelden – QuixPOS OAuth'
+    description = 'Melde dich mit deinem QuixPOS-Profil auf deiner Instanz an.'
+  } else if (cleanUrl === '/privacypolicy') {
     title = 'Datenschutzerklärung – QuixPOS'
     description = 'Datenschutzerklärung für die QuixPOS-Website und kostenlose Test-Instanzen.'
   } else if (cleanUrl === '/terms') {

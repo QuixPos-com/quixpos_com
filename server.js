@@ -17,8 +17,8 @@ async function startServer() {
   const server = http.createServer((req, res) => {
     const url = req.url || '/'
 
-    // Proxy /api to the backend
-    if (url === '/api' || url.startsWith('/api/')) {
+    // Proxy /api and /.well-known to the backend
+    if (url === '/api' || url.startsWith('/api/') || url.startsWith('/.well-known')) {
       const proxyReq = http.request(
         {
           hostname: API_TARGET.hostname,

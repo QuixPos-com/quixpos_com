@@ -79,6 +79,53 @@ export const extendSubscription = () =>
 
 export const getInstance = () => request<{ instance: Instance | null }>('/instance')
 
+export interface OAuthAuthorizeContext {
+  authenticated: boolean
+  googleClientId?: string
+  user: ApiUser | null
+  client: {
+    clientId: string
+    clientName: string
+    origin: string
+  }
+  params: {
+    clientId: string
+    redirectUri: string
+    responseType: string
+    scope: string
+    state: string
+    codeChallenge: string | null
+    codeChallengeMethod: string | null
+    nonce: string | null
+  }
+}
+
+export function getOAuthAuthorize(search: string): Promise<OAuthAuthorizeContext> {
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+  params.set('format', 'json')
+  return request<OAuthAuthorizeContext>(`/oauth/authorize?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+  })
+}
+
+export function postOAuthAuthorize(payload: {
+  client_id?: string
+  redirect_uri: string
+  response_type?: string
+  scope?: string
+  state?: string
+  code_challenge?: string | null
+  code_challenge_method?: string | null
+  nonce?: string | null
+  action: 'allow' | 'deny'
+}): Promise<{ ok: boolean; code?: string; redirectUrl: string }> {
+  return request<{ ok: boolean; code?: string; redirectUrl: string }>('/oauth/authorize', {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
 export const NAME_RE = /^(?!-)[a-z0-9-]{3,63}(?<!-)$/
 
 export const isExtendEligible = (validUntil: string) =>

@@ -9,6 +9,10 @@ export default defineConfig({
         target: process.env.API_PROXY_TARGET || 'http://localhost:4300',
         changeOrigin: true,
       },
+      '/.well-known': {
+        target: process.env.API_PROXY_TARGET || 'http://localhost:4300',
+        changeOrigin: true,
+      },
     },
   },
   build: {
