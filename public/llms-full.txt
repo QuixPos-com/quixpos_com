@@ -57,6 +57,14 @@ In Deutschland ist jede Kasse gesetzlich verpflichtet eine Technische Sicherheit
 
 QuixPOS unterstützt Epson ESC/POS-kompatible Thermo-Bondrucker (z. B. Epson TM-T30iii, TM-T88-Serie) über Netzwerk (LAN/WLAN)
 
+💬 Technischer Support & Community
+
+Bei Fragen zur Einrichtung, Konfiguration oder Problemen bieten wir technischen Support über unseren Discord-Server:
+
+👉 Technischer Support auf Discord (https://discord.gg/5ftjruDFJ)
+
+Hier erreichst du direkt die Entwickler und kannst dich mit anderen QuixPOS-Nutzern austauschen.
+
 ---
 
 ### [Downloads & Releases](https://quixpos.com/docs/downloads-releases)
@@ -93,6 +101,12 @@ Systemanforderungen
 - QuixPOS2JTL Sync Server: Windows 10 / 11 / Windows Server 2016+ oder Linux
 - Drucker: ESC/POS-kompatible Bon-Drucker
 - Kartenterminals: SumUp Air, Solo, Lite oder OPI-kompatible Terminals
+
+💬 Technischer Support
+
+Häufige Fragen oder Probleme bei Installation und Einrichtung? Trete unserem Discord bei:
+
+👉 Discord Support-Server (https://discord.gg/5ftjruDFJ)
 
 ---
 

@@ -35,3 +35,11 @@ Schau dir die Schritt-für-Schritt-Videoanleitung zur Einrichtung auf YouTube an
 - **QuixPOS2JTL Sync Server**: Windows 10 / 11 / Windows Server 2016+ oder Linux
 - **Drucker**: ESC/POS-kompatible Bon-Drucker
 - **Kartenterminals**: SumUp Air, Solo, Lite oder OPI-kompatible Terminals
+
+---
+
+## 💬 Technischer Support
+
+Häufige Fragen oder Probleme bei Installation und Einrichtung? Trete unserem Discord bei:
+
+👉 **[Discord Support-Server](https://discord.gg/5ftjruDFJ)** (`https://discord.gg/5ftjruDFJ`)

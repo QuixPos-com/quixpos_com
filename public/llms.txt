@@ -55,6 +55,10 @@ Source: https://quixpos.com/docs
 - [Tagesabschluss & Kassensturz (Z-Bon)](https://quixpos.com/docs/tagesabschluss-zbon): Tagesabschluss durchführen, Bargeldbestand zählen und Z-Bon drucken.
 - [Datensicherung & Backups](https://quixpos.com/docs/datensicherung-backups): Lokale Datensicherungen erstellen, Backups exportieren und Kassenstände sichern.
 
+## Support & Community
+
+- [Technischer Support (Discord)](https://discord.gg/5ftjruDFJ): Technischer Support, Hilfe bei der Einrichtung und Austausch in der Community.
+
 ## Optional
 
 - [Vollständige Dokumentation](https://quixpos.com/llms-full.txt): Der komplette Text aller Dokumentationsseiten zusammengefasst.

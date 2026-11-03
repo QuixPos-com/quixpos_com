@@ -82,3 +82,13 @@ In Deutschland ist jede Kasse gesetzlich verpflichtet eine **Technische Sicherhe
 ### 🖨️ Epson Bon-Drucker
 
 QuixPOS unterstützt **Epson ESC/POS-kompatible Thermo-Bondrucker** (z. B. Epson TM-T30iii, TM-T88-Serie) über Netzwerk (LAN/WLAN)
+
+---
+
+## 💬 Technischer Support & Community
+
+Bei Fragen zur Einrichtung, Konfiguration oder Problemen bieten wir technischen Support über unseren Discord-Server:
+
+👉 **[Technischer Support auf Discord](https://discord.gg/5ftjruDFJ)** (`https://discord.gg/5ftjruDFJ`)
+
+Hier erreichst du direkt die Entwickler und kannst dich mit anderen QuixPOS-Nutzern austauschen.

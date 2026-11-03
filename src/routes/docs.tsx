@@ -95,6 +95,15 @@ export class DocsRoute extends Component<DocsRouteProps, DocsRouteState> {
             </Link>
           </div>
           <div class="docs-header-right">
+            <a
+              class="docs-header-discord"
+              href="https://discord.gg/5ftjruDFJ"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Technischer Support auf Discord"
+            >
+              Discord Support ↗
+            </a>
             <Link class="docs-back-btn" href="/">
               ← Startseite
             </Link>

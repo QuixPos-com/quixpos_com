@@ -159,6 +159,11 @@ function build() {
     indexLines.push('');
   }
 
+  indexLines.push('## Support & Community');
+  indexLines.push('');
+  indexLines.push('- [Technischer Support (Discord)](https://discord.gg/5ftjruDFJ): Technischer Support, Hilfe bei der Einrichtung und Austausch in der Community.');
+  indexLines.push('');
+
   indexLines.push('## Optional');
   indexLines.push('');
   indexLines.push(`- [Vollständige Dokumentation](${SITE_URL}/llms-full.txt): Der komplette Text aller Dokumentationsseiten zusammengefasst.`);
