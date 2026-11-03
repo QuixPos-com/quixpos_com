@@ -140,24 +140,6 @@ export class DocsArticle extends Component<DocsArticleProps, DocsArticleState> {
 
         <article class="docs-article" dangerouslySetInnerHTML={{ __html: html }} />
 
-        <div class="docs-support-card">
-          <div class="docs-support-card-icon" aria-hidden="true">💬</div>
-          <div class="docs-support-card-text">
-            <h3>Technischer Support & Fragen</h3>
-            <p>
-              Benötigst du Unterstützung bei der Einrichtung oder hast du technische Fragen? Unser Team und die Community helfen dir gerne im Discord weiter.
-            </p>
-          </div>
-          <a
-            href="https://discord.gg/5ftjruDFJ"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="docs-support-card-btn"
-          >
-            Discord beitreten ↗
-          </a>
-        </div>
-
         <div class="docs-pagination">
           {prev ? (
             <Link href={`/docs/${prev.id}`} class="docs-page-card prev">

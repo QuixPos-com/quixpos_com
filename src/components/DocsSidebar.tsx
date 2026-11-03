@@ -121,22 +121,6 @@ export class DocsSidebar extends Component<DocsSidebarProps> {
             </div>
           ) : null}
         </nav>
-
-        <div class="docs-sidebar-footer">
-          <a
-            href="https://discord.gg/5ftjruDFJ"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="docs-sidebar-support-link"
-            title="Technischer Support auf Discord"
-          >
-            <span class="docs-sidebar-support-icon" aria-hidden="true">💬</span>
-            <div class="docs-sidebar-support-info">
-              <span class="docs-sidebar-support-title">Technischer Support</span>
-              <span class="docs-sidebar-support-sub">Discord Community ↗</span>
-            </div>
-          </a>
-        </div>
       </aside>
     )
   }
