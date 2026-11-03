@@ -36,6 +36,7 @@ export function AccountRoute() {
   const [name, setName] = useState('')
   const [nameState, setNameState] = useState<'idle' | 'checking' | 'free' | 'taken' | 'invalid'>('idle')
   const [busy, setBusy] = useState(false)
+  const [fedcmBlocked, setFedcmBlocked] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     try {
@@ -45,6 +46,22 @@ export function AccountRoute() {
     }
   })
   const btnRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.credentials?.get) return
+    const origGet = navigator.credentials.get.bind(navigator.credentials)
+    navigator.credentials.get = async (...args) => {
+      try {
+        return await origGet(...args)
+      } catch (err: any) {
+        setFedcmBlocked(true)
+        throw err
+      }
+    }
+    return () => {
+      navigator.credentials.get = origGet
+    }
+  }, [])
 
   const onToggleTerms = (checked: boolean) => {
     setAcceptedTerms(checked)
@@ -66,6 +83,7 @@ export function AccountRoute() {
       return
     }
     setError('')
+    setFedcmBlocked(false)
     const roleBtn = btnRef.current?.querySelector<HTMLElement>('div[role="button"]')
     if (roleBtn) {
       roleBtn.click()
@@ -76,7 +94,11 @@ export function AccountRoute() {
           if (btn) {
             btn.click()
           } else if (window.google?.accounts?.id?.prompt) {
-            window.google.accounts.id.prompt()
+            window.google.accounts.id.prompt((notification: any) => {
+              if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
+                setFedcmBlocked(true)
+              }
+            })
           }
         })
         .catch((e) => setError(e.message))
@@ -269,6 +291,15 @@ export function AccountRoute() {
                 <Link href="/privacypolicy" target="_blank">Datenschutzerklärung</Link>.
               </span>
             </label>
+            {fedcmBlocked && (
+              <div class="acc-msg warning" style={{ marginTop: '1rem', textAlign: 'left', fontSize: '0.9rem' }}>
+                <strong>Hinweis zur Google-Anmeldung:</strong>
+                <p style={{ margin: '0.35rem 0 0' }}>
+                  Die Anmeldung wurde vom Browser blockiert (Drittanbieter-Anmeldung / FedCM deaktiviert oder vorübergehend pausiert).
+                  Du kannst die Drittanbieter-Anmeldung über das Symbol links neben der Adressleiste (oder in den Browser-Website-Einstellungen) erlauben.
+                </p>
+              </div>
+            )}
           </section>
         ) : sub ? (
           <>

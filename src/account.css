@@ -14,6 +14,7 @@
 .acc-msg { padding: .7rem 1rem; border-radius: 10px; }
 .acc-msg.error { background: #fde8e8; color: #9b1c1c; }
 .acc-msg.ok { background: #def7ec; color: #03543f; }
+.acc-msg.warning { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
 .hint { font-size: .9rem; color: var(--ink-soft); }
 .hint.free { color: var(--teal-deep); }
 .hint.taken, .hint.invalid { color: #9b1c1c; }
