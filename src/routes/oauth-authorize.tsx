@@ -2,19 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { Link } from '../components/Router'
 import * as api from '../api'
 import type { ApiUser, OAuthAuthorizeContext } from '../api'
+import { clearUserAction, initAndRenderGsiButton, loadGsi, markUserActionStart } from '../gsi'
 import '../account.css'
-
-function loadGsi(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) return resolve()
-    const s = document.createElement('script')
-    s.src = 'https://accounts.google.com/gsi/client'
-    s.async = true
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error('Google-Anmeldung konnte nicht geladen werden'))
-    document.head.appendChild(s)
-  })
-}
 
 export function OAuthAuthorizeRoute() {
   const [loading, setLoading] = useState(true)
@@ -49,6 +38,17 @@ export function OAuthAuthorizeRoute() {
     }
   }
 
+  const handleLoginCredential = async (credential: string) => {
+    try {
+      setError('')
+      setFedcmBlocked(false)
+      const { user: loggedInUser } = await api.login(credential)
+      setUser(loggedInUser)
+    } catch (e: any) {
+      setError(e.message || 'Anmeldung fehlgeschlagen')
+    }
+  }
+
   const onGoogleBtnClick = () => {
     if (!acceptedTerms) {
       setError('Bitte akzeptiere zuerst die Nutzungsbedingungen und die Datenschutzerklärung.')
@@ -56,22 +56,20 @@ export function OAuthAuthorizeRoute() {
     }
     setError('')
     setFedcmBlocked(false)
+    markUserActionStart(() => setFedcmBlocked(true))
+
     const roleBtn = btnRef.current?.querySelector<HTMLElement>('div[role="button"]')
     if (roleBtn) {
       roleBtn.click()
     } else {
       loadGsi()
         .then(() => {
-          const btn = btnRef.current?.querySelector<HTMLElement>('div[role="button"]')
-          if (btn) {
-            btn.click()
-          } else if (window.google?.accounts?.id?.prompt) {
-            window.google.accounts.id.prompt((notification: any) => {
-              const type = notification?.getMomentType?.()
-              if (type === 'skipped' || type === 'dismissed') {
-                setFedcmBlocked(true)
-              }
-            })
+          if (clientId && btnRef.current) {
+            initAndRenderGsiButton(clientId, btnRef.current, handleLoginCredential)
+            setTimeout(() => {
+              const btn = btnRef.current?.querySelector<HTMLElement>('div[role="button"]')
+              if (btn) btn.click()
+            }, 80)
           }
         })
         .catch((e) => setError(e.message))
@@ -105,25 +103,7 @@ export function OAuthAuthorizeRoute() {
     loadGsi()
       .then(() => {
         if (cancelled || !btnRef.current) return
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          use_fedcm_for_prompt: true,
-          callback: async (resp: { credential: string }) => {
-            try {
-              setError('')
-              const { user: loggedInUser } = await api.login(resp.credential)
-              setUser(loggedInUser)
-            } catch (e: any) {
-              setError(e.message || 'Anmeldung fehlgeschlagen')
-            }
-          },
-        })
-        window.google.accounts.id.renderButton(btnRef.current, {
-          theme: 'outline',
-          size: 'large',
-          locale: 'de',
-          width: 300,
-        })
+        initAndRenderGsiButton(clientId, btnRef.current, handleLoginCredential)
       })
       .catch((e) => setError(e.message))
     return () => {
@@ -162,6 +142,8 @@ export function OAuthAuthorizeRoute() {
   const handleSwitchAccount = async () => {
     if (busy) return
     setBusy('logout')
+    clearUserAction()
+    setFedcmBlocked(false)
     setError('')
     try {
       await api.logout()
