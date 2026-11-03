@@ -47,24 +47,9 @@ export function AccountRoute() {
   })
   const btnRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || !navigator.credentials?.get) return
-    const origGet = navigator.credentials.get.bind(navigator.credentials)
-    navigator.credentials.get = async (...args) => {
-      try {
-        return await origGet(...args)
-      } catch (err: any) {
-        setFedcmBlocked(true)
-        throw err
-      }
-    }
-    return () => {
-      navigator.credentials.get = origGet
-    }
-  }, [])
-
   const onToggleTerms = (checked: boolean) => {
     setAcceptedTerms(checked)
+    setFedcmBlocked(false)
     try {
       if (checked) {
         localStorage.setItem('quixpos_terms_accepted', 'true')
