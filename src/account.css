@@ -99,4 +99,29 @@
   color: var(--teal-deep);
 }
 
+@media (max-width: 560px) {
+  .account-header {
+    padding: 0.85rem 1rem;
+    gap: 0.5rem;
+  }
+  .account-user {
+    gap: 0.5rem;
+  }
+  .account-user span {
+    display: none;
+  }
+  .account-main {
+    padding: 1rem 1rem 3rem;
+  }
+  .acc-card {
+    padding: 1rem;
+    overflow-wrap: break-word;
+  }
+  .acc-btn {
+    padding: 0.55rem 0.9rem;
+    font-size: 0.88rem;
+  }
+}
+
+
 

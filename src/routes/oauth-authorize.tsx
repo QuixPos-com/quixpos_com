@@ -166,8 +166,15 @@ export function OAuthAuthorizeRoute() {
         </Link>
         {user && (
           <div class="account-user">
-            {user.picture && <img src={api.pictureSrc(user.picture)} alt="" width="32" height="32" />}
-            <span>{user.email}</span>
+            {user.picture && (
+              <img
+                src={api.pictureSrc(user.picture)}
+                alt={user.email}
+                title={user.email}
+                width="32"
+                height="32"
+              />
+            )}
             <button class="acc-btn secondary" onClick={handleSwitchAccount} disabled={busy !== null}>
               Konto wechseln
             </button>
