@@ -697,3 +697,56 @@ img {
     transform: none;
   }
 }
+
+.infographics {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.infographics img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+.infographic-btn {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.85);
+  cursor: zoom-out;
+}
+
+.lightbox img {
+  width: min(96vw, 2000px);
+  max-height: 94vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  border: 0;
+  background: none;
+  color: #fff;
+  font-size: 2.5rem;
+  line-height: 1;
+  cursor: pointer;
+}

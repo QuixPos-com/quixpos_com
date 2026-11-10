@@ -1,10 +1,45 @@
 import { Component } from 'preact'
 import { Link } from '../components/Router'
 
-export class IndexRoute extends Component {
+const INFOGRAPHICS = [
+  {
+    src: '/infographics/01-pos-physical-setup.svg',
+    alt: 'Physischer Aufbau eines QuixPOS-Kassenplatzes',
+  },
+  {
+    src: '/infographics/02-software-architecture.svg',
+    alt: 'Software-Architektur von QuixPOS',
+  },
+]
+
+export class IndexRoute extends Component<object, { zoom: number | null }> {
+  state = { zoom: null as number | null }
+
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') this.setState({ zoom: null })
+  }
+
+  componentDidUpdate(_: object, prev: { zoom: number | null }) {
+    if (typeof document === 'undefined' || prev.zoom === this.state.zoom) return
+    const open = this.state.zoom !== null
+    const wasOpen = prev.zoom !== null
+    if (open === wasOpen) return
+    const body = document.body.style
+    if (open) {
+      // Compensate the vanishing scrollbar so the page underneath doesn't shift.
+      const bar = window.innerWidth - document.documentElement.clientWidth
+      body.paddingRight = bar > 0 ? `${bar}px` : ''
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.documentElement.style.overflow = ''
+      body.paddingRight = ''
+    }
+  }
+
   private observer: IntersectionObserver | null = null
 
   componentDidMount() {
+    window.addEventListener('keydown', this.onKeyDown)
     if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
       return
     }
@@ -30,6 +65,9 @@ export class IndexRoute extends Component {
   }
 
   componentWillUnmount() {
+    window.removeEventListener('keydown', this.onKeyDown)
+    document.documentElement.style.overflow = ''
+    document.body.style.paddingRight = ''
     if (this.observer) {
       this.observer.disconnect()
       this.observer = null
@@ -145,6 +183,18 @@ export class IndexRoute extends Component {
                   Demo ausprobieren oder direkt mit dem eigenen Shop beginnen.
                 </li>
               </ul>
+              <div class="infographics">
+                {INFOGRAPHICS.map((img, i) => (
+                  <button
+                    type="button"
+                    class="infographic-btn"
+                    aria-label={`${img.alt} vergrößern`}
+                    onClick={() => this.setState({ zoom: i })}
+                  >
+                    <img src={img.src} alt={img.alt} loading="lazy" />
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
@@ -180,6 +230,28 @@ export class IndexRoute extends Component {
             </div>
           </section>
         </main>
+
+        {this.state.zoom !== null && (
+          <div
+            class="lightbox"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => this.setState({ zoom: null })}
+          >
+            <button
+              type="button"
+              class="lightbox-close"
+              aria-label="Schließen"
+              onClick={() => this.setState({ zoom: null })}
+            >
+              ×
+            </button>
+            <img
+              src={INFOGRAPHICS[this.state.zoom].src}
+              alt={INFOGRAPHICS[this.state.zoom].alt}
+            />
+          </div>
+        )}
 
         <footer class="site-footer">
           <p><span class="logo-inline">QuixPOS</span> · Kassensystem</p>
