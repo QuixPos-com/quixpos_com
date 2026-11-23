@@ -13,6 +13,12 @@ interface TabletSpec {
   physicalScale: number
   bezelPad: number
   bottomClearance: number
+  crop?: {
+    x: number
+    y: number
+    w: number
+    h: number
+  }
 }
 
 // Scale: 1 world unit = 0.25 mm (4000 units = 1 meter).
@@ -51,8 +57,8 @@ const TABLETS: TabletSpec[] = [
   {
     id: 'pos-center',
     title: 'POS',
-    subtitle: 'posdemo.quixpos.com',
-    url: 'https://posdemo.quixpos.com',
+    subtitle: 'pos.quixpos.com',
+    url: 'https://pos.quixpos.com',
     x: 74,
     cssW: 1024,
     cssH: 640,
@@ -63,8 +69,8 @@ const TABLETS: TabletSpec[] = [
   {
     id: 'pos-vertical',
     title: 'Kundendisplay',
-    subtitle: 'pos.quixpos.com',
-    url: 'https://pos.quixpos.com',
+    subtitle: 'posdemo.quixpos.com',
+    url: 'https://posdemo.quixpos.com',
     x: 1186,
     cssW: 432,
     cssH: 688,
@@ -77,12 +83,18 @@ const TABLETS: TabletSpec[] = [
     title: 'SumUp Virtual Solo',
     subtitle: 'virtual-solo.sumup.com',
     url: 'https://virtual-solo.sumup.com',
-    x: 2038,
+    x: 1684,
     cssW: 1024,
     cssH: 640,
-    physicalScale: 1,
-    bezelPad: 36,
-    bottomClearance: 127,
+    physicalScale: 0.85,
+    bezelPad: 24,
+    bottomClearance: 380,
+    crop: {
+      x: 304,
+      y: 158,
+      w: 400,
+      h: 465,
+    },
   },
 ]
 
@@ -407,8 +419,10 @@ export function ThreeDRoute() {
       const TABLET_Z = 920 // Near front edge of the table (front edge at +1600)
 
       for (const spec of TABLETS) {
-        const screenW = Math.round(spec.cssW * spec.physicalScale)
-        const screenH = Math.round(spec.cssH * spec.physicalScale)
+        const visibleCssW = spec.crop ? spec.crop.w : spec.cssW
+        const visibleCssH = spec.crop ? spec.crop.h : spec.cssH
+        const screenW = Math.round(visibleCssW * spec.physicalScale)
+        const screenH = Math.round(visibleCssH * spec.physicalScale)
         const tabletW = screenW + spec.bezelPad * 2
         const tabletH = screenH + spec.bezelPad * 2
 
@@ -419,12 +433,13 @@ export function ThreeDRoute() {
         const bezelTopGeo = new THREE.BoxGeometry(tabletW, spec.bezelPad, 10)
         const bezelSideGeo = new THREE.BoxGeometry(spec.bezelPad, screenH, 10)
         const cutoutGeo = new THREE.PlaneGeometry(screenW, screenH)
-        const footW = Math.min(580, Math.max(360, Math.round(tabletW * 0.45)))
-        const baseFootGeo = new THREE.BoxGeometry(footW, 32, 380)
+        const footW = Math.min(580, Math.max(280, Math.round(tabletW * 0.65)))
+        const baseFootGeo = new THREE.BoxGeometry(footW, 32, 340)
         const neckH = Math.max(240, Math.round(centerYOffset))
         const neckGeo = new THREE.BoxGeometry(110, neckH, 64)
-        const nameplateW = Math.min(760, tabletW - 40)
-        const nameplateGeo = new THREE.BoxGeometry(nameplateW, 24, 170)
+        const nameplateW = Math.min(760, Math.max(400, tabletW - 20))
+        const nameplateD = Math.max(100, Math.round(nameplateW * 0.25))
+        const nameplateGeo = new THREE.BoxGeometry(nameplateW, 24, nameplateD)
 
         disposables.push(
           backShellGeo,
@@ -531,13 +546,18 @@ export function ThreeDRoute() {
         // Real DOM iframe inside CSS3DObject
         const wrapperEl = document.createElement('div')
         wrapperEl.className = 'tablet-screen-frame'
-        wrapperEl.style.width = `${spec.cssW}px`
-        wrapperEl.style.height = `${spec.cssH}px`
+        wrapperEl.style.width = `${visibleCssW}px`
+        wrapperEl.style.height = `${visibleCssH}px`
 
         const iframeEl = document.createElement('iframe')
         iframeEl.className = 'tablet-screen-iframe'
         iframeEl.style.width = `${spec.cssW}px`
         iframeEl.style.height = `${spec.cssH}px`
+        if (spec.crop) {
+          iframeEl.style.position = 'relative'
+          iframeEl.style.left = `${-spec.crop.x}px`
+          iframeEl.style.top = `${-spec.crop.y}px`
+        }
         iframeEl.src = spec.url
         iframeEl.title = `${spec.title} (${spec.subtitle})`
         iframeEl.loading = 'eager'
