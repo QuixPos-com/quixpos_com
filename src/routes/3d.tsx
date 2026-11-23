@@ -257,6 +257,7 @@ export function ThreeDRoute() {
 
       resetViewRef.current = () => {
         setFocused(null)
+        cameraTween = null
         camera.position.set(SPAWN_POS.x, SPAWN_POS.y, SPAWN_POS.z)
         yaw = SPAWN_YAW
         pitch = SPAWN_PITCH
@@ -407,13 +408,18 @@ export function ThreeDRoute() {
       interface TabletInstance {
         spec: TabletSpec
         cutoutMesh: InstanceType<typeof THREE.Mesh>
+        plateMesh: InstanceType<typeof THREE.Mesh>
         cssObject: InstanceType<typeof CSS3DObject>
         wrapperEl: HTMLDivElement
         iframeEl: HTMLIFrameElement
+        tabletW: number
+        tabletH: number
+        centerY: number
       }
 
       const tabletInstances: TabletInstance[] = []
       const raycastTargets: Array<InstanceType<typeof THREE.Mesh>> = []
+      const plateTargets: Array<InstanceType<typeof THREE.Mesh>> = []
 
       const TILT_ANGLE = -0.36 // ~20.6 degrees tilted back toward viewer
       const TABLET_Z = 920 // Near front edge of the table (front edge at +1600)
@@ -488,7 +494,10 @@ export function ThreeDRoute() {
         plate.position.set(spec.x, TABLE_TOP_Y + 12, TABLET_Z + 440)
         plate.castShadow = true
         plate.receiveShadow = true
+        plate.userData = { tabletTitle: spec.title, tabletId: spec.id }
         webglScene.add(plate)
+        plateTargets.push(plate)
+        raycastTargets.push(plate)
 
         // Tablet body group
         const tabletGroup = new THREE.Group()
@@ -573,9 +582,13 @@ export function ThreeDRoute() {
         tabletInstances.push({
           spec,
           cutoutMesh,
+          plateMesh: plate,
           cssObject,
           wrapperEl,
           iframeEl,
+          tabletW,
+          tabletH,
+          centerY,
         })
         raycastTargets.push(cutoutMesh)
       }
@@ -590,8 +603,26 @@ export function ThreeDRoute() {
       let currentTargetId: string | null = null
       let focusedId: string | null = null
 
+      interface CameraTween {
+        fromX: number
+        fromY: number
+        fromZ: number
+        fromYaw: number
+        fromPitch: number
+        toX: number
+        toY: number
+        toZ: number
+        toYaw: number
+        toPitch: number
+        elapsed: number
+        duration: number
+      }
+
+      let cameraTween: CameraTween | null = null
+
       const raycaster = new THREE.Raycaster()
       const screenCenter = new THREE.Vector2(0, 0)
+      const pointerNdc = new THREE.Vector2(0, 0)
       const tmpNormal = new THREE.Vector3()
       const tmpToCam = new THREE.Vector3()
       const tmpWorldPos = new THREE.Vector3()
@@ -599,6 +630,50 @@ export function ThreeDRoute() {
       const forwardVec = new THREE.Vector3()
       const rightVec = new THREE.Vector3()
       const moveVec = new THREE.Vector3()
+
+      const startCameraTween = (
+        toX: number,
+        toY: number,
+        toZ: number,
+        toYaw: number,
+        toPitch: number,
+        duration = 0.36,
+      ) => {
+        let deltaYaw = (toYaw - yaw) % (Math.PI * 2)
+        if (deltaYaw > Math.PI) deltaYaw -= Math.PI * 2
+        if (deltaYaw < -Math.PI) deltaYaw += Math.PI * 2
+        cameraTween = {
+          fromX: camera.position.x,
+          fromY: camera.position.y,
+          fromZ: camera.position.z,
+          fromYaw: yaw,
+          fromPitch: pitch,
+          toX,
+          toY,
+          toZ,
+          toYaw: yaw + deltaYaw,
+          toPitch,
+          elapsed: 0,
+          duration,
+        }
+      }
+
+      const getFocusCameraPose = (t: TabletInstance) => {
+        const fovRad = THREE.MathUtils.degToRad(camera.fov)
+        const halfV = Math.tan(fovRad / 2)
+        const aspect = Math.max(0.5, stageEl.clientWidth / Math.max(1, stageEl.clientHeight))
+        const dVert = (t.tabletH / 2) / (0.74 * halfV)
+        const dHoriz = (t.tabletW / 2) / (0.78 * aspect * halfV)
+        const dist = Math.max(dVert, dHoriz, 680)
+        const tilt = -TILT_ANGLE
+        return {
+          x: t.spec.x,
+          y: t.centerY + dist * Math.sin(tilt),
+          z: TABLET_Z + dist * Math.cos(tilt),
+          yaw: 0,
+          pitch: TILT_ANGLE,
+        }
+      }
 
       const setFocused = (id: string | null) => {
         focusedId = id
@@ -612,10 +687,49 @@ export function ThreeDRoute() {
         }
       }
 
+      const focusDevice = (id: string) => {
+        const target = tabletInstances.find((t) => t.spec.id === id)
+        if (!target) return
+        setFocused(id)
+        stageEl.style.cursor = ''
+        if (document.pointerLockElement === stageEl) {
+          document.exitPointerLock()
+        }
+        const pose = getFocusCameraPose(target)
+        startCameraTween(pose.x, pose.y, pose.z, pose.yaw, pose.pitch)
+      }
+
+      const exitFocus = () => {
+        window.focus()
+        setFocused(null)
+        startCameraTween(
+          SPAWN_POS.x,
+          SPAWN_POS.y,
+          SPAWN_POS.z,
+          SPAWN_YAW,
+          SPAWN_PITCH,
+        )
+      }
+
+      const hitPlateAtClient = (clientX: number, clientY: number) => {
+        const rect = stageEl.getBoundingClientRect()
+        if (rect.width <= 0 || rect.height <= 0) return null
+        pointerNdc.set(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1,
+        )
+        raycaster.setFromCamera(pointerNdc, camera)
+        const hits = raycaster.intersectObjects(plateTargets, false)
+        if (hits.length === 0) return null
+        return (hits[0].object.userData.tabletId as string) ?? null
+      }
+
       const syncPointerMode = (locked: boolean) => {
         pointerLocked = locked
         if (locked) {
           dragLooking = false
+          cameraTween = null
+          stageEl.style.cursor = ''
           setFocused(null)
         }
         setIsLocked(locked)
@@ -642,8 +756,7 @@ export function ThreeDRoute() {
       }
 
       unlockFocusRef.current = () => {
-        setFocused(null)
-        tryEnterPointerLock()
+        exitFocus()
       }
 
       const onPointerLockChange = () => {
@@ -668,16 +781,18 @@ export function ThreeDRoute() {
         ) {
           pressedKeys.add(code)
         } else if (code === 'Escape' && focusedId !== null && !pointerLocked) {
-          setFocused(null)
+          exitFocus()
         } else if (code === 'KeyE' || code === 'Tab') {
           e.preventDefault()
           if (document.pointerLockElement === stageEl) {
             if (currentTargetId) {
-              setFocused(currentTargetId)
+              focusDevice(currentTargetId)
+            } else {
+              document.exitPointerLock()
             }
-            document.exitPointerLock()
+          } else if (focusedId !== null) {
+            exitFocus()
           } else {
-            setFocused(null)
             tryEnterPointerLock()
           }
         }
@@ -694,8 +809,8 @@ export function ThreeDRoute() {
           if (disposed || pointerLocked) return
           const activeEl = document.activeElement
           const hit = tabletInstances.find((t) => t.iframeEl === activeEl)
-          if (hit) {
-            setFocused(hit.spec.id)
+          if (hit && focusedId !== hit.spec.id) {
+            focusDevice(hit.spec.id)
           }
         }, 0)
       }
@@ -703,12 +818,14 @@ export function ThreeDRoute() {
       const onMouseMove = (e: MouseEvent) => {
         const sensitivity = 0.0022
         if (pointerLocked) {
+          cameraTween = null
           yaw -= e.movementX * sensitivity
           pitch -= e.movementY * sensitivity
           const maxPitch = Math.PI * 0.46
           pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch))
           camera.rotation.set(pitch, yaw, 0, 'YXZ')
         } else if (dragLooking) {
+          cameraTween = null
           const dx = e.clientX - lastDragX
           const dy = e.clientY - lastDragY
           lastDragX = e.clientX
@@ -718,6 +835,11 @@ export function ThreeDRoute() {
           const maxPitch = Math.PI * 0.46
           pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch))
           camera.rotation.set(pitch, yaw, 0, 'YXZ')
+        } else if (focusedId === null) {
+          const hitId = hitPlateAtClient(e.clientX, e.clientY)
+          stageEl.style.cursor = hitId ? 'pointer' : ''
+        } else {
+          stageEl.style.cursor = ''
         }
       }
 
@@ -730,16 +852,25 @@ export function ThreeDRoute() {
 
         if (pointerLocked) {
           if (e.button === 0 && currentTargetId) {
-            setFocused(currentTargetId)
-            document.exitPointerLock()
+            focusDevice(currentTargetId)
           }
           return
         }
 
-        // In Cursor Mode, clicks on a visible tablet iframe are handled directly by the iframe.
-        // Clicking anywhere outside the focused tablet clears focus and enters Walk/Look Mode.
         if (e.button === 0) {
-          setFocused(null)
+          if (focusedId !== null) {
+            exitFocus()
+            return
+          }
+
+          const plateId = hitPlateAtClient(e.clientX, e.clientY)
+          if (plateId) {
+            e.preventDefault()
+            focusDevice(plateId)
+            return
+          }
+
+          // Clicking outside tablets and labels enters Walk/Look Mode.
           tryEnterPointerLock()
           dragLooking = true
           lastDragX = e.clientX
@@ -819,15 +950,36 @@ export function ThreeDRoute() {
         const dt = Math.min(0.05, (now - lastTime) / 1000)
         lastTime = now
 
+        // Smooth focus / return-to-overview camera transition
+        if (cameraTween) {
+          cameraTween.elapsed += dt
+          const p = Math.min(1, cameraTween.elapsed / cameraTween.duration)
+          const ease = 1 - Math.pow(1 - p, 3)
+          camera.position.set(
+            cameraTween.fromX + (cameraTween.toX - cameraTween.fromX) * ease,
+            cameraTween.fromY + (cameraTween.toY - cameraTween.fromY) * ease,
+            cameraTween.fromZ + (cameraTween.toZ - cameraTween.fromZ) * ease,
+          )
+          yaw = cameraTween.fromYaw + (cameraTween.toYaw - cameraTween.fromYaw) * ease
+          pitch = cameraTween.fromPitch + (cameraTween.toPitch - cameraTween.fromPitch) * ease
+          camera.rotation.set(pitch, yaw, 0, 'YXZ')
+          if (p >= 1) {
+            cameraTween = null
+          }
+        }
+
         // Flat WASD walking (no jump, sprint, or crouch)
         let moveForward = 0
         let moveRight = 0
-        if (pressedKeys.has('KeyW') || pressedKeys.has('ArrowUp')) moveForward += 1
-        if (pressedKeys.has('KeyS') || pressedKeys.has('ArrowDown')) moveForward -= 1
-        if (pressedKeys.has('KeyD') || pressedKeys.has('ArrowRight')) moveRight += 1
-        if (pressedKeys.has('KeyA') || pressedKeys.has('ArrowLeft')) moveRight -= 1
+        if (focusedId === null) {
+          if (pressedKeys.has('KeyW') || pressedKeys.has('ArrowUp')) moveForward += 1
+          if (pressedKeys.has('KeyS') || pressedKeys.has('ArrowDown')) moveForward -= 1
+          if (pressedKeys.has('KeyD') || pressedKeys.has('ArrowRight')) moveRight += 1
+          if (pressedKeys.has('KeyA') || pressedKeys.has('ArrowLeft')) moveRight -= 1
+        }
 
         if (moveForward !== 0 || moveRight !== 0) {
+          cameraTween = null
           forwardVec.set(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize()
           rightVec.set(Math.cos(yaw), 0, -Math.sin(yaw)).normalize()
 
@@ -963,10 +1115,10 @@ export function ThreeDRoute() {
           )}
           <div class="scene3d-hint">
             {isLocked
-              ? 'WASD: Bewegen · Maus: Umsehen · Gerät anvisieren + Klick (oder E): Bedienen · ESC: Maus freigeben'
+              ? 'WASD: Bewegen · Maus: Umsehen · Gerät oder Schild anvisieren + Klick (oder E): Bedienen · ESC: Maus freigeben'
               : focusedTablet
-                ? 'Maus & Mausrad bedienen das Gerät · Klick außerhalb oder „Entsperren“: Zurück zum Laufen'
-                : 'Gerät anklicken: Bedienen · Boden/Umgebung anklicken (oder E): Laufen & Umsehen · WASD: Bewegen'}
+                ? 'Maus & Mausrad bedienen das Gerät · Klick außerhalb oder „Entsperren“: Zurück zur Übersicht'
+                : 'Schild oder Gerät anklicken: Fokus & Bedienen · Boden/Umgebung anklicken (oder E): Laufen & Umsehen · WASD: Bewegen'}
           </div>
         </div>
       </div>
