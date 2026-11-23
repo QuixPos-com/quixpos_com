@@ -420,8 +420,13 @@ export function ThreeDRoute() {
   const stageRef = useRef<HTMLDivElement>(null)
   const cssLayerRef = useRef<HTMLDivElement>(null)
   const webglCanvasRef = useRef<HTMLCanvasElement>(null)
+  const moveStickRef = useRef<HTMLDivElement>(null)
+  const moveKnobRef = useRef<HTMLDivElement>(null)
+  const aimStickRef = useRef<HTMLDivElement>(null)
+  const aimKnobRef = useRef<HTMLDivElement>(null)
 
   const [isLocked, setIsLocked] = useState(false)
+  const [isTouchMode, setIsTouchMode] = useState(false)
   const [targetedTablet, setTargetedTablet] = useState<{
     title: string
     kind: 'label' | 'screen' | 'drawer'
@@ -438,6 +443,12 @@ export function ThreeDRoute() {
     const canvasEl = webglCanvasRef.current
     if (!stageEl || !cssLayerEl || !canvasEl) return
 
+    const touchCapable =
+      window.matchMedia('(pointer: coarse)').matches ||
+      'ontouchstart' in window ||
+      navigator.maxTouchPoints > 0
+    setIsTouchMode(touchCapable)
+
     let disposed = false
     let animId = 0
 
@@ -451,11 +462,11 @@ export function ThreeDRoute() {
 
       const disposables: Array<{ dispose: () => void }> = []
 
-      // 1. Renderers
+      // 1. Renderers (on touch/mobile, CSS3D sits above opaque WebGL so cross-origin iframes composite reliably)
       const webglRenderer = new THREE.WebGLRenderer({
         canvas: canvasEl,
         antialias: true,
-        alpha: true,
+        alpha: !touchCapable,
         powerPreference: 'high-performance',
       })
       webglRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -621,13 +632,18 @@ export function ThreeDRoute() {
         roughness: 0.3,
         metalness: 0.8,
       })
-      const cutoutMat = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        opacity: 0,
-        transparent: true,
-        blending: THREE.NoBlending,
-        side: THREE.FrontSide,
-      })
+      const cutoutMat = touchCapable
+        ? new THREE.MeshBasicMaterial({
+            color: 0x0b1220,
+            side: THREE.FrontSide,
+          })
+        : new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            opacity: 0,
+            transparent: true,
+            blending: THREE.NoBlending,
+            side: THREE.FrontSide,
+          })
       const camDotMat = new THREE.MeshStandardMaterial({
         color: '#1ec9a8',
         emissive: '#0f9f86',
@@ -817,16 +833,22 @@ export function ThreeDRoute() {
         iframeEl.className = 'tablet-screen-iframe'
         iframeEl.style.width = `${spec.cssW}px`
         iframeEl.style.height = `${spec.cssH}px`
-        if (spec.crop) {
-          iframeEl.style.position = 'relative'
-          iframeEl.style.left = `${-spec.crop.x}px`
-          iframeEl.style.top = `${-spec.crop.y}px`
-        }
         iframeEl.src = spec.url
         iframeEl.title = `${spec.title} (${spec.subtitle})`
         iframeEl.loading = 'eager'
         iframeEl.allow = 'clipboard-read; clipboard-write'
-        wrapperEl.appendChild(iframeEl)
+
+        if (spec.crop) {
+          const cropEl = document.createElement('div')
+          cropEl.className = 'tablet-screen-crop'
+          iframeEl.style.position = 'relative'
+          iframeEl.style.left = `${-spec.crop.x}px`
+          iframeEl.style.top = `${-spec.crop.y}px`
+          cropEl.appendChild(iframeEl)
+          wrapperEl.appendChild(cropEl)
+        } else {
+          wrapperEl.appendChild(iframeEl)
+        }
 
         const cssObject = new CSS3DObject(wrapperEl)
         cutoutMesh.getWorldPosition(cssObject.position)
@@ -1474,6 +1496,16 @@ export function ThreeDRoute() {
       let btnPressAnim = 0
       let hoveredTabletId: string | null = null
       let hasPointerActivity = false
+      let lastTouchTime = 0
+      let touchMoveX = 0
+      let touchMoveY = 0
+      let touchAimX = 0
+      let touchAimY = 0
+      let moveTouchId: number | null = null
+      let aimTouchId: number | null = null
+      let tapTouchId: number | null = null
+      let tapStartX = 0
+      let tapStartY = 0
 
       for (const t of tabletInstances) {
         const onEnter = () => {
@@ -1729,6 +1761,7 @@ export function ThreeDRoute() {
       }
 
       const onMouseMove = (e: MouseEvent) => {
+        if (Date.now() - lastTouchTime < 700) return
         const sensitivity = 0.0022
         if (pointerLocked) {
           cameraTween = null
@@ -1756,9 +1789,13 @@ export function ThreeDRoute() {
       }
 
       const onStageMouseDown = (e: MouseEvent) => {
-        // Ignore clicks on HUD buttons/links
+        if (Date.now() - lastTouchTime < 700) return
+        // Ignore clicks on HUD buttons/links or virtual sticks
         const target = e.target as HTMLElement | null
-        if (target && target.closest('.scene3d-hud-top, .scene3d-hud-bottom')) {
+        if (
+          target &&
+          target.closest('.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-stick')
+        ) {
           return
         }
 
@@ -1794,11 +1831,157 @@ export function ThreeDRoute() {
             return
           }
 
-          // Clicking outside tablets and labels enters Walk/Look Mode.
-          tryEnterPointerLock()
+          // Clicking outside tablets and labels enters Walk/Look Mode on desktop.
+          if (!touchCapable) {
+            tryEnterPointerLock()
+          }
           dragLooking = true
           lastDragX = e.clientX
           lastDragY = e.clientY
+        }
+      }
+
+      // Mobile dual-stick touch handlers & tap-to-click
+      const STICK_MAX_R = 38
+      const updateStickVector = (
+        stickEl: HTMLDivElement | null,
+        knobEl: HTMLDivElement | null,
+        clientX: number,
+        clientY: number,
+        isMove: boolean,
+      ) => {
+        if (!stickEl) return
+        const rect = stickEl.getBoundingClientRect()
+        const cx = rect.left + rect.width / 2
+        const cy = rect.top + rect.height / 2
+        let dx = clientX - cx
+        let dy = clientY - cy
+        const len = Math.hypot(dx, dy)
+        if (len > STICK_MAX_R) {
+          dx = (dx / len) * STICK_MAX_R
+          dy = (dy / len) * STICK_MAX_R
+        }
+        if (knobEl) {
+          knobEl.style.transform = `translate(${dx}px, ${dy}px)`
+        }
+        const nx = dx / STICK_MAX_R
+        const ny = dy / STICK_MAX_R
+        if (isMove) {
+          touchMoveX = nx
+          touchMoveY = -ny
+        } else {
+          touchAimX = Math.abs(nx) < 0.1 ? 0 : nx
+          touchAimY = Math.abs(ny) < 0.1 ? 0 : ny
+        }
+      }
+
+      const resetStick = (knobEl: HTMLDivElement | null, isMove: boolean) => {
+        if (knobEl) {
+          knobEl.style.transform = 'translate(0px, 0px)'
+        }
+        if (isMove) {
+          touchMoveX = 0
+          touchMoveY = 0
+          moveTouchId = null
+        } else {
+          touchAimX = 0
+          touchAimY = 0
+          aimTouchId = null
+        }
+      }
+
+      const onStageTouchStart = (e: TouchEvent) => {
+        lastTouchTime = Date.now()
+        const target = e.target as HTMLElement | null
+        if (target && target.closest('.scene3d-hud-top, .scene3d-hud-bottom')) {
+          return
+        }
+
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i]
+          const touchTarget = touch.target as HTMLElement | null
+          if (touchTarget && moveStickRef.current?.contains(touchTarget)) {
+            if (moveTouchId === null) {
+              moveTouchId = touch.identifier
+              updateStickVector(
+                moveStickRef.current,
+                moveKnobRef.current,
+                touch.clientX,
+                touch.clientY,
+                true,
+              )
+            }
+            e.preventDefault()
+          } else if (touchTarget && aimStickRef.current?.contains(touchTarget)) {
+            if (aimTouchId === null) {
+              aimTouchId = touch.identifier
+              updateStickVector(
+                aimStickRef.current,
+                aimKnobRef.current,
+                touch.clientX,
+                touch.clientY,
+                false,
+              )
+            }
+            e.preventDefault()
+          } else if (tapTouchId === null) {
+            tapTouchId = touch.identifier
+            tapStartX = touch.clientX
+            tapStartY = touch.clientY
+          }
+        }
+      }
+
+      const onWindowTouchMove = (e: TouchEvent) => {
+        lastTouchTime = Date.now()
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i]
+          if (touch.identifier === moveTouchId) {
+            updateStickVector(
+              moveStickRef.current,
+              moveKnobRef.current,
+              touch.clientX,
+              touch.clientY,
+              true,
+            )
+            e.preventDefault()
+          } else if (touch.identifier === aimTouchId) {
+            updateStickVector(
+              aimStickRef.current,
+              aimKnobRef.current,
+              touch.clientX,
+              touch.clientY,
+              false,
+            )
+            e.preventDefault()
+          }
+        }
+      }
+
+      const onWindowTouchEnd = (e: TouchEvent) => {
+        lastTouchTime = Date.now()
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i]
+          if (touch.identifier === moveTouchId) {
+            resetStick(moveKnobRef.current, true)
+          } else if (touch.identifier === aimTouchId) {
+            resetStick(aimKnobRef.current, false)
+          } else if (touch.identifier === tapTouchId) {
+            tapTouchId = null
+            const dist = Math.hypot(touch.clientX - tapStartX, touch.clientY - tapStartY)
+            if (dist < 14) {
+              if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
+                toggleCashDrawer()
+              } else if (focusedId !== null) {
+                exitFocus()
+              } else {
+                const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
+                if (plateId) {
+                  focusDevice(plateId)
+                }
+              }
+            }
+          }
         }
       }
 
@@ -1815,6 +1998,10 @@ export function ThreeDRoute() {
         cssRenderer.setSize(w, h)
       }
 
+      const resizeObserver =
+        typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null
+      resizeObserver?.observe(stageEl)
+
       document.addEventListener('pointerlockchange', onPointerLockChange)
       document.addEventListener('pointerlockerror', onPointerLockError)
       window.addEventListener('keydown', onKeyDown)
@@ -1823,9 +2010,14 @@ export function ThreeDRoute() {
       window.addEventListener('mousemove', onMouseMove)
       window.addEventListener('mouseup', onWindowMouseUp)
       window.addEventListener('resize', onResize)
+      window.addEventListener('touchmove', onWindowTouchMove, { passive: false })
+      window.addEventListener('touchend', onWindowTouchEnd)
+      window.addEventListener('touchcancel', onWindowTouchEnd)
       stageEl.addEventListener('mousedown', onStageMouseDown)
+      stageEl.addEventListener('touchstart', onStageTouchStart, { passive: false })
 
       cleanupFns.push(() => {
+        resizeObserver?.disconnect()
         document.removeEventListener('pointerlockchange', onPointerLockChange)
         document.removeEventListener('pointerlockerror', onPointerLockError)
         window.removeEventListener('keydown', onKeyDown)
@@ -1834,7 +2026,11 @@ export function ThreeDRoute() {
         window.removeEventListener('mousemove', onMouseMove)
         window.removeEventListener('mouseup', onWindowMouseUp)
         window.removeEventListener('resize', onResize)
+        window.removeEventListener('touchmove', onWindowTouchMove)
+        window.removeEventListener('touchend', onWindowTouchEnd)
+        window.removeEventListener('touchcancel', onWindowTouchEnd)
         stageEl.removeEventListener('mousedown', onStageMouseDown)
+        stageEl.removeEventListener('touchstart', onStageTouchStart)
 
         if (document.pointerLockElement === stageEl) {
           document.exitPointerLock()
@@ -1908,7 +2104,17 @@ export function ThreeDRoute() {
           }
         }
 
-        // Flat WASD walking (no jump, sprint, or crouch)
+        // Mobile right-stick aim rotation
+        if (focusedId === null && (touchAimX !== 0 || touchAimY !== 0)) {
+          cameraTween = null
+          yaw -= touchAimX * 1.9 * dt
+          pitch -= touchAimY * 1.35 * dt
+          const maxPitch = Math.PI * 0.46
+          pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch))
+          camera.rotation.set(pitch, yaw, 0, 'YXZ')
+        }
+
+        // Flat WASD + mobile left-stick walking (no jump, sprint, or crouch)
         let moveForward = 0
         let moveRight = 0
         if (focusedId === null) {
@@ -1916,9 +2122,11 @@ export function ThreeDRoute() {
           if (pressedKeys.has('KeyS') || pressedKeys.has('ArrowDown')) moveForward -= 1
           if (pressedKeys.has('KeyD') || pressedKeys.has('ArrowRight')) moveRight += 1
           if (pressedKeys.has('KeyA') || pressedKeys.has('ArrowLeft')) moveRight -= 1
+          moveForward += touchMoveY
+          moveRight += touchMoveX
         }
 
-        if (moveForward !== 0 || moveRight !== 0) {
+        if (Math.abs(moveForward) > 0.01 || Math.abs(moveRight) > 0.01) {
           cameraTween = null
           forwardVec.set(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize()
           rightVec.set(Math.cos(yaw), 0, -Math.sin(yaw)).normalize()
@@ -1927,8 +2135,10 @@ export function ThreeDRoute() {
             .set(0, 0, 0)
             .addScaledVector(forwardVec, moveForward)
             .addScaledVector(rightVec, moveRight)
-            .normalize()
-            .multiplyScalar(WALK_SPEED * dt)
+          if (moveVec.length() > 1) {
+            moveVec.normalize()
+          }
+          moveVec.multiplyScalar(WALK_SPEED * dt)
 
           const nextX = camera.position.x + moveVec.x
           const nextZ = camera.position.z + moveVec.z
@@ -1999,7 +2209,7 @@ export function ThreeDRoute() {
     : null
 
   return (
-    <div class="scene3d-page">
+    <div class={`scene3d-page ${isTouchMode ? 'is-touch' : ''}`}>
       <div
         ref={stageRef}
         class={`scene3d-stage ${isLocked ? '' : 'is-cursor-mode'}`}
@@ -2027,7 +2237,9 @@ export function ThreeDRoute() {
                 ? 'Lauf-Modus'
                 : focusedTablet
                   ? `Fokus: ${focusedTablet.title}`
-                  : 'Maus-Modus'}
+                  : isTouchMode
+                    ? 'Touch-Modus'
+                    : 'Maus-Modus'}
             </span>
             {focusedTablet && (
               <a
@@ -2085,10 +2297,27 @@ export function ThreeDRoute() {
             {isLocked
               ? 'WASD: Bewegen · Maus: Umsehen · Schild anvisieren + Klick (E): Fokussieren · Bildschirm + Klick (E): Bedienen · ESC: Maus freigeben'
               : focusedTablet
-                ? 'Maus & Mausrad bedienen das Gerät · Klick außerhalb oder „Entsperren“: Zurück zur Übersicht'
-                : 'Schild mit Lupe anklicken: Fokussieren · Bildschirm direkt bedienen · Boden anklicken (oder E): Laufen & Umsehen'}
+                ? isTouchMode
+                  ? 'Auf das Gerät tippen & wischen · Tippen außerhalb oder „Entsperren“: Zurück zur Übersicht'
+                  : 'Maus & Mausrad bedienen das Gerät · Klick außerhalb oder „Entsperren“: Zurück zur Übersicht'
+                : isTouchMode
+                  ? 'Linker Stick: Bewegen · Rechter Stick: Umsehen · Tippen: Bildschirm bedienen / Schild fokussieren'
+                  : 'Schild mit Lupe anklicken: Fokussieren · Bildschirm direkt bedienen · Boden anklicken (oder E): Laufen & Umsehen'}
           </div>
         </div>
+
+        {isTouchMode && !focusedTablet && (
+          <>
+            <div ref={moveStickRef} class="scene3d-stick is-left" aria-label="Bewegungs-Stick">
+              <span class="scene3d-stick-label">Bewegen</span>
+              <div ref={moveKnobRef} class="scene3d-stick-knob" />
+            </div>
+            <div ref={aimStickRef} class="scene3d-stick is-right" aria-label="Umsehen-Stick">
+              <span class="scene3d-stick-label">Umsehen</span>
+              <div ref={aimKnobRef} class="scene3d-stick-knob" />
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
