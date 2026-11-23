@@ -184,21 +184,14 @@ function createNameplateTexture(
   ctx.font = '500 22px system-ui, -apple-system, sans-serif'
   ctx.fillText(subtitle, 224, 88)
 
-  // Magnifying glass (loupe) icon indicating click-to-focus
+  // Subtle circular socket for the 3D loupe badge
   ctx.save()
-  ctx.fillStyle = 'rgba(30, 201, 168, 0.14)'
-  ctx.strokeStyle = '#1ec9a8'
-  ctx.lineWidth = 5
-  ctx.lineCap = 'round'
+  ctx.fillStyle = 'rgba(30, 201, 168, 0.08)'
+  ctx.strokeStyle = 'rgba(30, 201, 168, 0.35)'
+  ctx.lineWidth = 3
   ctx.beginPath()
-  ctx.arc(446, 54, 18, 0, Math.PI * 2)
+  ctx.arc(446, 64, 34, 0, Math.PI * 2)
   ctx.fill()
-  ctx.stroke()
-
-  ctx.lineWidth = 6
-  ctx.beginPath()
-  ctx.moveTo(459, 67)
-  ctx.lineTo(476, 84)
   ctx.stroke()
   ctx.restore()
 
@@ -653,6 +646,23 @@ export function ThreeDRoute() {
       const camDotGeo = new THREE.CircleGeometry(7, 16)
       const vesaArmGeo = new THREE.BoxGeometry(110, 70, 96)
       const vesaPlateGeo = new THREE.BoxGeometry(160, 120, 20)
+      const loupeRingGeo = new THREE.TorusGeometry(24, 5.5, 12, 28)
+      const loupeLensGeo = new THREE.CircleGeometry(21, 22)
+      const loupeHandleGeo = new THREE.CylinderGeometry(5.5, 5.5, 34, 12)
+      const loupeRingMat = new THREE.MeshStandardMaterial({
+        color: '#1ec9a8',
+        emissive: '#0f9f86',
+        emissiveIntensity: 0.45,
+        roughness: 0.25,
+        metalness: 0.35,
+      })
+      const loupeLensMat = new THREE.MeshStandardMaterial({
+        color: '#1ec9a8',
+        transparent: true,
+        opacity: 0.26,
+        roughness: 0.12,
+        metalness: 0.2,
+      })
 
       disposables.push(
         shellMat,
@@ -663,12 +673,20 @@ export function ThreeDRoute() {
         camDotGeo,
         vesaArmGeo,
         vesaPlateGeo,
+        loupeRingGeo,
+        loupeLensGeo,
+        loupeHandleGeo,
+        loupeRingMat,
+        loupeLensMat,
       )
 
       interface TabletInstance {
         spec: TabletSpec
         cutoutMesh: InstanceType<typeof THREE.Mesh>
         plateMesh: InstanceType<typeof THREE.Mesh>
+        loupeGroup: InstanceType<typeof THREE.Group>
+        loupeBaseScale: number
+        loupeHover: number
         cssObject: InstanceType<typeof CSS3DObject>
         wrapperEl: HTMLDivElement
         iframeEl: HTMLIFrameElement
@@ -766,6 +784,45 @@ export function ThreeDRoute() {
         plateTargets.push(plate)
         raycastTargets.push(plate)
 
+        // 3D loupe icon sitting over the right side of the nameplate
+        const loupeBaseScale = nameplateD / 145
+        const loupeGroup = new THREE.Group()
+        loupeGroup.position.set(
+          spec.x + nameplateW * 0.372,
+          TABLE_TOP_Y + 34,
+          TABLET_Z + 432,
+        )
+        loupeGroup.scale.setScalar(loupeBaseScale)
+
+        const loupeUserData = {
+          tabletTitle: spec.title,
+          tabletId: spec.id,
+          kind: 'label',
+        }
+
+        const lRing = new THREE.Mesh(loupeRingGeo, loupeRingMat)
+        lRing.rotation.x = Math.PI / 2
+        lRing.castShadow = true
+        lRing.userData = loupeUserData
+        loupeGroup.add(lRing)
+
+        const lLens = new THREE.Mesh(loupeLensGeo, loupeLensMat)
+        lLens.rotation.x = -Math.PI / 2
+        lLens.userData = loupeUserData
+        loupeGroup.add(lLens)
+
+        const lHandle = new THREE.Mesh(loupeHandleGeo, loupeRingMat)
+        lHandle.rotation.z = Math.PI / 2
+        lHandle.rotation.y = -Math.PI / 4
+        lHandle.position.set(27, 0, 27)
+        lHandle.castShadow = true
+        lHandle.userData = loupeUserData
+        loupeGroup.add(lHandle)
+
+        webglScene.add(loupeGroup)
+        plateTargets.push(lRing, lLens, lHandle)
+        raycastTargets.push(lRing, lLens, lHandle)
+
         // Tablet body group
         const tabletGroup = new THREE.Group()
         tabletGroup.position.set(spec.x, centerY, TABLET_Z)
@@ -860,6 +917,9 @@ export function ThreeDRoute() {
           spec,
           cutoutMesh,
           plateMesh: plate,
+          loupeGroup,
+          loupeBaseScale,
+          loupeHover: 0,
           cssObject,
           wrapperEl,
           iframeEl,
@@ -1494,6 +1554,9 @@ export function ThreeDRoute() {
       let drawerZCurrent = 0
       let drawerZTarget = 0
       let btnPressAnim = 0
+      let lastMouseX = -9999
+      let lastMouseY = -9999
+      let cashBtnHover = 0
       let hoveredTabletId: string | null = null
       let hasPointerActivity = false
       let lastTouchTime = 0
@@ -1511,6 +1574,8 @@ export function ThreeDRoute() {
         const onEnter = () => {
           hoveredTabletId = t.spec.id
           hasPointerActivity = true
+          lastMouseX = -9999
+          lastMouseY = -9999
         }
         const onLeave = () => {
           if (hoveredTabletId === t.spec.id) {
@@ -1550,6 +1615,7 @@ export function ThreeDRoute() {
       const tmpNormal = new THREE.Vector3()
       const tmpToCam = new THREE.Vector3()
       const tmpWorldPos = new THREE.Vector3()
+      const tmpProjVec = new THREE.Vector3()
       const tmpWorldQuat = new THREE.Quaternion()
       const forwardVec = new THREE.Vector3()
       const rightVec = new THREE.Vector3()
@@ -1762,6 +1828,8 @@ export function ThreeDRoute() {
 
       const onMouseMove = (e: MouseEvent) => {
         if (Date.now() - lastTouchTime < 700) return
+        lastMouseX = e.clientX
+        lastMouseY = e.clientY
         const sensitivity = 0.0022
         if (pointerLocked) {
           cameraTween = null
@@ -2065,10 +2133,54 @@ export function ThreeDRoute() {
         return [px, pz]
       }
 
+      const getCursorProximity = (
+        obj: InstanceType<typeof THREE.Object3D>,
+        radiusPx: number,
+      ) => {
+        if (!pointerLocked && (lastMouseX < 0 || lastMouseY < 0)) return 0
+        const rect = stageEl.getBoundingClientRect()
+        if (rect.width <= 0 || rect.height <= 0) return 0
+        const mx = pointerLocked ? rect.width / 2 : lastMouseX - rect.left
+        const my = pointerLocked ? rect.height / 2 : lastMouseY - rect.top
+        obj.getWorldPosition(tmpProjVec)
+        tmpProjVec.project(camera)
+        if (tmpProjVec.z <= -1 || tmpProjVec.z >= 1) return 0
+        const sx = (tmpProjVec.x * 0.5 + 0.5) * rect.width
+        const sy = (-tmpProjVec.y * 0.5 + 0.5) * rect.height
+        const dist = Math.hypot(mx - sx, my - sy)
+        const t = Math.max(0, 1 - dist / radiusPx)
+        return t * t * (3 - 2 * t)
+      }
+
       const tick = (now: number) => {
         if (disposed) return
         const dt = Math.min(0.05, (now - lastTime) / 1000)
         lastTime = now
+
+        // Proximity grow animations for loupes & cash drawer button
+        const hoverSmooth = 1 - Math.exp(-16 * dt)
+        for (const t of tabletInstances) {
+          const targetHover =
+            focusedId === null
+              ? Math.max(
+                  getCursorProximity(t.loupeGroup, 150),
+                  getCursorProximity(t.plateMesh, 130) * 0.75,
+                )
+              : 0
+          t.loupeHover += (targetHover - t.loupeHover) * hoverSmooth
+          t.loupeGroup.scale.setScalar(t.loupeBaseScale * (1 + 0.65 * t.loupeHover))
+          t.loupeGroup.position.y = TABLE_TOP_Y + 34 + 16 * t.loupeHover
+          t.plateMesh.scale.set(
+            1 + 0.08 * t.loupeHover,
+            1,
+            1 + 0.08 * t.loupeHover,
+          )
+        }
+
+        const btnTargetHover = getCursorProximity(cashBtnMesh, 140)
+        cashBtnHover += (btnTargetHover - cashBtnHover) * hoverSmooth
+        const btnScale = 1 + 0.42 * cashBtnHover
+        cashBtnMesh.scale.set(btnScale, btnScale, 1 + 0.25 * cashBtnHover)
 
         // Cash drawer slide & button press animation
         if (Math.abs(drawerZTarget - drawerZCurrent) > 0.5) {
