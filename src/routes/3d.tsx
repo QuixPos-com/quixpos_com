@@ -63,8 +63,8 @@ const TABLETS: TabletSpec[] = [
   {
     id: 'pos-vertical',
     title: 'Kundendisplay',
-    subtitle: 'posdemo2.quixpos.com',
-    url: 'https://posdemo2.quixpos.com',
+    subtitle: 'pos.quixpos.com',
+    url: 'https://pos.quixpos.com',
     x: 1186,
     cssW: 432,
     cssH: 688,
