@@ -178,11 +178,29 @@ function createNameplateTexture(
   ctx.font = 'bold 34px system-ui, -apple-system, sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(title, 256, 46)
+  ctx.fillText(title, 224, 46)
 
   ctx.fillStyle = '#1ec9a8'
   ctx.font = '500 22px system-ui, -apple-system, sans-serif'
-  ctx.fillText(subtitle, 256, 88)
+  ctx.fillText(subtitle, 224, 88)
+
+  // Magnifying glass (loupe) icon indicating click-to-focus
+  ctx.save()
+  ctx.fillStyle = 'rgba(30, 201, 168, 0.14)'
+  ctx.strokeStyle = '#1ec9a8'
+  ctx.lineWidth = 5
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.arc(446, 54, 18, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.moveTo(459, 67)
+  ctx.lineTo(476, 84)
+  ctx.stroke()
+  ctx.restore()
 
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
@@ -195,7 +213,7 @@ export function ThreeDRoute() {
   const webglCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const [isLocked, setIsLocked] = useState(false)
-  const [targetedTablet, setTargetedTablet] = useState<string | null>(null)
+  const [targetedTablet, setTargetedTablet] = useState<{ title: string; isLabel: boolean } | null>(null)
   const [focusedTabletId, setFocusedTabletId] = useState<string | null>(null)
   const resetViewRef = useRef<(() => void) | null>(null)
   const unlockFocusRef = useRef<(() => void) | null>(null)
@@ -494,7 +512,7 @@ export function ThreeDRoute() {
         plate.position.set(spec.x, TABLE_TOP_Y + 12, TABLET_Z + 440)
         plate.castShadow = true
         plate.receiveShadow = true
-        plate.userData = { tabletTitle: spec.title, tabletId: spec.id }
+        plate.userData = { tabletTitle: spec.title, tabletId: spec.id, isLabel: true }
         webglScene.add(plate)
         plateTargets.push(plate)
         raycastTargets.push(plate)
@@ -546,7 +564,7 @@ export function ThreeDRoute() {
         // Transparent NoBlending cutout plane for CSS3D iframe visibility + occlusion
         const cutoutMesh = new THREE.Mesh(cutoutGeo, cutoutMat)
         cutoutMesh.position.set(0, 0, 2)
-        cutoutMesh.userData = { tabletTitle: spec.title, tabletId: spec.id }
+        cutoutMesh.userData = { tabletTitle: spec.title, tabletId: spec.id, isLabel: false }
         tabletGroup.add(cutoutMesh)
 
         webglScene.add(tabletGroup)
@@ -601,7 +619,30 @@ export function ThreeDRoute() {
       let lastDragY = 0
       let currentTargetTitle: string | null = null
       let currentTargetId: string | null = null
+      let currentTargetIsLabel = false
       let focusedId: string | null = null
+      let hoveredTabletId: string | null = null
+      let hasPointerActivity = false
+
+      for (const t of tabletInstances) {
+        const onEnter = () => {
+          hoveredTabletId = t.spec.id
+          hasPointerActivity = true
+        }
+        const onLeave = () => {
+          if (hoveredTabletId === t.spec.id) {
+            hoveredTabletId = null
+          }
+        }
+        t.wrapperEl.addEventListener('pointerenter', onEnter)
+        t.wrapperEl.addEventListener('pointermove', onEnter)
+        t.wrapperEl.addEventListener('pointerleave', onLeave)
+        cleanupFns.push(() => {
+          t.wrapperEl.removeEventListener('pointerenter', onEnter)
+          t.wrapperEl.removeEventListener('pointermove', onEnter)
+          t.wrapperEl.removeEventListener('pointerleave', onLeave)
+        })
+      }
 
       interface CameraTween {
         fromX: number
@@ -730,6 +771,7 @@ export function ThreeDRoute() {
           setTargetedTablet(null)
           currentTargetTitle = null
           currentTargetId = null
+          currentTargetIsLabel = false
         }
       }
 
@@ -778,7 +820,7 @@ export function ThreeDRoute() {
         } else if (code === 'KeyE' || code === 'Tab') {
           e.preventDefault()
           if (document.pointerLockElement === stageEl) {
-            if (currentTargetId) {
+            if (currentTargetId && currentTargetIsLabel) {
               focusDevice(currentTargetId)
             } else {
               document.exitPointerLock()
@@ -802,8 +844,9 @@ export function ThreeDRoute() {
           if (disposed || pointerLocked) return
           const activeEl = document.activeElement
           const hit = tabletInstances.find((t) => t.iframeEl === activeEl)
-          if (hit && focusedId !== hit.spec.id) {
-            focusDevice(hit.spec.id)
+          if (!hit) return
+          if (!(hasPointerActivity && hoveredTabletId === hit.spec.id) && focusedId === null) {
+            window.focus()
           }
         }, 0)
       }
@@ -845,7 +888,11 @@ export function ThreeDRoute() {
 
         if (pointerLocked) {
           if (e.button === 0 && currentTargetId) {
-            focusDevice(currentTargetId)
+            if (currentTargetIsLabel) {
+              focusDevice(currentTargetId)
+            } else {
+              document.exitPointerLock()
+            }
           }
           return
         }
@@ -1018,10 +1065,12 @@ export function ThreeDRoute() {
             ? (hits[0].object.userData.tabletTitle as string)
             : null
           const nextId = hasHit ? (hits[0].object.userData.tabletId as string) : null
+          const nextIsLabel = hasHit ? Boolean(hits[0].object.userData.isLabel) : false
           currentTargetId = nextId
-          if (nextTitle !== currentTargetTitle) {
+          if (nextTitle !== currentTargetTitle || nextIsLabel !== currentTargetIsLabel) {
             currentTargetTitle = nextTitle
-            setTargetedTablet(nextTitle)
+            currentTargetIsLabel = nextIsLabel
+            setTargetedTablet(nextTitle ? { title: nextTitle, isLabel: nextIsLabel } : null)
           }
         }
 
@@ -1073,9 +1122,19 @@ export function ThreeDRoute() {
               {isLocked
                 ? 'Lauf-Modus'
                 : focusedTablet
-                  ? `Bedienmodus: ${focusedTablet.title}`
+                  ? `Fokus: ${focusedTablet.title}`
                   : 'Maus-Modus'}
             </span>
+            {focusedTablet && (
+              <a
+                class="scene3d-pill scene3d-pill-url"
+                href={focusedTablet.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {focusedTablet.url} ↗
+              </a>
+            )}
           </div>
 
           <div class="scene3d-hud-group">
@@ -1101,15 +1160,18 @@ export function ThreeDRoute() {
         <div class="scene3d-hud-bottom">
           {isLocked && targetedTablet && (
             <div class="scene3d-target-badge">
-              {targetedTablet} — Klicken oder E drücken zum Bedienen
+              {targetedTablet.title} —{' '}
+              {targetedTablet.isLabel
+                ? 'Klicken oder E drücken zum Fokussieren'
+                : 'Klicken oder E drücken zum Bedienen'}
             </div>
           )}
           <div class="scene3d-hint">
             {isLocked
-              ? 'WASD: Bewegen · Maus: Umsehen · Gerät oder Schild anvisieren + Klick (oder E): Bedienen · ESC: Maus freigeben'
+              ? 'WASD: Bewegen · Maus: Umsehen · Schild anvisieren + Klick (E): Fokussieren · Bildschirm + Klick (E): Bedienen · ESC: Maus freigeben'
               : focusedTablet
                 ? 'Maus & Mausrad bedienen das Gerät · Klick außerhalb oder „Entsperren“: Zurück zur Übersicht'
-                : 'Schild oder Gerät anklicken: Fokus & Bedienen · Boden/Umgebung anklicken (oder E): Laufen & Umsehen · WASD: Bewegen'}
+                : 'Schild mit Lupe anklicken: Fokussieren · Bildschirm direkt bedienen · Boden anklicken (oder E): Laufen & Umsehen'}
           </div>
         </div>
       </div>

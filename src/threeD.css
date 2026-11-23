@@ -107,6 +107,12 @@
   border-color: #1ec9a8;
 }
 
+.scene3d-pill-url {
+  color: #1ec9a8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+}
+
 .scene3d-pill-dot {
   width: 8px;
   height: 8px;
