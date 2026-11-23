@@ -1,0 +1,218 @@
+.scene3d-page {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #dce8f0;
+  font-family: var(--font-body);
+  color: var(--ink);
+  user-select: none;
+}
+
+.scene3d-stage {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+}
+
+.scene3d-stage.is-cursor-mode {
+  cursor: default;
+}
+
+.scene3d-css-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.scene3d-webgl-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  display: block;
+  transition: filter 0.25s ease;
+}
+
+.scene3d-webgl-layer.is-blurred {
+  filter: blur(10px) brightness(0.8);
+}
+
+.tablet-screen-frame {
+  background: #0b1220;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: filter 0.25s ease;
+}
+
+.tablet-screen-frame.is-blurred {
+  filter: blur(10px) brightness(0.7);
+}
+
+.tablet-screen-iframe {
+  border: 0;
+  display: block;
+  background: #ffffff;
+}
+
+/* HUD */
+.scene3d-hud-top {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.scene3d-hud-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.scene3d-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: rgba(11, 18, 32, 0.78);
+  backdrop-filter: blur(10px);
+  color: #f7fafc;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 20px rgba(11, 18, 32, 0.18);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.scene3d-pill:hover {
+  background: rgba(11, 18, 32, 0.92);
+  border-color: rgba(30, 201, 168, 0.55);
+}
+
+.scene3d-pill-unlock {
+  background: rgba(15, 159, 134, 0.92);
+  border-color: rgba(30, 201, 168, 0.75);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.scene3d-pill-unlock:hover {
+  background: #0f9f86;
+  border-color: #1ec9a8;
+}
+
+.scene3d-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1ec9a8;
+  flex-shrink: 0;
+}
+
+.scene3d-pill-dot.is-cursor {
+  background: #f59e0b;
+}
+
+.scene3d-hud-bottom {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+}
+
+.scene3d-hint {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(11, 18, 32, 0.76);
+  backdrop-filter: blur(10px);
+  color: #e6eef4;
+  font-size: 0.84rem;
+  line-height: 1.3;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(11, 18, 32, 0.18);
+  white-space: nowrap;
+}
+
+.scene3d-target-badge {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(15, 159, 134, 0.92);
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(15, 159, 134, 0.35);
+}
+
+/* Minecraft-style center crosshair */
+.scene3d-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  z-index: 9;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.scene3d-crosshair.is-visible {
+  opacity: 1;
+}
+
+.scene3d-crosshair::before,
+.scene3d-crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 2px rgba(11, 18, 32, 0.85);
+}
+
+.scene3d-crosshair::before {
+  left: 50%;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  transform: translateX(-50%);
+}
+
+.scene3d-crosshair::after {
+  top: 50%;
+  left: 2px;
+  right: 2px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.scene3d-crosshair.is-targeting::before,
+.scene3d-crosshair.is-targeting::after {
+  background: #1ec9a8;
+}
+
+@media (max-width: 720px) {
+  .scene3d-hint {
+    white-space: normal;
+    border-radius: 14px;
+    font-size: 0.78rem;
+  }
+}

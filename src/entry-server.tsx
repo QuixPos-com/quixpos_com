@@ -10,7 +10,7 @@ export interface RenderResult {
 
 export function getRoutes(): string[] {
   const pages = getAllPages()
-  const routes = ['/', '/docs', '/account', '/oauth/authorize', '/privacypolicy', '/terms']
+  const routes = ['/', '/docs', '/3d', '/account', '/oauth/authorize', '/privacypolicy', '/terms']
   for (const p of pages) {
     routes.push(`/docs/${p.id}`)
   }
@@ -28,6 +28,10 @@ export function render(url: string): RenderResult {
   if (cleanUrl === '/oauth/authorize') {
     title = 'Anmelden – QuixPOS OAuth'
     description = 'Melde dich mit deinem QuixPOS-Profil auf deiner Instanz an.'
+  } else if (cleanUrl === '/3d') {
+    title = '3D Demo – QuixPOS'
+    description =
+      'QuixPOS 3D-Arbeitsplatz mit interaktiven Tablets für POS Demo, Artikelverwaltung und SumUp Virtual Solo.'
   } else if (cleanUrl === '/privacypolicy') {
     title = 'Datenschutzerklärung – QuixPOS'
     description = 'Datenschutzerklärung für die QuixPOS-Website und kostenlose Test-Instanzen.'

@@ -88,6 +88,9 @@ export class IndexRoute extends Component<object, { zoom: number | null }> {
             <Link class="nav-link-docs" href="/docs">
               Dokumentation
             </Link>
+            <Link class="nav-link-docs" href="/3d">
+              3D
+            </Link>
             <Link class="nav-link-docs" href="/account">
               Konto
             </Link>
