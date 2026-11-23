@@ -678,13 +678,6 @@ export function ThreeDRoute() {
       const setFocused = (id: string | null) => {
         focusedId = id
         setFocusedTabletId(id)
-        for (const t of tabletInstances) {
-          if (id !== null && t.spec.id !== id) {
-            t.wrapperEl.classList.add('is-blurred')
-          } else {
-            t.wrapperEl.classList.remove('is-blurred')
-          }
-        }
       }
 
       const focusDevice = (id: string) => {
@@ -1010,9 +1003,7 @@ export function ThreeDRoute() {
             t.iframeEl.style.pointerEvents = 'none'
           } else {
             t.wrapperEl.style.visibility = 'visible'
-            const canInteract =
-              !pointerLocked && (focusedId === null || focusedId === t.spec.id)
-            const interactive = canInteract ? 'auto' : 'none'
+            const interactive = !pointerLocked ? 'auto' : 'none'
             t.wrapperEl.style.pointerEvents = interactive
             t.iframeEl.style.pointerEvents = interactive
           }

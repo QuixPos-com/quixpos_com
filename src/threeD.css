@@ -43,11 +43,6 @@
   overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  transition: filter 0.25s ease;
-}
-
-.tablet-screen-frame.is-blurred {
-  filter: blur(10px) brightness(0.7);
 }
 
 .tablet-screen-iframe {
