@@ -27,7 +27,7 @@ interface TabletSpec {
 // 8" 10:16 portrait (432x688 CSS px @ scale 1.0 -> 108x172mm, 8.0" diag)
 const TABLET_DEPTH = 28
 
-const TABLE_W = 6400 // 1.60m
+const TABLE_W = 7000 // 1.75m
 const TABLE_D = 3200 // 0.80m
 const TABLE_TOP_Y = 3040 // 0.76m
 const TABLE_THICKNESS = 140
@@ -37,9 +37,9 @@ const WALK_SPEED = 11200 // 2.8 m/s
 const PLAYER_RADIUS = 650
 const ARENA_HALF = 72000 // 18m
 
-const SPAWN_POS = { x: 0, y: EYE_HEIGHT, z: 4200 }
+const SPAWN_POS = { x: 0, y: EYE_HEIGHT, z: 4400 }
 const SPAWN_YAW = 0
-const SPAWN_PITCH = -0.26
+const SPAWN_PITCH = -0.25
 
 const TABLETS: TabletSpec[] = [
   {
@@ -47,7 +47,7 @@ const TABLETS: TabletSpec[] = [
     title: 'Artikelverwaltung',
     subtitle: 'dashdemo.quixpos.com',
     url: 'https://dashdemo.quixpos.com',
-    x: -1550,
+    x: -2150,
     cssW: 1600,
     cssH: 1200,
     physicalScale: 1.1176,
@@ -207,16 +207,230 @@ function createNameplateTexture(
   return tex
 }
 
+function createCashButtonTexture(
+  THREE: typeof import('three'),
+  label: string,
+  accent: string,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 112
+  const ctx = canvas.getContext('2d')!
+
+  ctx.fillStyle = '#111827'
+  ctx.fillRect(0, 0, 256, 112)
+
+  ctx.strokeStyle = accent
+  ctx.lineWidth = 6
+  ctx.strokeRect(5, 5, 246, 102)
+
+  ctx.fillStyle = accent
+  ctx.font = 'bold 34px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 128, 56)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+function createPrinterFrontTexture(THREE: typeof import('three')) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  ctx.fillStyle = '#181d26'
+  ctx.fillRect(0, 0, 256, 128)
+
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = 'bold 26px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('EPSON', 128, 44)
+
+  ctx.fillStyle = '#e5e7eb'
+  ctx.font = '600 22px system-ui, -apple-system, sans-serif'
+  ctx.fillText('TM-m30III', 128, 84)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+function createReceiptTexture(THREE: typeof import('three')) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')!
+
+  ctx.fillStyle = '#f9fafb'
+  ctx.fillRect(0, 0, 256, 256)
+
+  ctx.fillStyle = '#111827'
+  ctx.font = 'bold 22px monospace'
+  ctx.textAlign = 'center'
+  ctx.fillText('QuixPOS Beleg', 128, 34)
+
+  ctx.font = '16px monospace'
+  ctx.textAlign = 'left'
+  ctx.fillText('Espresso       2,80 EUR', 18, 76)
+  ctx.fillText('Croissant      3,20 EUR', 18, 104)
+  ctx.fillText('Orangensaft    3,50 EUR', 18, 132)
+  ctx.fillText('-----------------------', 18, 158)
+  ctx.font = 'bold 18px monospace'
+  ctx.fillText('SUMME          9,50 EUR', 18, 186)
+  ctx.font = '14px monospace'
+  ctx.fillStyle = '#4b5563'
+  ctx.fillText('TSE Signatur: OK', 18, 222)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+function createZebraBadgeTexture(THREE: typeof import('three')) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')!
+
+  ctx.fillStyle = '#2b313a'
+  ctx.fillRect(0, 0, 512, 256)
+
+  ctx.strokeStyle = '#3f4754'
+  ctx.lineWidth = 4
+  ctx.strokeRect(4, 4, 504, 248)
+
+  // Left white circular power button
+  ctx.fillStyle = '#f8fafc'
+  ctx.beginPath()
+  ctx.arc(82, 86, 30, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = '#1f2937'
+  ctx.lineWidth = 4
+  ctx.beginPath()
+  ctx.arc(82, 88, 12, -Math.PI * 0.28, Math.PI * 1.28)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(82, 72)
+  ctx.lineTo(82, 86)
+  ctx.stroke()
+
+  // NFC icon below power button
+  ctx.strokeStyle = '#9ca3af'
+  ctx.lineWidth = 3
+  ctx.strokeRect(86, 166, 20, 30)
+  ctx.beginPath()
+  ctx.arc(76, 180, 10, -0.9, 0.9)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(76, 180, 17, -0.9, 0.9)
+  ctx.stroke()
+
+  // 5 status indicator icons across top row
+  const statusColors = ['#10b981', '#6b7280', '#6b7280', '#6b7280', '#10b981']
+  for (let i = 0; i < 5; i++) {
+    const sx = 188 + i * 58
+    ctx.fillStyle = statusColors[i]
+    ctx.fillRect(sx - 10, 42, 20, 20)
+  }
+
+  // 3 white pill buttons (Pause, Feed, Cancel)
+  const pillLabels = ['||', '•>', 'X']
+  for (let i = 0; i < 3; i++) {
+    const px = 176 + i * 94
+    ctx.fillStyle = '#f8fafc'
+    ctx.beginPath()
+    ctx.roundRect(px, 98, 76, 44, 22)
+    ctx.fill()
+
+    ctx.fillStyle = '#111827'
+    ctx.font = 'bold 22px system-ui, -apple-system, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(pillLabels[i], px + 38, 121)
+  }
+
+  // ZEBRA ZD420 branding
+  ctx.fillStyle = '#f8fafc'
+  ctx.font = 'bold 34px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('ZEBRA', 238, 194)
+
+  ctx.fillStyle = '#d1d5db'
+  ctx.font = '600 22px system-ui, -apple-system, sans-serif'
+  ctx.fillText('ZD420', 362, 192)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+function createShippingLabelTexture(THREE: typeof import('three')) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')!
+
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, 256, 256)
+
+  ctx.strokeStyle = '#111827'
+  ctx.lineWidth = 4
+  ctx.strokeRect(10, 10, 236, 236)
+
+  ctx.fillStyle = '#111827'
+  ctx.fillRect(10, 10, 236, 42)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 22px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillText('PAKETVERSAND', 20, 38)
+
+  ctx.fillStyle = '#111827'
+  ctx.font = 'bold 16px monospace'
+  ctx.fillText('Von: QuixPOS GmbH', 20, 78)
+  ctx.font = '15px monospace'
+  ctx.fillText('An:  Musterkunde', 20, 104)
+  ctx.fillText('     10115 Berlin', 20, 126)
+
+  // Shipping barcode stripes
+  const widths = [4, 2, 6, 3, 2, 5, 4, 2, 6, 2, 4, 5, 3, 2, 6, 4, 3, 5, 2, 4, 6, 2, 3, 5]
+  let bx = 24
+  for (let i = 0; i < widths.length && bx < 228; i++) {
+    if (i % 2 === 0) {
+      ctx.fillRect(bx, 152, widths[i], 68)
+    }
+    bx += widths[i] + 3
+  }
+
+  ctx.font = '13px monospace'
+  ctx.textAlign = 'center'
+  ctx.fillText('0034 0434 1610 9281 42', 128, 236)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
 export function ThreeDRoute() {
   const stageRef = useRef<HTMLDivElement>(null)
   const cssLayerRef = useRef<HTMLDivElement>(null)
   const webglCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const [isLocked, setIsLocked] = useState(false)
-  const [targetedTablet, setTargetedTablet] = useState<{ title: string; isLabel: boolean } | null>(null)
+  const [targetedTablet, setTargetedTablet] = useState<{
+    title: string
+    kind: 'label' | 'screen' | 'drawer'
+  } | null>(null)
   const [focusedTabletId, setFocusedTabletId] = useState<string | null>(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const resetViewRef = useRef<(() => void) | null>(null)
   const unlockFocusRef = useRef<(() => void) | null>(null)
+  const toggleDrawerRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     const stageEl = stageRef.current
@@ -360,16 +574,28 @@ export function ThreeDRoute() {
         tableGroup.add(leg)
       }
 
-      // Subtle under-table crossbar frame
-      const beamXGeo = new THREE.BoxGeometry(TABLE_W - 520, 110, 120)
+      // Subtle under-table crossbar frame (front beam leaves opening for under-table cash drawer)
+      const beamBackGeo = new THREE.BoxGeometry(TABLE_W - 520, 110, 120)
+      const beamSideLeftGeo = new THREE.BoxGeometry(2600, 110, 120)
+      const beamSideRightGeo = new THREE.BoxGeometry(2460, 110, 120)
       const beamZGeo = new THREE.BoxGeometry(120, 110, TABLE_D - 520)
-      disposables.push(beamXGeo, beamZGeo)
-      for (const bz of [-legOffsetZ, legOffsetZ]) {
-        const beam = new THREE.Mesh(beamXGeo, metalMat)
-        beam.position.set(0, TABLE_TOP_Y - TABLE_THICKNESS - 55, bz)
-        beam.castShadow = true
-        tableGroup.add(beam)
-      }
+      disposables.push(beamBackGeo, beamSideLeftGeo, beamSideRightGeo, beamZGeo)
+
+      const beamBack = new THREE.Mesh(beamBackGeo, metalMat)
+      beamBack.position.set(0, TABLE_TOP_Y - TABLE_THICKNESS - 55, -legOffsetZ)
+      beamBack.castShadow = true
+      tableGroup.add(beamBack)
+
+      const beamFrontLeft = new THREE.Mesh(beamSideLeftGeo, metalMat)
+      beamFrontLeft.position.set(-1940, TABLE_TOP_Y - TABLE_THICKNESS - 55, legOffsetZ)
+      beamFrontLeft.castShadow = true
+      tableGroup.add(beamFrontLeft)
+
+      const beamFrontRight = new THREE.Mesh(beamSideRightGeo, metalMat)
+      beamFrontRight.position.set(2010, TABLE_TOP_Y - TABLE_THICKNESS - 55, legOffsetZ)
+      beamFrontRight.castShadow = true
+      tableGroup.add(beamFrontRight)
+
       for (const bx of [-legOffsetX, legOffsetX]) {
         const beam = new THREE.Mesh(beamZGeo, metalMat)
         beam.position.set(bx, TABLE_TOP_Y - TABLE_THICKNESS - 55, 0)
@@ -438,9 +664,11 @@ export function ThreeDRoute() {
       const tabletInstances: TabletInstance[] = []
       const raycastTargets: Array<InstanceType<typeof THREE.Mesh>> = []
       const plateTargets: Array<InstanceType<typeof THREE.Mesh>> = []
+      const drawerTargets: Array<InstanceType<typeof THREE.Mesh>> = []
 
       const TILT_ANGLE = -0.36 // ~20.6 degrees tilted back toward viewer
       const TABLET_Z = 920 // Near front edge of the table (front edge at +1600)
+      const DRAWER_H = 380
 
       for (const spec of TABLETS) {
         const visibleCssW = spec.crop ? spec.crop.w : spec.cssW
@@ -452,6 +680,7 @@ export function ThreeDRoute() {
 
         const centerYOffset = (tabletH / 2) * Math.cos(TILT_ANGLE) + spec.bottomClearance
         const centerY = TABLE_TOP_Y + centerYOffset
+        const standBaseY = TABLE_TOP_Y
 
         const backShellGeo = new THREE.BoxGeometry(tabletW, tabletH, TABLET_DEPTH - 8)
         const bezelTopGeo = new THREE.BoxGeometry(tabletW, spec.bezelPad, 10)
@@ -459,7 +688,7 @@ export function ThreeDRoute() {
         const cutoutGeo = new THREE.PlaneGeometry(screenW, screenH)
         const footW = Math.min(580, Math.max(280, Math.round(tabletW * 0.65)))
         const baseFootGeo = new THREE.BoxGeometry(footW, 32, 340)
-        const neckH = Math.max(240, Math.round(centerYOffset))
+        const neckH = Math.max(240, Math.round(centerY - standBaseY))
         const neckGeo = new THREE.BoxGeometry(110, neckH, 64)
         const nameplateW = Math.min(760, Math.max(400, tabletW - 20))
         const nameplateD = Math.max(100, Math.round(nameplateW * 0.25))
@@ -475,15 +704,15 @@ export function ThreeDRoute() {
           nameplateGeo,
         )
 
-        // Stand on tabletop
+        // Stand on tabletop (or on top of cash drawer for center POS)
         const foot = new THREE.Mesh(baseFootGeo, standMat)
-        foot.position.set(spec.x, TABLE_TOP_Y + 16, TABLET_Z - 140)
+        foot.position.set(spec.x, standBaseY + 16, TABLET_Z - 140)
         foot.castShadow = true
         foot.receiveShadow = true
         webglScene.add(foot)
 
         const neck = new THREE.Mesh(neckGeo, standMat)
-        neck.position.set(spec.x, TABLE_TOP_Y + neckH / 2 + 16, TABLET_Z - 140)
+        neck.position.set(spec.x, standBaseY + neckH / 2 + 16, TABLET_Z - 140)
         neck.castShadow = true
         neck.receiveShadow = true
         webglScene.add(neck)
@@ -512,7 +741,11 @@ export function ThreeDRoute() {
         plate.position.set(spec.x, TABLE_TOP_Y + 12, TABLET_Z + 440)
         plate.castShadow = true
         plate.receiveShadow = true
-        plate.userData = { tabletTitle: spec.title, tabletId: spec.id, isLabel: true }
+        plate.userData = {
+          tabletTitle: spec.title,
+          tabletId: spec.id,
+          kind: 'label',
+        }
         webglScene.add(plate)
         plateTargets.push(plate)
         raycastTargets.push(plate)
@@ -564,7 +797,11 @@ export function ThreeDRoute() {
         // Transparent NoBlending cutout plane for CSS3D iframe visibility + occlusion
         const cutoutMesh = new THREE.Mesh(cutoutGeo, cutoutMat)
         cutoutMesh.position.set(0, 0, 2)
-        cutoutMesh.userData = { tabletTitle: spec.title, tabletId: spec.id, isLabel: false }
+        cutoutMesh.userData = {
+          tabletTitle: spec.title,
+          tabletId: spec.id,
+          kind: 'screen',
+        }
         tabletGroup.add(cutoutMesh)
 
         webglScene.add(tabletGroup)
@@ -611,6 +848,616 @@ export function ThreeDRoute() {
         raycastTargets.push(cutoutMesh)
       }
 
+      // 6b. Cash Drawer mounted under the table beneath center POS
+      const DRAWER_X = 74
+      const DRAWER_Z = 980
+      const DRAWER_W = 1360
+      const DRAWER_D = 1120
+      const DRAWER_OPEN_OFFSET = 820
+
+      const drawerBodyMat = new THREE.MeshStandardMaterial({
+        color: '#1a202c',
+        roughness: 0.42,
+        metalness: 0.55,
+      })
+      const drawerTrayMat = new THREE.MeshStandardMaterial({
+        color: '#111827',
+        roughness: 0.5,
+        metalness: 0.35,
+      })
+      const chromeMat = new THREE.MeshStandardMaterial({
+        color: '#cbd5e1',
+        roughness: 0.22,
+        metalness: 0.88,
+      })
+      const openBtnTex = createCashButtonTexture(THREE, 'ÖFFNEN', '#1ec9a8')
+      const closeBtnTex = createCashButtonTexture(THREE, 'SCHLIESSEN', '#f59e0b')
+      const drawerBtnFaceMat = new THREE.MeshStandardMaterial({
+        map: openBtnTex,
+        roughness: 0.3,
+        metalness: 0.15,
+      })
+
+      const drawerBottomGeo = new THREE.BoxGeometry(DRAWER_W, 28, DRAWER_D)
+      const drawerTopGeo = new THREE.BoxGeometry(DRAWER_W, 32, DRAWER_D)
+      const drawerSideGeo = new THREE.BoxGeometry(32, DRAWER_H - 60, DRAWER_D)
+      const drawerBackGeo = new THREE.BoxGeometry(DRAWER_W - 64, DRAWER_H - 60, 28)
+
+      const trayFrontGeo = new THREE.BoxGeometry(DRAWER_W - 72, 294, 34)
+      const trayFloorGeo = new THREE.BoxGeometry(DRAWER_W - 104, 22, DRAWER_D - 90)
+      const traySideGeo = new THREE.BoxGeometry(22, 165, DRAWER_D - 90)
+      const trayBackWallGeo = new THREE.BoxGeometry(DRAWER_W - 148, 165, 22)
+      const trayDividerGeo = new THREE.BoxGeometry(16, 145, 520)
+      const trayMidWallGeo = new THREE.BoxGeometry(DRAWER_W - 148, 130, 18)
+      const coinCupGeo = new THREE.BoxGeometry(16, 95, 340)
+      const handleBarGeo = new THREE.BoxGeometry(440, 28, 36)
+      const lockGeo = new THREE.CylinderGeometry(30, 30, 26, 20)
+      const cashBtnGeo = new THREE.BoxGeometry(260, 114, 26)
+      const billGeo = new THREE.BoxGeometry(210, 42, 340)
+      const coinStackGeo = new THREE.CylinderGeometry(48, 48, 38, 18)
+
+      disposables.push(
+        drawerBodyMat,
+        drawerTrayMat,
+        chromeMat,
+        openBtnTex,
+        closeBtnTex,
+        drawerBtnFaceMat,
+        drawerBottomGeo,
+        drawerTopGeo,
+        drawerSideGeo,
+        drawerBackGeo,
+        trayFrontGeo,
+        trayFloorGeo,
+        traySideGeo,
+        trayBackWallGeo,
+        trayDividerGeo,
+        trayMidWallGeo,
+        coinCupGeo,
+        handleBarGeo,
+        lockGeo,
+        cashBtnGeo,
+        billGeo,
+        coinStackGeo,
+      )
+
+      const drawerGroup = new THREE.Group()
+      drawerGroup.position.set(
+        DRAWER_X,
+        TABLE_TOP_Y - TABLE_THICKNESS - DRAWER_H,
+        DRAWER_Z,
+      )
+      webglScene.add(drawerGroup)
+
+      const dBottom = new THREE.Mesh(drawerBottomGeo, drawerBodyMat)
+      dBottom.position.set(0, 14, 0)
+      dBottom.receiveShadow = true
+      drawerGroup.add(dBottom)
+
+      const dTop = new THREE.Mesh(drawerTopGeo, drawerBodyMat)
+      dTop.position.set(0, DRAWER_H - 16, 0)
+      dTop.castShadow = true
+      dTop.receiveShadow = true
+      drawerGroup.add(dTop)
+
+      const dLeft = new THREE.Mesh(drawerSideGeo, drawerBodyMat)
+      dLeft.position.set(-DRAWER_W / 2 + 16, DRAWER_H / 2, 0)
+      dLeft.castShadow = true
+      dLeft.receiveShadow = true
+      drawerGroup.add(dLeft)
+
+      const dRight = new THREE.Mesh(drawerSideGeo, drawerBodyMat)
+      dRight.position.set(DRAWER_W / 2 - 16, DRAWER_H / 2, 0)
+      dRight.castShadow = true
+      dRight.receiveShadow = true
+      drawerGroup.add(dRight)
+
+      const dBack = new THREE.Mesh(drawerBackGeo, drawerBodyMat)
+      dBack.position.set(0, DRAWER_H / 2, -DRAWER_D / 2 + 14)
+      dBack.castShadow = true
+      drawerGroup.add(dBack)
+
+      // Sliding inner cash tray (slides along +Z over tabletop & nameplate)
+      const drawerTrayGroup = new THREE.Group()
+      drawerGroup.add(drawerTrayGroup)
+
+      const trayFront = new THREE.Mesh(trayFrontGeo, drawerBodyMat)
+      trayFront.position.set(0, 193, DRAWER_D / 2 - 20)
+      trayFront.castShadow = true
+      trayFront.receiveShadow = true
+      trayFront.userData = {
+        tabletTitle: 'Kassenschublade',
+        tabletId: 'cash-drawer',
+        kind: 'drawer',
+      }
+      drawerTrayGroup.add(trayFront)
+
+      const handleBar = new THREE.Mesh(handleBarGeo, chromeMat)
+      handleBar.position.set(-140, 168, DRAWER_D / 2 + 8)
+      handleBar.castShadow = true
+      drawerTrayGroup.add(handleBar)
+
+      const lockCylinder = new THREE.Mesh(lockGeo, chromeMat)
+      lockCylinder.rotation.x = Math.PI / 2
+      lockCylinder.position.set(-500, 198, DRAWER_D / 2 + 2)
+      drawerTrayGroup.add(lockCylinder)
+
+      const cashBtnMesh = new THREE.Mesh(cashBtnGeo, [
+        chromeMat,
+        chromeMat,
+        chromeMat,
+        chromeMat,
+        drawerBtnFaceMat,
+        chromeMat,
+      ])
+      cashBtnMesh.position.set(360, 193, DRAWER_D / 2 + 8)
+      cashBtnMesh.castShadow = true
+      cashBtnMesh.userData = {
+        tabletTitle: 'Kassenschublade',
+        tabletId: 'cash-drawer',
+        kind: 'drawer',
+      }
+      drawerTrayGroup.add(cashBtnMesh)
+      drawerTargets.push(cashBtnMesh, trayFront)
+      raycastTargets.push(cashBtnMesh, trayFront)
+
+      const trayFloor = new THREE.Mesh(trayFloorGeo, drawerTrayMat)
+      trayFloor.position.set(0, 57, -25)
+      trayFloor.receiveShadow = true
+      drawerTrayGroup.add(trayFloor)
+
+      const trayLeft = new THREE.Mesh(traySideGeo, drawerTrayMat)
+      trayLeft.position.set(-(DRAWER_W - 104) / 2 + 11, 145, -25)
+      drawerTrayGroup.add(trayLeft)
+
+      const trayRight = new THREE.Mesh(traySideGeo, drawerTrayMat)
+      trayRight.position.set((DRAWER_W - 104) / 2 - 11, 145, -25)
+      drawerTrayGroup.add(trayRight)
+
+      const trayBackWall = new THREE.Mesh(trayBackWallGeo, drawerTrayMat)
+      trayBackWall.position.set(0, 145, -DRAWER_D / 2 + 32)
+      drawerTrayGroup.add(trayBackWall)
+
+      const trayMidWall = new THREE.Mesh(trayMidWallGeo, drawerTrayMat)
+      trayMidWall.position.set(0, 130, 80)
+      drawerTrayGroup.add(trayMidWall)
+
+      const billColors = ['#9ca3af', '#f87171', '#60a5fa', '#fbbf24']
+      for (let i = 0; i < 4; i++) {
+        const bx = -420 + i * 280
+        if (i < 3) {
+          const div = new THREE.Mesh(trayDividerGeo, drawerTrayMat)
+          div.position.set(bx + 140, 136, -220)
+          drawerTrayGroup.add(div)
+        }
+        const billMat = new THREE.MeshStandardMaterial({
+          color: billColors[i],
+          roughness: 0.7,
+        })
+        disposables.push(billMat)
+        const billStack = new THREE.Mesh(billGeo, billMat)
+        billStack.position.set(bx, 88, -220)
+        drawerTrayGroup.add(billStack)
+      }
+
+      const coinMat = new THREE.MeshStandardMaterial({
+        color: '#d97706',
+        roughness: 0.25,
+        metalness: 0.82,
+      })
+      disposables.push(coinMat)
+      for (let i = 0; i < 5; i++) {
+        const cx = -440 + i * 220
+        if (i < 4) {
+          const cupDiv = new THREE.Mesh(coinCupGeo, drawerTrayMat)
+          cupDiv.position.set(cx + 110, 112, 290)
+          drawerTrayGroup.add(cupDiv)
+        }
+        const coins = new THREE.Mesh(coinStackGeo, coinMat)
+        coins.position.set(cx, 86, 290)
+        drawerTrayGroup.add(coins)
+      }
+
+      // 6c. Epson TM-m30III Thermal Receipt Printer to the right of SumUp Virtual Solo
+      const PRINTER_SIZE = 340
+      const PRINTER_X = 2118
+      const PRINTER_Z = 900
+
+      const printerBodyMat = new THREE.MeshStandardMaterial({
+        color: '#1b2029',
+        roughness: 0.36,
+        metalness: 0.35,
+      })
+      const printerTopMat = new THREE.MeshStandardMaterial({
+        color: '#10141b',
+        roughness: 0.28,
+        metalness: 0.25,
+      })
+      const printerBadgeTex = createPrinterFrontTexture(THREE)
+      const printerBadgeMat = new THREE.MeshStandardMaterial({
+        map: printerBadgeTex,
+        roughness: 0.35,
+        metalness: 0.2,
+      })
+      const receiptTex = createReceiptTexture(THREE)
+      const receiptMat = new THREE.MeshStandardMaterial({
+        map: receiptTex,
+        roughness: 0.85,
+        side: THREE.DoubleSide,
+      })
+      const printerPowerLedMat = new THREE.MeshStandardMaterial({
+        color: '#1ec9a8',
+        emissive: '#1ec9a8',
+        emissiveIntensity: 0.9,
+      })
+      const printerNetLedMat = new THREE.MeshStandardMaterial({
+        color: '#3b82f6',
+        emissive: '#3b82f6',
+        emissiveIntensity: 0.8,
+      })
+
+      const printerBoxGeo = new THREE.BoxGeometry(PRINTER_SIZE, PRINTER_SIZE, PRINTER_SIZE)
+      const printerTopCapGeo = new THREE.BoxGeometry(PRINTER_SIZE - 28, 12, PRINTER_SIZE - 28)
+      const printerSlotGeo = new THREE.BoxGeometry(220, 18, 28)
+      const printerBadgeGeo = new THREE.PlaneGeometry(180, 90)
+      const receiptGeo = new THREE.PlaneGeometry(190, 180)
+      const ledGeo = new THREE.CircleGeometry(7, 14)
+
+      disposables.push(
+        printerBodyMat,
+        printerTopMat,
+        printerBadgeTex,
+        printerBadgeMat,
+        receiptTex,
+        receiptMat,
+        printerPowerLedMat,
+        printerNetLedMat,
+        printerBoxGeo,
+        printerTopCapGeo,
+        printerSlotGeo,
+        printerBadgeGeo,
+        receiptGeo,
+        ledGeo,
+      )
+
+      const printerGroup = new THREE.Group()
+      printerGroup.position.set(PRINTER_X, TABLE_TOP_Y, PRINTER_Z)
+      webglScene.add(printerGroup)
+
+      const printerBody = new THREE.Mesh(printerBoxGeo, printerBodyMat)
+      printerBody.position.set(0, PRINTER_SIZE / 2, 0)
+      printerBody.castShadow = true
+      printerBody.receiveShadow = true
+      printerGroup.add(printerBody)
+
+      const printerCap = new THREE.Mesh(printerTopCapGeo, printerTopMat)
+      printerCap.position.set(0, PRINTER_SIZE + 3, 0)
+      printerGroup.add(printerCap)
+
+      const printerSlot = new THREE.Mesh(printerSlotGeo, drawerTrayMat)
+      printerSlot.position.set(0, PRINTER_SIZE - 22, PRINTER_SIZE / 2 - 12)
+      printerGroup.add(printerSlot)
+
+      const receiptMesh = new THREE.Mesh(receiptGeo, receiptMat)
+      receiptMesh.position.set(0, PRINTER_SIZE - 8, PRINTER_SIZE / 2 + 52)
+      receiptMesh.rotation.x = -0.95
+      receiptMesh.castShadow = true
+      printerGroup.add(receiptMesh)
+
+      const printerBadge = new THREE.Mesh(printerBadgeGeo, printerBadgeMat)
+      printerBadge.position.set(0, PRINTER_SIZE * 0.42, PRINTER_SIZE / 2 + 2)
+      printerGroup.add(printerBadge)
+
+      const powerLed = new THREE.Mesh(ledGeo, printerPowerLedMat)
+      powerLed.position.set(-112, PRINTER_SIZE - 38, PRINTER_SIZE / 2 + 2)
+      printerGroup.add(powerLed)
+
+      const netLed = new THREE.Mesh(ledGeo, printerNetLedMat)
+      netLed.position.set(-84, PRINTER_SIZE - 38, PRINTER_SIZE / 2 + 2)
+      printerGroup.add(netLed)
+
+      // 6d. Zebra ZD420 Shipping Label Printer right of the 22" big monitor
+      const ZEBRA_X = -844
+      const ZEBRA_Z = 780
+      const ZEBRA_W = 540
+      const ZEBRA_D = 700
+
+      const zebraBodyMat = new THREE.MeshStandardMaterial({
+        color: '#23272e',
+        roughness: 0.42,
+        metalness: 0.2,
+      })
+      const zebraPlinthMat = new THREE.MeshStandardMaterial({
+        color: '#171a20',
+        roughness: 0.5,
+        metalness: 0.2,
+      })
+      const zebraLatchMat = new THREE.MeshStandardMaterial({
+        color: '#f59e0b',
+        roughness: 0.32,
+        metalness: 0.1,
+      })
+      const zebraWindowMat = new THREE.MeshStandardMaterial({
+        color: '#0f172a',
+        roughness: 0.12,
+        metalness: 0.3,
+        transparent: true,
+        opacity: 0.46,
+      })
+      const zebraRollMat = new THREE.MeshStandardMaterial({
+        color: '#f3f4f6',
+        roughness: 0.75,
+      })
+      const zebraBadgeTex = createZebraBadgeTexture(THREE)
+      const zebraBadgeMat = new THREE.MeshStandardMaterial({
+        map: zebraBadgeTex,
+        roughness: 0.35,
+      })
+      const shippingLabelTex = createShippingLabelTexture(THREE)
+      const shippingLabelMat = new THREE.MeshStandardMaterial({
+        map: shippingLabelTex,
+        roughness: 0.85,
+        side: THREE.DoubleSide,
+      })
+
+      // Side-profile clamshell silhouette matching Zebra ZD420/ZD421
+      const zebraShape = new THREE.Shape()
+      zebraShape.moveTo(-332, 26)
+      zebraShape.lineTo(332, 26)
+      zebraShape.lineTo(332, 206)
+      zebraShape.quadraticCurveTo(332, 240, 304, 262)
+      zebraShape.lineTo(94, 424)
+      zebraShape.quadraticCurveTo(-70, 460, -252, 418)
+      zebraShape.quadraticCurveTo(-342, 368, -342, 205)
+      zebraShape.lineTo(-332, 26)
+
+      const zebraShellGeo = new THREE.ExtrudeGeometry(zebraShape, {
+        depth: ZEBRA_W - 24,
+        bevelEnabled: true,
+        bevelThickness: 12,
+        bevelSize: 12,
+        bevelSegments: 4,
+      })
+      zebraShellGeo.translate(0, 0, -(ZEBRA_W - 24) / 2)
+
+      const zebraPlinthGeo = new THREE.BoxGeometry(ZEBRA_W - 36, 28, ZEBRA_D - 56)
+      const zebraLatchGeo = new THREE.BoxGeometry(22, 54, 66)
+      const zebraHingeGeo = new THREE.CylinderGeometry(28, 28, 18, 20)
+      const zebraWindowGeo = new THREE.BoxGeometry(340, 20, 150)
+      const zebraRollGeo = new THREE.CylinderGeometry(74, 74, 300, 24)
+      const zebraSlotGeo = new THREE.BoxGeometry(430, 14, 26)
+      const zebraSeamGeo = new THREE.BoxGeometry(ZEBRA_W + 2, 6, 440)
+      const zebraBadgeGeo = new THREE.PlaneGeometry(300, 150)
+      const shippingLabelGeo = new THREE.PlaneGeometry(310, 250)
+
+      disposables.push(
+        zebraBodyMat,
+        zebraPlinthMat,
+        zebraLatchMat,
+        zebraWindowMat,
+        zebraRollMat,
+        zebraBadgeTex,
+        zebraBadgeMat,
+        shippingLabelTex,
+        shippingLabelMat,
+        zebraShellGeo,
+        zebraPlinthGeo,
+        zebraLatchGeo,
+        zebraHingeGeo,
+        zebraWindowGeo,
+        zebraRollGeo,
+        zebraSlotGeo,
+        zebraSeamGeo,
+        zebraBadgeGeo,
+        shippingLabelGeo,
+      )
+
+      const zebraGroup = new THREE.Group()
+      zebraGroup.position.set(ZEBRA_X, TABLE_TOP_Y, ZEBRA_Z)
+      webglScene.add(zebraGroup)
+
+      const zebraPlinth = new THREE.Mesh(zebraPlinthGeo, zebraPlinthMat)
+      zebraPlinth.position.set(0, 14, 0)
+      zebraPlinth.castShadow = true
+      zebraPlinth.receiveShadow = true
+      zebraGroup.add(zebraPlinth)
+
+      const zebraShell = new THREE.Mesh(zebraShellGeo, zebraBodyMat)
+      zebraShell.rotation.y = -Math.PI / 2
+      zebraShell.castShadow = true
+      zebraShell.receiveShadow = true
+      zebraGroup.add(zebraShell)
+
+      // White label roll visible through translucent smoked top window
+      const zebraRoll = new THREE.Mesh(zebraRollGeo, zebraRollMat)
+      zebraRoll.rotation.z = Math.PI / 2
+      zebraRoll.position.set(0, 355, -80)
+      zebraGroup.add(zebraRoll)
+
+      const zebraWindow = new THREE.Mesh(zebraWindowGeo, zebraWindowMat)
+      zebraWindow.position.set(0, 440, -80)
+      zebraWindow.rotation.x = 0.08
+      zebraGroup.add(zebraWindow)
+
+      // Yellow-orange clamshell release latches + side seam + rear hinge caps
+      for (const lx of [-(ZEBRA_W / 2 + 2), ZEBRA_W / 2 + 2]) {
+        const latch = new THREE.Mesh(zebraLatchGeo, zebraLatchMat)
+        latch.position.set(lx, 185, 130)
+        latch.castShadow = true
+        zebraGroup.add(latch)
+
+        const hinge = new THREE.Mesh(zebraHingeGeo, zebraPlinthMat)
+        hinge.rotation.z = Math.PI / 2
+        hinge.position.set(lx, 326, -315)
+        zebraGroup.add(hinge)
+      }
+
+      const zebraSeam = new THREE.Mesh(zebraSeamGeo, zebraPlinthMat)
+      zebraSeam.position.set(0, 198, -70)
+      zebraGroup.add(zebraSeam)
+
+      // Sloped control panel matching front clamshell slope
+      const zebraBadge = new THREE.Mesh(zebraBadgeGeo, zebraBadgeMat)
+      zebraBadge.position.set(0, 354, 211)
+      zebraBadge.rotation.x = -0.914
+      zebraGroup.add(zebraBadge)
+
+      // Front label exit slot + emerging shipping label
+      const zebraSlot = new THREE.Mesh(zebraSlotGeo, drawerTrayMat)
+      zebraSlot.position.set(0, 196, 338)
+      zebraGroup.add(zebraSlot)
+
+      const shippingLabelMesh = new THREE.Mesh(shippingLabelGeo, shippingLabelMat)
+      shippingLabelMesh.position.set(0, 146, 412)
+      shippingLabelMesh.rotation.x = -0.95
+      shippingLabelMesh.castShadow = true
+      zebraGroup.add(shippingLabelMesh)
+
+      // 6e. Inateck BCST-70 Barcode Scanner right of the Epson TM-m30III printer
+      const SCANNER_X = 2580
+      const SCANNER_Z = 920
+
+      const scannerGreyMat = new THREE.MeshStandardMaterial({
+        color: '#c4c8ce',
+        roughness: 0.45,
+        metalness: 0.08,
+      })
+      const scannerRubberMat = new THREE.MeshStandardMaterial({
+        color: '#1b1f26',
+        roughness: 0.62,
+        metalness: 0.08,
+      })
+      const scannerLensMat = new THREE.MeshStandardMaterial({
+        color: '#0f172a',
+        roughness: 0.1,
+        metalness: 0.4,
+      })
+      const scannerBeamMat = new THREE.MeshStandardMaterial({
+        color: '#ef4444',
+        emissive: '#ef4444',
+        emissiveIntensity: 0.9,
+      })
+
+      const footOvalGeo = new THREE.CylinderGeometry(72, 78, 34, 24)
+      const lowerGripGeo = new THREE.CylinderGeometry(52, 60, 225, 22)
+      const rearSpineGeo = new THREE.BoxGeometry(68, 225, 52)
+      const upperNeckGeo = new THREE.CylinderGeometry(64, 52, 220, 22)
+      const triggerGeo = new THREE.BoxGeometry(44, 98, 56)
+      const triggerBumpGeo = new THREE.CylinderGeometry(24, 24, 44, 16)
+      const headCoreGeo = new THREE.BoxGeometry(168, 122, 160)
+      const hoodRibGeo = new THREE.BoxGeometry(232, 26, 165)
+      const scanLensGeo = new THREE.PlaneGeometry(156, 94)
+      const scanBeamGeo = new THREE.BoxGeometry(106, 5, 4)
+
+      // Rounded oval hood with recessed front cavity (matching BCST-70 front mouth)
+      const hoodOuter = new THREE.Shape()
+      hoodOuter.absellipse(0, 0, 108, 74, 0, Math.PI * 2, false, 0)
+      const hoodHole = new THREE.Path()
+      hoodHole.absellipse(0, 0, 76, 44, 0, Math.PI * 2, true, 0)
+      hoodOuter.holes.push(hoodHole)
+
+      const hoodGeo = new THREE.ExtrudeGeometry(hoodOuter, {
+        depth: 130,
+        bevelEnabled: true,
+        bevelThickness: 14,
+        bevelSize: 12,
+        bevelSegments: 4,
+      })
+
+      disposables.push(
+        scannerGreyMat,
+        scannerRubberMat,
+        scannerLensMat,
+        scannerBeamMat,
+        footOvalGeo,
+        lowerGripGeo,
+        rearSpineGeo,
+        upperNeckGeo,
+        triggerGeo,
+        triggerBumpGeo,
+        headCoreGeo,
+        hoodRibGeo,
+        scanLensGeo,
+        scanBeamGeo,
+        hoodGeo,
+      )
+
+      const scannerGroup = new THREE.Group()
+      scannerGroup.position.set(SCANNER_X, TABLE_TOP_Y, SCANNER_Z)
+      scannerGroup.rotation.y = -0.36
+      webglScene.add(scannerGroup)
+
+      const sFoot = new THREE.Mesh(footOvalGeo, scannerRubberMat)
+      sFoot.scale.set(0.92, 1, 1.38)
+      sFoot.position.set(0, 17, 16)
+      sFoot.castShadow = true
+      sFoot.receiveShadow = true
+      scannerGroup.add(sFoot)
+
+      const sLowerGrip = new THREE.Mesh(lowerGripGeo, scannerRubberMat)
+      sLowerGrip.scale.set(0.9, 1, 1.15)
+      sLowerGrip.position.set(0, 136, 0)
+      sLowerGrip.rotation.x = 0.08
+      sLowerGrip.castShadow = true
+      scannerGroup.add(sLowerGrip)
+
+      const sRearSpine = new THREE.Mesh(rearSpineGeo, scannerGreyMat)
+      sRearSpine.position.set(0, 148, -32)
+      sRearSpine.rotation.x = 0.08
+      sRearSpine.castShadow = true
+      scannerGroup.add(sRearSpine)
+
+      const sUpperNeck = new THREE.Mesh(upperNeckGeo, scannerGreyMat)
+      sUpperNeck.scale.set(0.95, 1, 1.24)
+      sUpperNeck.position.set(0, 336, 22)
+      sUpperNeck.rotation.x = 0.24
+      sUpperNeck.castShadow = true
+      scannerGroup.add(sUpperNeck)
+
+      const sTrigger = new THREE.Mesh(triggerGeo, scannerRubberMat)
+      sTrigger.position.set(0, 368, 76)
+      sTrigger.rotation.x = -0.22
+      sTrigger.castShadow = true
+      scannerGroup.add(sTrigger)
+
+      const sTriggerBump = new THREE.Mesh(triggerBumpGeo, scannerRubberMat)
+      sTriggerBump.rotation.z = Math.PI / 2
+      sTriggerBump.position.set(0, 366, 98)
+      scannerGroup.add(sTriggerBump)
+
+      const scannerHeadGroup = new THREE.Group()
+      scannerHeadGroup.position.set(0, 474, 72)
+      scannerHeadGroup.rotation.x = 0.18
+      scannerGroup.add(scannerHeadGroup)
+
+      const sHeadCore = new THREE.Mesh(headCoreGeo, scannerGreyMat)
+      sHeadCore.position.set(0, 4, -52)
+      sHeadCore.castShadow = true
+      scannerHeadGroup.add(sHeadCore)
+
+      const sHeadCap = new THREE.Mesh(hoodGeo, scannerRubberMat)
+      sHeadCap.position.set(0, 0, -24)
+      sHeadCap.castShadow = true
+      scannerHeadGroup.add(sHeadCap)
+
+      const sHoodRib = new THREE.Mesh(hoodRibGeo, scannerRubberMat)
+      sHoodRib.position.set(0, 6, 32)
+      sHoodRib.castShadow = true
+      scannerHeadGroup.add(sHoodRib)
+
+      const sScanLens = new THREE.Mesh(scanLensGeo, scannerLensMat)
+      sScanLens.position.set(0, 0, 14)
+      scannerHeadGroup.add(sScanLens)
+
+      const sScanBeam = new THREE.Mesh(scanBeamGeo, scannerBeamMat)
+      sScanBeam.position.set(0, 0, 18)
+      scannerHeadGroup.add(sScanBeam)
+
+      const sStatusLed = new THREE.Mesh(ledGeo, printerPowerLedMat)
+      sStatusLed.rotation.x = -Math.PI / 2
+      sStatusLed.position.set(0, 66, -78)
+      scannerHeadGroup.add(sStatusLed)
+
       // 7. Player Input (WASD flat walk + Minecraft Pointer Lock mouse look)
       const pressedKeys = new Set<string>()
       let pointerLocked = false
@@ -619,8 +1466,12 @@ export function ThreeDRoute() {
       let lastDragY = 0
       let currentTargetTitle: string | null = null
       let currentTargetId: string | null = null
-      let currentTargetIsLabel = false
+      let currentTargetKind: 'label' | 'screen' | 'drawer' | null = null
       let focusedId: string | null = null
+      let drawerOpen = false
+      let drawerZCurrent = 0
+      let drawerZTarget = 0
+      let btnPressAnim = 0
       let hoveredTabletId: string | null = null
       let hasPointerActivity = false
 
@@ -758,6 +1609,30 @@ export function ThreeDRoute() {
         return (hits[0].object.userData.tabletId as string) ?? null
       }
 
+      const hitDrawerAtClient = (clientX: number, clientY: number) => {
+        const rect = stageEl.getBoundingClientRect()
+        if (rect.width <= 0 || rect.height <= 0) return false
+        pointerNdc.set(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1,
+        )
+        raycaster.setFromCamera(pointerNdc, camera)
+        return raycaster.intersectObjects(drawerTargets, false).length > 0
+      }
+
+      const toggleCashDrawer = () => {
+        drawerOpen = !drawerOpen
+        drawerZTarget = drawerOpen ? DRAWER_OPEN_OFFSET : 0
+        btnPressAnim = 1
+        drawerBtnFaceMat.map = drawerOpen ? closeBtnTex : openBtnTex
+        drawerBtnFaceMat.needsUpdate = true
+        setIsDrawerOpen(drawerOpen)
+      }
+
+      toggleDrawerRef.current = () => {
+        toggleCashDrawer()
+      }
+
       const syncPointerMode = (locked: boolean) => {
         pointerLocked = locked
         if (locked) {
@@ -771,7 +1646,7 @@ export function ThreeDRoute() {
           setTargetedTablet(null)
           currentTargetTitle = null
           currentTargetId = null
-          currentTargetIsLabel = false
+          currentTargetKind = null
         }
       }
 
@@ -820,7 +1695,9 @@ export function ThreeDRoute() {
         } else if (code === 'KeyE' || code === 'Tab') {
           e.preventDefault()
           if (document.pointerLockElement === stageEl) {
-            if (currentTargetId && currentTargetIsLabel) {
+            if (currentTargetKind === 'drawer') {
+              toggleCashDrawer()
+            } else if (currentTargetId && currentTargetKind === 'label') {
               focusDevice(currentTargetId)
             } else {
               document.exitPointerLock()
@@ -871,11 +1748,10 @@ export function ThreeDRoute() {
           const maxPitch = Math.PI * 0.46
           pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch))
           camera.rotation.set(pitch, yaw, 0, 'YXZ')
-        } else if (focusedId === null) {
-          const hitId = hitPlateAtClient(e.clientX, e.clientY)
-          stageEl.style.cursor = hitId ? 'pointer' : ''
         } else {
-          stageEl.style.cursor = ''
+          const hitDrawer = hitDrawerAtClient(e.clientX, e.clientY)
+          const hitPlate = focusedId === null ? hitPlateAtClient(e.clientX, e.clientY) : null
+          stageEl.style.cursor = hitDrawer || hitPlate ? 'pointer' : ''
         }
       }
 
@@ -888,7 +1764,9 @@ export function ThreeDRoute() {
 
         if (pointerLocked) {
           if (e.button === 0 && currentTargetId) {
-            if (currentTargetIsLabel) {
+            if (currentTargetKind === 'drawer') {
+              toggleCashDrawer()
+            } else if (currentTargetKind === 'label') {
               focusDevice(currentTargetId)
             } else {
               document.exitPointerLock()
@@ -898,6 +1776,12 @@ export function ThreeDRoute() {
         }
 
         if (e.button === 0) {
+          if (hitDrawerAtClient(e.clientX, e.clientY)) {
+            e.preventDefault()
+            toggleCashDrawer()
+            return
+          }
+
           if (focusedId !== null) {
             exitFocus()
             return
@@ -990,6 +1874,22 @@ export function ThreeDRoute() {
         const dt = Math.min(0.05, (now - lastTime) / 1000)
         lastTime = now
 
+        // Cash drawer slide & button press animation
+        if (Math.abs(drawerZTarget - drawerZCurrent) > 0.5) {
+          const lerp = 1 - Math.exp(-12 * dt)
+          drawerZCurrent += (drawerZTarget - drawerZCurrent) * lerp
+        } else {
+          drawerZCurrent = drawerZTarget
+        }
+        drawerTrayGroup.position.z = drawerZCurrent
+
+        if (btnPressAnim > 0) {
+          btnPressAnim = Math.max(0, btnPressAnim - dt * 5)
+          cashBtnMesh.position.z = DRAWER_D / 2 + 8 - Math.sin(btnPressAnim * Math.PI) * 14
+        } else {
+          cashBtnMesh.position.z = DRAWER_D / 2 + 8
+        }
+
         // Smooth focus / return-to-overview camera transition
         if (cameraTween) {
           cameraTween.elapsed += dt
@@ -1065,12 +1965,16 @@ export function ThreeDRoute() {
             ? (hits[0].object.userData.tabletTitle as string)
             : null
           const nextId = hasHit ? (hits[0].object.userData.tabletId as string) : null
-          const nextIsLabel = hasHit ? Boolean(hits[0].object.userData.isLabel) : false
+          const nextKind = hasHit
+            ? ((hits[0].object.userData.kind as 'label' | 'screen' | 'drawer') ?? 'screen')
+            : null
           currentTargetId = nextId
-          if (nextTitle !== currentTargetTitle || nextIsLabel !== currentTargetIsLabel) {
+          if (nextTitle !== currentTargetTitle || nextKind !== currentTargetKind) {
             currentTargetTitle = nextTitle
-            currentTargetIsLabel = nextIsLabel
-            setTargetedTablet(nextTitle ? { title: nextTitle, isLabel: nextIsLabel } : null)
+            currentTargetKind = nextKind
+            setTargetedTablet(
+              nextTitle && nextKind ? { title: nextTitle, kind: nextKind } : null,
+            )
           }
         }
 
@@ -1150,6 +2054,13 @@ export function ThreeDRoute() {
             <button
               type="button"
               class="scene3d-pill"
+              onClick={() => toggleDrawerRef.current?.()}
+            >
+              {isDrawerOpen ? 'Kasse schließen' : 'Kasse öffnen'}
+            </button>
+            <button
+              type="button"
+              class="scene3d-pill"
               onClick={() => resetViewRef.current?.()}
             >
               Position zurücksetzen
@@ -1161,9 +2072,13 @@ export function ThreeDRoute() {
           {isLocked && targetedTablet && (
             <div class="scene3d-target-badge">
               {targetedTablet.title} —{' '}
-              {targetedTablet.isLabel
-                ? 'Klicken oder E drücken zum Fokussieren'
-                : 'Klicken oder E drücken zum Bedienen'}
+              {targetedTablet.kind === 'drawer'
+                ? isDrawerOpen
+                  ? 'Klicken oder E drücken zum Schließen'
+                  : 'Klicken oder E drücken zum Öffnen'
+                : targetedTablet.kind === 'label'
+                  ? 'Klicken oder E drücken zum Fokussieren'
+                  : 'Klicken oder E drücken zum Bedienen'}
             </div>
           )}
           <div class="scene3d-hint">
