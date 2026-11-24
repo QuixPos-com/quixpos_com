@@ -16,10 +16,10 @@ export function createFloorTexture(THREE: ThreeModule) {
   }
 
   const tiles: Array<{ col: number; row: number; base: string; horizontal: boolean }> = [
-    { col: 0, row: 0, base: '#93bfa8', horizontal: true },
-    { col: 1, row: 0, base: '#8eb5cf', horizontal: false },
-    { col: 0, row: 1, base: '#cfb29e', horizontal: false },
-    { col: 1, row: 1, base: '#9dc9c2', horizontal: true },
+    { col: 0, row: 0, base: '#4b705f', horizontal: true },
+    { col: 1, row: 0, base: '#47657d', horizontal: false },
+    { col: 0, row: 1, base: '#735c4f', horizontal: false },
+    { col: 1, row: 1, base: '#507872', horizontal: true },
   ]
 
   for (const tile of tiles) {
@@ -33,8 +33,8 @@ export function createFloorTexture(THREE: ThreeModule) {
     for (let i = 0; i < tileSize; i += 4) {
       const isHighlight = (i / 4) % 2 === 0
       ctx.fillStyle = isHighlight
-        ? 'rgba(255, 255, 255, 0.08)'
-        : 'rgba(28, 42, 52, 0.065)'
+        ? 'rgba(255, 255, 255, 0.055)'
+        : 'rgba(12, 18, 24, 0.14)'
       if (tile.horizontal) {
         ctx.fillRect(x0, y0 + i, tileSize, 2)
       } else {
@@ -43,7 +43,7 @@ export function createFloorTexture(THREE: ThreeModule) {
     }
 
     // Cross-weave micro threads
-    ctx.fillStyle = 'rgba(28, 42, 52, 0.04)'
+    ctx.fillStyle = 'rgba(12, 18, 24, 0.08)'
     for (let i = 2; i < tileSize; i += 6) {
       if (tile.horizontal) {
         ctx.fillRect(x0 + i, y0, 1, tileSize)
@@ -58,13 +58,13 @@ export function createFloorTexture(THREE: ThreeModule) {
       const fy = y0 + Math.floor(nextRand() * tileSize)
       ctx.fillStyle =
         nextRand() > 0.5
-          ? 'rgba(255, 255, 255, 0.085)'
-          : 'rgba(26, 40, 50, 0.07)'
+          ? 'rgba(255, 255, 255, 0.06)'
+          : 'rgba(10, 16, 22, 0.13)'
       ctx.fillRect(fx, fy, 2, 2)
     }
 
     // Soft carpet-tile seam around each checkered square
-    ctx.strokeStyle = 'rgba(26, 38, 48, 0.13)'
+    ctx.strokeStyle = 'rgba(10, 16, 22, 0.22)'
     ctx.lineWidth = 2
     ctx.strokeRect(x0 + 1, y0 + 1, tileSize - 2, tileSize - 2)
   }
