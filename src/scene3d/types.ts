@@ -70,6 +70,32 @@ export interface ShelfSlot {
   facingYaw: number
 }
 
+export interface ShelfProductInput {
+  id: string | number
+  sku?: string
+  name?: string
+  title?: string
+  image?: string
+  imageUrl?: string
+  picture?: string
+  stock: number
+  slotId?: string
+  wall?: ShelfWallId
+  imageAspectRatio?: number
+  boxColor?: string
+  maxVisible?: number
+}
+
+export interface ShelfProductSummary {
+  id: string
+  sku?: string
+  name?: string
+  stock: number
+  renderedBoxes: number
+  slotIds: string[]
+  aspectRatio: number
+}
+
 export interface TargetedDevice {
   title: string
   kind: TargetKind
@@ -247,5 +273,10 @@ export interface SceneController {
   dropHeldItem: () => void
   toggleScanner: () => void
   onBarcodeScan: (callback: (scan: BarcodeScanEvent) => void) => () => void
+  setShelfProducts: (products: ShelfProductInput[]) => ShelfProductSummary[]
+  upsertShelfProduct: (
+    product: Partial<ShelfProductInput> & { id: string | number },
+  ) => ShelfProductSummary[]
+  clearShelves: () => void
   dispose: () => void
 }

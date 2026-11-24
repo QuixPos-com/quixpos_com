@@ -236,6 +236,7 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
       name !== 'screens:get' &&
       name !== 'printer:info' &&
       name !== 'printer:media:get' &&
+      name !== 'shelves:getSlots' &&
       name !== 'input:middleClick' &&
       name !== 'input:lookStart' &&
       name !== 'input:lookMove' &&

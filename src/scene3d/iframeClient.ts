@@ -98,6 +98,71 @@ export interface DrawerCashChangedPayload {
   coins: Record<'200' | '100' | '50' | '20' | '10' | '5' | '2' | '1', number>
 }
 
+export type ShelfWallId = 'back' | 'left' | 'right'
+
+export interface ShelfProductInput {
+  [key: string]: unknown
+  id: string | number
+  sku?: string
+  name?: string
+  title?: string
+  /** Image URL or data URI rendered on the front face of the box (aspect ratio sets box dimensions) */
+  image?: string
+  imageUrl?: string
+  picture?: string
+  /** Current stock quantity; reflected by the number of boxes placed on the shelves */
+  stock: number
+  /** Optional explicit shelf slot ID (e.g. 'back-bay1-lvl2') */
+  slotId?: string
+  /** Optional preferred wall when auto-assigning ('back' | 'left' | 'right') */
+  wall?: ShelfWallId
+  /** Optional width/height hint before the image finishes loading */
+  imageAspectRatio?: number
+  boxColor?: string
+  maxVisible?: number
+}
+
+export interface ShelfProductSummary {
+  [key: string]: unknown
+  id: string
+  sku?: string
+  name?: string
+  stock: number
+  renderedBoxes: number
+  slotIds: string[]
+  aspectRatio: number
+}
+
+export interface ShelfSlotInfo {
+  [key: string]: unknown
+  id: string
+  wall: ShelfWallId
+  bayIndex: number
+  levelIndex: number
+  centerX: number
+  surfaceY: number
+  centerZ: number
+  usableWidth: number
+  usableDepth: number
+  clearanceHeight: number
+  facingYaw: number
+}
+
+export interface ShelvesUpdatedPayload {
+  [key: string]: unknown
+  totalProducts: number
+  totalStock: number
+  renderedBoxes: number
+  slotsUsed: number
+  products: ShelfProductSummary[]
+}
+
+export interface ShelvesSlotsPayload {
+  [key: string]: unknown
+  slots: ShelfSlotInfo[]
+  products: ShelfProductSummary[]
+}
+
 export interface ScreensChangedPayload {
   [key: string]: unknown
   tabletId?: string
@@ -823,6 +888,45 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     })
   }
 
+  // ── 3D Inventory Shelf Helpers ───────────────────────────────────────────
+
+  /**
+   * Populate the 3D shop shelves with inventory products.
+   * Each package's front aspect ratio automatically adapts to its loaded product image,
+   * and the number of boxes placed reflects its `stock` count (`0` removes boxes).
+   */
+  const setShelfProducts = (products: ShelfProductInput[]) => {
+    send('shelves:setProducts', { products })
+  }
+
+  /**
+   * Insert or update a single product on the 3D shelves (e.g. after a POS sale decrements stock).
+   */
+  const updateShelfProduct = (
+    product: Partial<ShelfProductInput> & { id: string | number },
+  ) => {
+    send('shelves:upsertProduct', { product })
+  }
+
+  /** Remove all inventory product boxes from the 3D shelves */
+  const clearShelves = () => {
+    send('shelves:clear', {})
+  }
+
+  /** Query all 32 shelf slot definitions and current product placements from the 3D host */
+  const requestShelfSlots = () => {
+    send('shelves:getSlots', {})
+  }
+
+  /** Subscribe to `'shelves:updated'` confirmations after inventory shelf updates */
+  const onShelvesUpdated = (
+    callback: (info: ShelvesUpdatedPayload) => void,
+  ): (() => void) => {
+    return on<ShelvesUpdatedPayload>('shelves:updated', (data) => {
+      callback(data)
+    })
+  }
+
   const dispose = () => {
     if (disposed) return
     disposed = true
@@ -888,6 +992,11 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     setDrawerCash,
     setDrawerCashCents,
     onDrawerCashChanged,
+    setShelfProducts,
+    updateShelfProduct,
+    clearShelves,
+    requestShelfSlots,
+    onShelvesUpdated,
     dispose,
   }
 }

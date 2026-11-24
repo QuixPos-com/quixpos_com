@@ -57,6 +57,8 @@ import type {
   SceneController,
   SceneRuntimeState,
   ScreenPowerSummary,
+  ShelfProductInput,
+  ShelfProductSummary,
   TouchStickRefs,
   ZebraMediaInfo,
   ZebraReelId,
@@ -117,6 +119,15 @@ export function mountSceneEngine({
   let rotateHeldLabelImpl: (() => void) | null = null
   let dropHeldItemImpl: (() => void) | null = null
   let toggleScannerImpl: (() => void) | null = null
+  let setShelfProductsImpl:
+    | ((products: ShelfProductInput[]) => ShelfProductSummary[])
+    | null = null
+  let upsertShelfProductImpl:
+    | ((
+      product: Partial<ShelfProductInput> & { id: string | number },
+    ) => ShelfProductSummary[])
+    | null = null
+  let clearShelvesImpl: (() => void) | null = null
 
   const scanListeners = new Set<(scan: BarcodeScanEvent) => void>()
 
@@ -217,11 +228,32 @@ export function mountSceneEngine({
       disposables,
     )
     const { tableMeshes } = buildTable(THREE, webglScene, disposables)
-    const { wallAndShelfSurfaceMeshes } = buildWallsAndShelves(
+
+    const broadcastShelvesUpdated = (products: ShelfProductSummary[]) => {
+      const slotSet = new Set<string>()
+      let totalStock = 0
+      let renderedBoxes = 0
+      for (const p of products) {
+        totalStock += p.stock
+        renderedBoxes += p.renderedBoxes
+        for (const sid of p.slotIds) slotSet.add(sid)
+      }
+      channel.send('shelves:updated', {
+        totalProducts: products.length,
+        totalStock,
+        renderedBoxes,
+        slotsUsed: slotSet.size,
+        products,
+      })
+    }
+
+    const shelvesController = buildWallsAndShelves(
       THREE,
       webglScene,
       disposables,
+      broadcastShelvesUpdated,
     )
+    const { wallAndShelfSurfaceMeshes } = shelvesController
 
     const {
       tabletInstances,
@@ -406,6 +438,7 @@ export function mountSceneEngine({
             state.yaw,
             [
               ...placeableBaseSurfaces,
+              ...shelvesController.getBoxSurfaceMeshes(),
               ...printManager.getPlacedLabelSurfaces(),
             ],
             1,
@@ -1227,6 +1260,52 @@ export function mountSceneEngine({
       handleEscPosChannelJob(data, meta.sender, meta.origin, meta.name)
     })
 
+    const handleSetShelfProducts = (data: Record<string, unknown>) => {
+      const list = Array.isArray(data.products)
+        ? data.products
+        : Array.isArray(data.items)
+          ? data.items
+          : null
+      if (!list) return
+      const valid = list.filter(isPlainRecord) as unknown as ShelfProductInput[]
+      shelvesController.setProducts(valid)
+    }
+
+    const handleUpsertShelfProduct = (data: Record<string, unknown>) => {
+      const raw = isPlainRecord(data.product) ? data.product : data
+      if (raw.id === undefined && typeof raw.sku !== 'string') return
+      const normalized = {
+        ...raw,
+        id:
+          raw.id !== undefined && raw.id !== null
+            ? (raw.id as string | number)
+            : String(raw.sku),
+      } as Partial<ShelfProductInput> & { id: string | number }
+      shelvesController.upsertProduct(normalized)
+    }
+
+    channel.on('shelves:setProducts', (data) => {
+      handleSetShelfProducts(data)
+    })
+    channel.on('inventory:setProducts', (data) => {
+      handleSetShelfProducts(data)
+    })
+    channel.on('shelves:upsertProduct', (data) => {
+      handleUpsertShelfProduct(data)
+    })
+    channel.on('shelves:updateStock', (data) => {
+      handleUpsertShelfProduct(data)
+    })
+    channel.on('shelves:clear', () => {
+      shelvesController.clearProducts()
+    })
+    channel.on('shelves:getSlots', (_data, meta) => {
+      meta.reply('shelves:slots', {
+        slots: shelvesController.shelfSlots,
+        products: shelvesController.getSummary(),
+      })
+    })
+
     navigateImpl = (view: NavPresetId) => {
       navigateToFocusView(view)
     }
@@ -1280,6 +1359,17 @@ export function mountSceneEngine({
 
     toggleScannerImpl = () => {
       toggleScanner()
+    }
+
+    setShelfProductsImpl = (products: ShelfProductInput[]) =>
+      shelvesController.setProducts(products)
+
+    upsertShelfProductImpl = (
+      product: Partial<ShelfProductInput> & { id: string | number },
+    ) => shelvesController.upsertProduct(product)
+
+    clearShelvesImpl = () => {
+      shelvesController.clearProducts()
     }
 
     const onResize = () => {
@@ -1833,6 +1923,7 @@ export function mountSceneEngine({
         raycaster.setFromCamera(aimNdc, camera)
         const surfaces = [
           ...placeableBaseSurfaces,
+          ...shelvesController.getBoxSurfaceMeshes(),
           ...printManager.getPlacedLabelSurfaces(),
         ]
         const canPlace = printManager.updateHeldLabelPreview(
@@ -1863,6 +1954,7 @@ export function mountSceneEngine({
         const laserTargets = [
           ...printManager.getAllSheetMeshes(),
           ...placeableBaseSurfaces,
+          ...shelvesController.getBoxSurfaceMeshes(),
           ...cutoutTargets,
         ]
         const laserHits = raycaster.intersectObjects(laserTargets, false)
@@ -2077,6 +2169,9 @@ export function mountSceneEngine({
         scanListeners.delete(callback)
       }
     },
+    setShelfProducts: (products) => setShelfProductsImpl?.(products) ?? [],
+    upsertShelfProduct: (product) => upsertShelfProductImpl?.(product) ?? [],
+    clearShelves: () => clearShelvesImpl?.(),
     dispose: () => {
       disposed = true
       if (animId) cancelAnimationFrame(animId)

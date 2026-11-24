@@ -353,6 +353,10 @@ window.addEventListener('message', (event) => {
 | `'drawer:setCash'` | `{ amount: number }` *(EUR)* or `{ cents: number }` *(integer cents)* | Sets the total cash amount in the 3D cash drawer and updates its 5 Euro note compartments (`€5–€100`) and 8 Euro coin cups (`1c–€2`) to match. |
 | `'camera:focus'` | `{ view: 'total' \| 'left' \| 'center' \| 'right' \| 'drawer' }` | Smoothly flies the 3D camera to the specified station preset. |
 | `'camera:return'` | `{}` | Returns the 3D camera to its previous pose. |
+| `'shelves:setProducts'` | `{ products: ShelfProductInput[] }` | *(Alias `'inventory:setProducts'`)* Populates the 3D shop shelves with inventory boxes. Each box's front aspect ratio automatically adapts to its `image`, and the number of boxes reflects `stock`. |
+| `'shelves:upsertProduct'` | `{ product: Partial<ShelfProductInput> & { id } }` | *(Alias `'shelves:updateStock'`)* Updates one product's stock/image on the shelves in place. |
+| `'shelves:clear'` | `{}` | Removes all product boxes from the shelves. |
+| `'shelves:getSlots'` | `{}` | Replies directly to the caller with `'shelves:slots'` `{ slots, products }`. |
 | `'tablet:reload'` | `{ tabletId?: string }` | Reloads a powered-on tablet screen (defaults to caller's own `tabletId`). |
 | `'input:middleClick'` | `{}` | *(Host-only, auto-sent by `iframeClient.ts`)* Toggles the 3D barcode scanner on middle-click over an iframe. |
 | `'input:lookStart'` / `'input:lookMove'` / `'input:lookEnd'` | `{}` / `{ dx: number, dy: number }` / `{}` | *(Host-only, auto-sent by `iframeClient.ts`)* Forwards right-click drag look-around (*Umsehen*) while keeping left-click and scroll wheel native to the iframe. |
@@ -369,6 +373,8 @@ window.addEventListener('message', (event) => {
 | `'screens:state'` | `{ screens }` | Direct reply to `'screens:get'`. |
 | `'drawer:changed'` | `{ open: boolean }` | Whenever the 3D cash drawer opens or closes. |
 | `'drawer:cashChanged'` | `{ currency: 'EUR', amount: number, cents: number, notes, coins }` | Whenever the 3D cash drawer's Euro cash amount is updated via `'drawer:setCash'`. |
+| `'shelves:updated'` | `{ totalProducts, totalStock, renderedBoxes, slotsUsed, products }` | Whenever shelf inventory boxes are populated, updated, or cleared. |
+| `'shelves:slots'` | `{ slots, products }` | Direct reply to `'shelves:getSlots'`. |
 | `'camera:viewChanged'` | `{ view: 'total' \| 'left' \| 'center' \| 'right' \| 'drawer' \| null }` | Whenever the active camera preset changes (or `null` during free walk/look). |
 | `'scene:lockChanged'` | `{ locked: boolean }` | Whenever first-person pointer-lock crosshair mode toggles. |
 | *Custom names* | `{ ... }` | Any custom `(name, data)` broadcast by another iframe (`sender` = peer `tabletId`) or the host (`sender` = `'host'`). |
@@ -394,4 +400,25 @@ scene.printEscPos('\x1b@\x1ba\x01QuixPOS Beleg\n\x1ba\x00Espresso   2,80 EUR\n\x
 scene.onPrinted((job) => {
   console.log('Printed on', job.printer, 'droppedPrevious=', job.droppedPrevious)
 })
+
+// Populate the 3D shelves from inventory (box aspect ratio follows image, count follows stock)
+scene.setShelfProducts([
+  {
+    id: 101,
+    sku: 'KAFFEE-250',
+    name: 'Espresso Bohne',
+    image: 'https://cdn.example.com/products/espresso.jpg',
+    stock: 6,
+  },
+  {
+    id: 102,
+    sku: 'TEETASSE',
+    name: 'Keramik Tasse',
+    image: 'https://cdn.example.com/products/mug.png',
+    stock: 3,
+  },
+])
+
+// Decrement stock of a single product after a sale
+scene.updateShelfProduct({ id: 101, stock: 5 })
 ```
