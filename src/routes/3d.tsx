@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
+import { mountBackgroundAudio } from '../scene3d/backgroundAudio'
 import { mountSceneEngine } from '../scene3d/createSceneEngine'
 import { SceneHud } from '../scene3d/SceneHud'
 import type {
@@ -65,9 +66,11 @@ export function ThreeDRoute() {
         onDrawerChange: setIsDrawerOpen,
       },
     })
+    const bgAudio = mountBackgroundAudio('/Irish_Coffee.mp3')
     controllerRef.current = controller
 
     return () => {
+      bgAudio.dispose()
       controller.dispose()
       controllerRef.current = null
     }
