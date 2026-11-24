@@ -4,6 +4,8 @@ export interface ZplRenderResult {
   canvas: HTMLCanvasElement
   widthDots: number
   heightDots: number
+  commandsUsed: string[]
+  unhandledCommands: string[]
 }
 
 interface ZplCommand {
@@ -180,6 +182,29 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
   ctx.fillStyle = '#fcfcfb'
   ctx.fillRect(0, 0, printWidth, labelHeight)
 
+  const commandsUsedSet = new Set<string>()
+  const unhandledCommandsSet = new Set<string>()
+  const BENIGN_SETUP_CODES = new Set([
+    'XA',
+    'XZ',
+    'PW',
+    'LL',
+    'CI',
+    'FX',
+    'PQ',
+    'PR',
+    'MD',
+    'SD',
+    'MM',
+    'MN',
+    'MT',
+    'PON',
+    'POI',
+    'PMN',
+    'LRN',
+    'JSN',
+  ])
+
   // State machine
   let homeX = 0
   let homeY = 0
@@ -244,6 +269,7 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
   for (const cmd of cmds) {
     const rawArgs = cmd.args
     const trimmed = rawArgs.trim()
+    commandsUsedSet.add(cmd.code)
 
     switch (cmd.code) {
       case 'LH': {
@@ -621,6 +647,10 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
           const [fh, fw] = parseNums(tail)
           if (fh && fh > 0) fieldFontH = fh
           if (fw && fw > 0) fieldFontW = fw
+        } else if (!BENIGN_SETUP_CODES.has(cmd.code)) {
+          unhandledCommandsSet.add(
+            cmd.code.startsWith('~') ? cmd.code : `^${cmd.code}`,
+          )
         }
         break
       }
@@ -631,5 +661,7 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
     canvas,
     widthDots: printWidth,
     heightDots: labelHeight,
+    commandsUsed: Array.from(commandsUsedSet),
+    unhandledCommands: Array.from(unhandledCommandsSet),
   }
 }

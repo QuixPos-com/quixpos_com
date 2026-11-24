@@ -9,12 +9,21 @@ import {
 } from '../config'
 import type { Disposable, ThreeModule } from '../types'
 import {
+  escPosBytesToBase64,
+  formatEscPosReadable,
   normalizeEscPosBytes,
   renderEscPosToCanvas,
 } from './escposEmulator'
 import { renderZplToCanvas } from './zplEmulator'
 
 export type PrinterKind = 'zebra' | 'epson'
+
+export interface PrintLogMeta {
+  sender: string
+  origin?: string
+  messageName?: string
+  jobId?: string
+}
 
 interface PrinterSlotConfig {
   kind: PrinterKind
@@ -63,15 +72,18 @@ export interface PrintJobOutcome {
 }
 
 export interface PrintManager extends Disposable {
-  printZpl: (zpl: string) => PrintJobOutcome
-  printEscPos: (input: {
-    escpos?: unknown
-    base64?: unknown
-    bytes?: unknown
-    raw?: unknown
-    data?: unknown
-    encoding?: unknown
-  }) => PrintJobOutcome
+  printZpl: (zpl: string, logMeta?: PrintLogMeta) => PrintJobOutcome
+  printEscPos: (
+    input: {
+      escpos?: unknown
+      base64?: unknown
+      bytes?: unknown
+      raw?: unknown
+      data?: unknown
+      encoding?: unknown
+    },
+    logMeta?: PrintLogMeta,
+  ) => PrintJobOutcome
   update: (dt: number) => void
 }
 
@@ -245,9 +257,46 @@ export function createPrintManager(
     return droppedPrevious
   }
 
-  const printZpl = (zpl: string): PrintJobOutcome => {
-    const { canvas } = renderZplToCanvas(zpl)
-    const droppedPrevious = spawnSheetFromCanvas('zebra', canvas)
+  const printZpl = (
+    zpl: string,
+    logMeta?: PrintLogMeta,
+  ): PrintJobOutcome => {
+    const rendered = renderZplToCanvas(zpl)
+    const droppedPrevious = spawnSheetFromCanvas('zebra', rendered.canvas)
+
+    const metaSummary = {
+      printer: 'zebra' as const,
+      protocol: 'zpl' as const,
+      sender: logMeta?.sender ?? 'unknown',
+      origin: logMeta?.origin,
+      messageName: logMeta?.messageName,
+      jobId: logMeta?.jobId,
+      timestamp: new Date().toISOString(),
+      charLength: zpl.length,
+      renderedSizeDots: {
+        width: rendered.widthDots,
+        height: rendered.heightDots,
+      },
+      droppedPrevious,
+      commandsUsed: rendered.commandsUsed,
+      unhandledCommands: rendered.unhandledCommands,
+    }
+
+    console.group(
+      `[scene3d:print] ZPL -> Zebra ZD420 (from ${metaSummary.sender}${
+        metaSummary.jobId ? `, jobId=${metaSummary.jobId}` : ''
+      })`,
+    )
+    console.log('meta:', metaSummary)
+    console.log('zpl content:\n' + zpl)
+    if (rendered.unhandledCommands.length > 0) {
+      console.warn(
+        'unhandled ZPL commands (candidates for emulation):',
+        rendered.unhandledCommands,
+      )
+    }
+    console.groupEnd()
+
     return {
       printer: 'zebra',
       droppedPrevious,
@@ -255,14 +304,63 @@ export function createPrintManager(
     }
   }
 
-  const printEscPos: PrintManager['printEscPos'] = (input) => {
+  const printEscPos: PrintManager['printEscPos'] = (input, logMeta) => {
     const bytes = normalizeEscPosBytes(input)
-    const { canvas, kickDrawer } = renderEscPosToCanvas(bytes)
-    const droppedPrevious = spawnSheetFromCanvas('epson', canvas)
+    const rendered = renderEscPosToCanvas(bytes)
+    const droppedPrevious = spawnSheetFromCanvas('epson', rendered.canvas)
+
+    const inputFormat =
+      input.bytes instanceof Uint8Array || Array.isArray(input.bytes) || Array.isArray(input.data)
+        ? 'bytes'
+        : typeof input.base64 === 'string' || input.encoding === 'base64'
+          ? 'base64'
+          : 'string'
+
+    const metaSummary = {
+      printer: 'epson' as const,
+      protocol: 'escpos' as const,
+      sender: logMeta?.sender ?? 'unknown',
+      origin: logMeta?.origin,
+      messageName: logMeta?.messageName,
+      jobId: logMeta?.jobId,
+      timestamp: new Date().toISOString(),
+      inputFormat,
+      encoding: typeof input.encoding === 'string' ? input.encoding : undefined,
+      byteLength: bytes.length,
+      renderedSizeDots: {
+        width: rendered.widthDots,
+        height: rendered.heightDots,
+      },
+      kickDrawer: rendered.kickDrawer,
+      droppedPrevious,
+      commandsUsed: rendered.commandsUsed,
+      unhandledCommands: rendered.unhandledCommands,
+    }
+
+    console.group(
+      `[scene3d:print] ESC/POS -> Epson TM-m30III (from ${metaSummary.sender}, ${bytes.length} bytes${
+        metaSummary.jobId ? `, jobId=${metaSummary.jobId}` : ''
+      })`,
+    )
+    console.log('meta:', metaSummary)
+    console.log('readable content:\n' + formatEscPosReadable(bytes))
+    console.log('raw payload:', {
+      base64: escPosBytesToBase64(bytes),
+      bytes,
+      originalData: input,
+    })
+    if (rendered.unhandledCommands.length > 0) {
+      console.warn(
+        'unhandled ESC/POS commands (candidates for emulation):',
+        rendered.unhandledCommands,
+      )
+    }
+    console.groupEnd()
+
     return {
       printer: 'epson',
       droppedPrevious,
-      kickDrawer,
+      kickDrawer: rendered.kickDrawer,
     }
   }
 

@@ -633,6 +633,8 @@ export function mountSceneEngine({
     const handleZplChannelJob = (
       data: Record<string, unknown>,
       sender: string,
+      origin?: string,
+      messageName = 'printer:zpl',
     ) => {
       const rawZpl =
         typeof data.zpl === 'string'
@@ -644,11 +646,17 @@ export function mountSceneEngine({
               : ''
       if (!rawZpl.trim()) return
 
-      const outcome = printManager.printZpl(rawZpl)
+      const jobId = typeof data.jobId === 'string' ? data.jobId : undefined
+      const outcome = printManager.printZpl(rawZpl, {
+        sender,
+        origin,
+        messageName,
+        jobId,
+      })
       channel.send('printer:printed', {
         printer: 'zebra',
         protocol: 'zpl',
-        jobId: typeof data.jobId === 'string' ? data.jobId : undefined,
+        jobId,
         droppedPrevious: outcome.droppedPrevious,
         requestedBy: sender,
       })
@@ -657,6 +665,8 @@ export function mountSceneEngine({
     const handleEscPosChannelJob = (
       data: Record<string, unknown>,
       sender: string,
+      origin?: string,
+      messageName = 'printer:escpos',
     ) => {
       const hasPayload =
         typeof data.escpos === 'string' ||
@@ -668,30 +678,36 @@ export function mountSceneEngine({
         data.bytes instanceof Uint8Array
       if (!hasPayload) return
 
-      const outcome = printManager.printEscPos(data)
+      const jobId = typeof data.jobId === 'string' ? data.jobId : undefined
+      const outcome = printManager.printEscPos(data, {
+        sender,
+        origin,
+        messageName,
+        jobId,
+      })
       if (outcome.kickDrawer) {
         setCashDrawerOpen(true)
       }
       channel.send('printer:printed', {
         printer: 'epson',
         protocol: 'escpos',
-        jobId: typeof data.jobId === 'string' ? data.jobId : undefined,
+        jobId,
         droppedPrevious: outcome.droppedPrevious,
         requestedBy: sender,
       })
     }
 
     channel.on('printer:zpl', (data, meta) => {
-      handleZplChannelJob(data, meta.sender)
+      handleZplChannelJob(data, meta.sender, meta.origin, meta.name)
     })
     channel.on('print:zpl', (data, meta) => {
-      handleZplChannelJob(data, meta.sender)
+      handleZplChannelJob(data, meta.sender, meta.origin, meta.name)
     })
     channel.on('printer:escpos', (data, meta) => {
-      handleEscPosChannelJob(data, meta.sender)
+      handleEscPosChannelJob(data, meta.sender, meta.origin, meta.name)
     })
     channel.on('print:escpos', (data, meta) => {
-      handleEscPosChannelJob(data, meta.sender)
+      handleEscPosChannelJob(data, meta.sender, meta.origin, meta.name)
     })
 
     navigateImpl = (view: NavPresetId) => {

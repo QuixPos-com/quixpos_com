@@ -5,6 +5,55 @@ export interface EscPosRenderResult {
   widthDots: number
   heightDots: number
   kickDrawer: boolean
+  commandsUsed: string[]
+  unhandledCommands: string[]
+}
+
+export function escPosBytesToBase64(bytes: Uint8Array): string {
+  let bin = ''
+  for (let i = 0; i < bytes.length; i++) {
+    bin += String.fromCharCode(bytes[i])
+  }
+  return typeof btoa === 'function' ? btoa(bin) : ''
+}
+
+export function formatEscPosReadable(bytes: Uint8Array): string {
+  let out = ''
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i]
+    if (b === 0x1b) {
+      const next = bytes[i + 1]
+      const label =
+        next !== undefined && next >= 0x20 && next <= 0x7e
+          ? String.fromCharCode(next)
+          : next !== undefined
+            ? `0x${next.toString(16).padStart(2, '0')}`
+            : ''
+      out += `<ESC ${label}>`
+      if (next !== undefined) i++
+    } else if (b === 0x1d) {
+      const next = bytes[i + 1]
+      const label =
+        next !== undefined && next >= 0x20 && next <= 0x7e
+          ? String.fromCharCode(next)
+          : next !== undefined
+            ? `0x${next.toString(16).padStart(2, '0')}`
+            : ''
+      out += `<GS ${label}>`
+      if (next !== undefined) i++
+    } else if (b === 0x0a) {
+      out += '<LF>\n'
+    } else if (b === 0x0d) {
+      out += '<CR>'
+    } else if (b === 0x09) {
+      out += '<HT>'
+    } else if (b >= 0x20 && b <= 0x7e) {
+      out += String.fromCharCode(b)
+    } else {
+      out += `\\x${b.toString(16).padStart(2, '0')}`
+    }
+  }
+  return out
 }
 
 const PAPER_WIDTH_DOTS = 576 // Standard 80mm thermal paper @ 203 dpi (576 dots, 48 cols Font A)
@@ -165,6 +214,8 @@ type PrintOp =
 export function renderEscPosToCanvas(bytes: Uint8Array): EscPosRenderResult {
   const ops: PrintOp[] = []
   let kickDrawer = false
+  const commandsUsedSet = new Set<string>()
+  const unhandledCommandsSet = new Set<string>()
 
   // Formatting state
   let align: 'left' | 'center' | 'right' = 'left'
@@ -266,15 +317,21 @@ export function renderEscPosToCanvas(bytes: Uint8Array): EscPosRenderResult {
       flushTextBytesToSpan()
       const cmd = bytes[i + 1]
       if (cmd === undefined) break
+      const cmdLabel =
+        cmd >= 0x20 && cmd <= 0x7e
+          ? `ESC ${String.fromCharCode(cmd)}`
+          : `ESC 0x${cmd.toString(16).padStart(2, '0')}`
 
       if (cmd === 0x40) {
         // ESC @ Initialize
+        commandsUsedSet.add(cmdLabel)
         resetFormatting()
         i += 2
         continue
       }
       if (cmd === 0x61 && i + 2 < len) {
         // ESC a n — Select justification
+        commandsUsedSet.add(cmdLabel)
         const n = bytes[i + 2]
         if (n === 1 || n === 49) align = 'center'
         else if (n === 2 || n === 50) align = 'right'
@@ -371,12 +428,14 @@ export function renderEscPosToCanvas(bytes: Uint8Array): EscPosRenderResult {
       }
       if (cmd === 0x70 && i + 4 < len) {
         // ESC p m t1 t2 — Cash drawer kick pulse
+        commandsUsedSet.add(cmdLabel)
         kickDrawer = true
         i += 5
         continue
       }
 
-      // Unrecognized ESC command: skip 2 bytes
+      // Unrecognized ESC command: record & skip 2 bytes
+      unhandledCommandsSet.add(cmdLabel)
       i += 2
       continue
     }
@@ -386,6 +445,11 @@ export function renderEscPosToCanvas(bytes: Uint8Array): EscPosRenderResult {
       flushTextBytesToSpan()
       const cmd = bytes[i + 1]
       if (cmd === undefined) break
+      const gsLabel =
+        cmd >= 0x20 && cmd <= 0x7e
+          ? `GS ${String.fromCharCode(cmd)}`
+          : `GS 0x${cmd.toString(16).padStart(2, '0')}`
+      commandsUsedSet.add(gsLabel)
 
       if (cmd === 0x21 && i + 2 < len) {
         // GS ! n — Select character size
@@ -530,6 +594,10 @@ export function renderEscPosToCanvas(bytes: Uint8Array): EscPosRenderResult {
         continue
       }
 
+      commandsUsedSet.delete(gsLabel)
+      const nextByte =
+        i + 2 < len ? ` 0x${bytes[i + 2].toString(16).padStart(2, '0')}` : ''
+      unhandledCommandsSet.add(`${gsLabel}${nextByte}`)
       i += 2
       continue
     }
@@ -836,5 +904,7 @@ export function renderEscPosToCanvas(bytes: Uint8Array): EscPosRenderResult {
     widthDots: PAPER_WIDTH_DOTS,
     heightDots: totalHeight,
     kickDrawer,
+    commandsUsed: Array.from(commandsUsedSet),
+    unhandledCommands: Array.from(unhandledCommandsSet),
   }
 }
