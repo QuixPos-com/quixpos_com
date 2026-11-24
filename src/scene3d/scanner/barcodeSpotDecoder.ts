@@ -49,21 +49,14 @@ export function warmScannerDecoder(): void {
   }
 }
 
-/**
- * Converts a WebGL `readRenderTargetPixels` bottom-up Linear-RGBA buffer into a
- * top-down sRGB `ImageData` (optionally painting into `previewCtx` for the live HUD
- * viewfinder) and decodes 1D barcodes & 2D QR codes via `zxing-wasm`.
- */
-export async function decodeSpotPixels(
+function convertSpotPixelsToImageData(
   rgbaBottomUp: Uint8Array,
   width: number,
   height: number,
-  previewCtx?: CanvasRenderingContext2D | null,
-): Promise<DecodedSpotBarcode | null> {
+): ImageData | null {
   if (typeof window === 'undefined' || typeof ImageData === 'undefined') {
     return null
   }
-  warmScannerDecoder()
 
   const byteLen = width * height * 4
   if (!reusableClamped || reusableClamped.length !== byteLen) {
@@ -84,7 +77,46 @@ export async function decodeSpotPixels(
     }
   }
 
-  const imageData = new ImageData(reusableClamped, width, height)
+  return new ImageData(reusableClamped, width, height)
+}
+
+/**
+ * Paints the captured WebGL render-target spot into the HUD viewfinder canvas
+ * without running barcode decoding.
+ */
+export function paintSpotPreview(
+  rgbaBottomUp: Uint8Array,
+  width: number,
+  height: number,
+  previewCtx?: CanvasRenderingContext2D | null,
+): void {
+  if (!previewCtx) return
+  const imageData = convertSpotPixelsToImageData(rgbaBottomUp, width, height)
+  if (!imageData) return
+  const canvas = previewCtx.canvas
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width
+    canvas.height = height
+  }
+  previewCtx.putImageData(imageData, 0, 0)
+}
+
+/**
+ * Converts a WebGL `readRenderTargetPixels` bottom-up Linear-RGBA buffer into a
+ * top-down sRGB `ImageData` (optionally painting into `previewCtx` for the live HUD
+ * viewfinder) and decodes 1D barcodes & 2D QR codes via `zxing-wasm`.
+ */
+export async function decodeSpotPixels(
+  rgbaBottomUp: Uint8Array,
+  width: number,
+  height: number,
+  previewCtx?: CanvasRenderingContext2D | null,
+): Promise<DecodedSpotBarcode | null> {
+  const imageData = convertSpotPixelsToImageData(rgbaBottomUp, width, height)
+  if (!imageData) {
+    return null
+  }
+  warmScannerDecoder()
 
   if (previewCtx) {
     const canvas = previewCtx.canvas

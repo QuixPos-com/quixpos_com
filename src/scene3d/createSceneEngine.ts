@@ -38,6 +38,7 @@ import { buildZebraPrinter } from './models/zebraPrinter'
 import { createPrintManager } from './printers/printManager'
 import {
   decodeSpotPixels,
+  paintSpotPreview,
   playScannerBeep,
   warmScannerDecoder,
 } from './scanner/barcodeSpotDecoder'
@@ -343,12 +344,9 @@ export function mountSceneEngine({
     let scanSuccessFlash = 0
     let scannerHover = 0
     let scannerDockHover = 0
-    let lastScanAttemptMs = 0
+    let lastScanPreviewMs = 0
     let scanDecodeBusy = false
-    let latchedScanCode: string | null = null
-    let emptyScanFrames = 0
-    let lastScanEmitMs = 0
-    let manualTriggerArmed = false
+    let pendingScanTrigger = false
 
     let drawerOpen = false
     let drawerZCurrent = 0
@@ -421,26 +419,21 @@ export function mountSceneEngine({
         printManager.cancelHeldLabel()
       }
       warmScannerDecoder()
-      latchedScanCode = null
-      emptyScanFrames = 0
-      manualTriggerArmed = false
+      pendingScanTrigger = false
       scannerTriggerAnim = 0.65
       setHeldMode('scanner')
     }
 
     const putDownScanner = () => {
       if (heldMode !== 'scanner') return
-      manualTriggerArmed = false
-      latchedScanCode = null
+      pendingScanTrigger = false
       setHeldMode('none')
     }
 
     const triggerScannerPulse = () => {
       if (heldMode !== 'scanner') return
       scannerTriggerAnim = 1
-      manualTriggerArmed = true
-      latchedScanCode = null
-      lastScanAttemptMs = 0
+      pendingScanTrigger = true
     }
 
     const cancelHeldItem = () => {
@@ -1800,14 +1793,19 @@ export function mountSceneEngine({
         timeSec: now * 0.001,
       })
 
-      // Live screenshot of the small spot around the laser crosshair -> zxing-wasm decoder
-      if (
+      // Capture spot around the laser crosshair: live HUD viewfinder while aiming,
+      // and decode via zxing-wasm ONLY on actual click/trigger; auto-return to dock after one successful scan.
+      const shouldDecodeSpot =
+        heldMode === 'scanner' && pendingScanTrigger && !scanDecodeBusy
+      const shouldUpdatePreview =
         heldMode === 'scanner' &&
+        !shouldDecodeSpot &&
         !scanDecodeBusy &&
-        now - lastScanAttemptMs >= SCAN_INTERVAL_MS
-      ) {
-        lastScanAttemptMs = now
-        scanDecodeBusy = true
+        Boolean(scannerPreviewCanvasRef?.current) &&
+        now - lastScanPreviewMs >= SCAN_INTERVAL_MS
+
+      if (shouldDecodeSpot || shouldUpdatePreview) {
+        lastScanPreviewMs = now
 
         const prevShadowAuto = webglRenderer.shadowMap.autoUpdate
         const prevScannerVis = scannerGroup.visible
@@ -1849,59 +1847,50 @@ export function mountSceneEngine({
         const previewCtx =
           scannerPreviewCanvasRef?.current?.getContext('2d') ?? null
 
-        decodeSpotPixels(scanPixelBuf, SCAN_RT_W, SCAN_RT_H, previewCtx)
-          .then((decoded) => {
-            scanDecodeBusy = false
-            if (disposed || heldMode !== 'scanner') return
+        if (shouldDecodeSpot) {
+          pendingScanTrigger = false
+          scanDecodeBusy = true
 
-            if (!decoded) {
-              emptyScanFrames++
-              if (emptyScanFrames >= 4) {
-                latchedScanCode = null
-              }
-              return
-            }
+          decodeSpotPixels(scanPixelBuf, SCAN_RT_W, SCAN_RT_H, previewCtx)
+            .then((decoded) => {
+              scanDecodeBusy = false
+              if (disposed || heldMode !== 'scanner' || !decoded) return
 
-            emptyScanFrames = 0
-            const nowMs = performance.now()
-            const canEmit =
-              decoded.code !== latchedScanCode &&
-              (nowMs - lastScanEmitMs >= 320 || manualTriggerArmed)
+              scanSuccessFlash = 1
+              playScannerBeep(Boolean(isAudioMuted?.()))
 
-            if (!canEmit) return
+              const posCenterTablet = tabletInstances.find(
+                (t) => t.spec.id === 'pos-center',
+              )
+              const deliveredToTablet = Boolean(posCenterTablet?.poweredOn)
+              const timestamp = Date.now()
 
-            latchedScanCode = decoded.code
-            lastScanEmitMs = nowMs
-            manualTriggerArmed = false
-            scanSuccessFlash = 1
-            playScannerBeep(Boolean(isAudioMuted?.()))
+              // Emit scanned string to the 12" wide center POS tablet ('pos-center')
+              channel.sendTo('pos-center', 'scanner:scan', {
+                code: decoded.code,
+                text: decoded.code,
+                format: decoded.format,
+                tabletId: 'pos-center',
+                timestamp,
+              })
 
-            const posCenterTablet = tabletInstances.find(
-              (t) => t.spec.id === 'pos-center',
-            )
-            const deliveredToTablet = Boolean(posCenterTablet?.poweredOn)
-            const timestamp = Date.now()
+              sceneCallbacks.onBarcodeScan?.({
+                code: decoded.code,
+                format: decoded.format,
+                tabletId: 'pos-center',
+                deliveredToTablet,
+                timestamp,
+              })
 
-            // Emit scanned string to the 12" wide center POS tablet ('pos-center')
-            channel.sendTo('pos-center', 'scanner:scan', {
-              code: decoded.code,
-              text: decoded.code,
-              format: decoded.format,
-              tabletId: 'pos-center',
-              timestamp,
+              // Return the scanner smoothly back to its tabletop dock after one successful scan
+              putDownScanner()
             })
-
-            sceneCallbacks.onBarcodeScan?.({
-              code: decoded.code,
-              format: decoded.format,
-              tabletId: 'pos-center',
-              deliveredToTablet,
-              timestamp,
+            .catch(() => {
+              scanDecodeBusy = false
             })
-          })
-          .catch(() => {
-            scanDecodeBusy = false
-          })
+        } else {
+          paintSpotPreview(scanPixelBuf, SCAN_RT_W, SCAN_RT_H, previewCtx)
+        }
       }
 
       // Front-face check & pointer-events routing for the real iframes

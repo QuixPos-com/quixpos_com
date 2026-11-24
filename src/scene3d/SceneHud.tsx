@@ -259,7 +259,7 @@ export function SceneHud({
                   </div>
                 ) : (
                   <div class="scene3d-scanner-readout">
-                    Laser-Fadenkreuz auf Barcode oder QR-Code richten
+                    Laser-Fadenkreuz auf Barcode richten und klicken zum Scannen
                   </div>
                 )}
               </div>
