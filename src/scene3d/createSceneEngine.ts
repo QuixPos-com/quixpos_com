@@ -37,6 +37,7 @@ import {
 } from './models/coinPhysics'
 import { buildLightingAndFloor, buildTable } from './models/environment'
 import { buildEpsonPrinter } from './models/epsonPrinter'
+import { buildWallsAndShelves } from './models/shelves'
 import { buildStationLoupes } from './models/stationLoupes'
 import { buildTablets } from './models/tablets'
 import { buildZebraPrinter } from './models/zebraPrinter'
@@ -212,6 +213,11 @@ export function mountSceneEngine({
     // 3. Environment & POS Hardware Models
     const floorMesh = buildLightingAndFloor(THREE, webglScene, disposables)
     const { tableMeshes } = buildTable(THREE, webglScene, disposables)
+    const { wallAndShelfSurfaceMeshes } = buildWallsAndShelves(
+      THREE,
+      webglScene,
+      disposables,
+    )
 
     const {
       tabletInstances,
@@ -289,9 +295,10 @@ export function mountSceneEngine({
     printManager.setZebraMedia(activeZebraMedia)
     disposables.push(printManager)
 
-    // Solid 3D surfaces where Zebra labels can be placed (tabletop, legs, printers, drawer, monitor stands/bezels, floor)
+    // Solid 3D surfaces where Zebra labels can be placed (tabletop, legs, printers, drawer, monitor stands/bezels, walls, shelves, floor)
     const placeableBaseSurfaces: Array<InstanceType<typeof THREE.Object3D>> = [
       ...tableMeshes,
+      ...wallAndShelfSurfaceMeshes,
       ...drawerSurfaceMeshes,
       ...zebraSurfaceMeshes,
       ...epsonSurfaceMeshes,

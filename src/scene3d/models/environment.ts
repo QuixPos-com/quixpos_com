@@ -26,8 +26,8 @@ export function buildLightingAndFloor(
   dirLight.shadow.mapSize.width = 2048
   dirLight.shadow.mapSize.height = 2048
   dirLight.shadow.camera.near = 2000
-  dirLight.shadow.camera.far = 45000
-  const shadowExtent = 9000
+  dirLight.shadow.camera.far = 50000
+  const shadowExtent = 12500
   dirLight.shadow.camera.left = -shadowExtent
   dirLight.shadow.camera.right = shadowExtent
   dirLight.shadow.camera.top = shadowExtent

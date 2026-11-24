@@ -1,8 +1,15 @@
 import {
   ARENA_HALF,
+  BACK_SHELF_BAYS,
   DRAWER_X,
   EYE_HEIGHT,
   PLAYER_RADIUS,
+  ROOM_BACK_Z,
+  ROOM_FRONT_Z,
+  ROOM_HALF_W,
+  SHELF_BAY_W,
+  SHELF_DEPTH,
+  SIDE_SHELF_BAYS,
   SPAWN_PITCH,
   SPAWN_POS,
   SPAWN_YAW,
@@ -31,8 +38,23 @@ export function resolveTableCollision(px: number, pz: number): [number, number] 
       pz = pz >= 0 ? halfD : -halfD
     }
   }
-  px = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, px))
-  pz = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, pz))
+
+  // Room wall & shelving bounds
+  const sideShelfHalfSpan = (SIDE_SHELF_BAYS * SHELF_BAY_W) / 2 + PLAYER_RADIUS
+  const backShelfHalfSpan = (BACK_SHELF_BAYS * SHELF_BAY_W) / 2 + PLAYER_RADIUS
+
+  const maxAbsX =
+    Math.abs(pz) < sideShelfHalfSpan
+      ? ROOM_HALF_W - SHELF_DEPTH - PLAYER_RADIUS
+      : ROOM_HALF_W - PLAYER_RADIUS
+  const minZ =
+    Math.abs(px) < backShelfHalfSpan
+      ? ROOM_BACK_Z + SHELF_DEPTH + PLAYER_RADIUS
+      : ROOM_BACK_Z + PLAYER_RADIUS
+  const maxZ = ROOM_FRONT_Z - PLAYER_RADIUS
+
+  px = Math.max(-Math.min(ARENA_HALF, maxAbsX), Math.min(ARENA_HALF, maxAbsX, px))
+  pz = Math.max(Math.max(-ARENA_HALF, minZ), Math.min(ARENA_HALF, maxZ, pz))
   return [px, pz]
 }
 

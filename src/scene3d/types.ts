@@ -54,6 +54,22 @@ export type NavPresetId = 'total' | 'left' | 'center' | 'right' | 'drawer'
 
 export type FocusViewId = NavPresetId
 
+export type ShelfWallId = 'back' | 'left' | 'right'
+
+export interface ShelfSlot {
+  id: string
+  wall: ShelfWallId
+  bayIndex: number
+  levelIndex: number
+  centerX: number
+  surfaceY: number
+  centerZ: number
+  usableWidth: number
+  usableDepth: number
+  clearanceHeight: number
+  facingYaw: number
+}
+
 export interface TargetedDevice {
   title: string
   kind: TargetKind

@@ -18,6 +18,20 @@ export const WALK_SPEED = 11200 // 2.8 m/s
 export const PLAYER_RADIUS = 650
 export const ARENA_HALF = 72000 // 18m
 
+// Shop room walls & shelving
+export const ROOM_HALF_W = 11200 // 5.60m wide
+export const ROOM_BACK_Z = -6400 // 1.60m behind table center
+export const ROOM_FRONT_Z = 12800 // 3.20m in front of table center
+export const ROOM_HEIGHT = 11200 // 2.80m wall height
+export const WALL_THICKNESS = 400
+export const SHELF_DEPTH = 1360 // 0.34m deep
+export const SHELF_BAY_W = 3600 // 0.90m wide per bay
+export const SHELF_HEIGHT = 8600 // 2.15m upright height
+export const SHELF_BOARD_THICKNESS = 90
+export const SHELF_LEVEL_YS = [1100, 3300, 5500, 7700] as const
+export const BACK_SHELF_BAYS = 4
+export const SIDE_SHELF_BAYS = 2
+
 export const SPAWN_POS = { x: 0, y: EYE_HEIGHT, z: 5400 }
 export const SPAWN_YAW = 0
 export const SPAWN_PITCH = -0.27
