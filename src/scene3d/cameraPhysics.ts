@@ -143,20 +143,20 @@ export function getViewCameraPose(
   }
 
   if (view === 'drawer') {
-    // Angled view looking down into the open under-table cash drawer (bills, coins & button)
+    // High eye-level view looking steeply down into the open under-table cash drawer (Euro notes, coins & button)
     return frameBoxPose(
       THREE,
       cameraFov,
       stageWidth,
       stageHeight,
       DRAWER_X,
-      2700,
-      1940,
-      1520,
-      920,
-      -0.5,
-      1320,
-      0.68,
+      2660,
+      1920,
+      1540,
+      1120,
+      -0.92,
+      2550,
+      0.66,
       0.76,
     )
   }
