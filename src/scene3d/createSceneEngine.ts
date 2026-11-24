@@ -74,6 +74,12 @@ const SCAN_SPOT_CSS_H = 70
 const SCAN_RT_W = 960
 const SCAN_RT_H = 600
 const SCAN_INTERVAL_MS = 100
+const MIN_ZOOM_FOV = 22
+const DEFAULT_ZOOM_FOV = 58
+const MAX_ZOOM_FOV = 70
+const DEFAULT_ZOOM_NORM =
+  (MAX_ZOOM_FOV - DEFAULT_ZOOM_FOV) / (MAX_ZOOM_FOV - MIN_ZOOM_FOV)
+const ZOOM_KNOB_TRAVEL_PX = 28
 
 export function mountSceneEngine({
   stageEl,
@@ -336,6 +342,9 @@ export function mountSceneEngine({
       touchAimY: 0,
       moveStickEngaged: false,
       aimStickEngaged: false,
+      zoomEngaged: false,
+      zoomNorm: DEFAULT_ZOOM_NORM,
+      targetZoomNorm: DEFAULT_ZOOM_NORM,
       mouseAimVisualX: 0,
       mouseAimVisualY: 0,
     }
@@ -1310,22 +1319,34 @@ export function mountSceneEngine({
       const dt = smoothedDt
 
       // Proximity grow animations for the 4 navigation loupes & cash drawer button
+      // Disabled while holding the barcode scanner so aiming/clicking never triggers loupes or buttons
+      const scannerActive = heldMode === 'scanner'
       const hoverSmooth = 1 - Math.exp(-16 * dt)
       for (const l of loupeInstances) {
         const isAlreadyFocused = state.activeView === l.viewId
-        const loupeProx = getCursorProximity(
-          l.loupeGroup,
-          150,
-          state,
-          stageEl,
-          camera,
-          tmpProjVec,
-        )
-        const plateProx = l.plateMesh
-          ? getCursorProximity(l.plateMesh, 130, state, stageEl, camera, tmpProjVec) *
-          0.75
-          : 0
-        const targetHover = !isAlreadyFocused ? Math.max(loupeProx, plateProx) : 0
+        const targetHover =
+          !scannerActive && !isAlreadyFocused
+            ? Math.max(
+              getCursorProximity(
+                l.loupeGroup,
+                150,
+                state,
+                stageEl,
+                camera,
+                tmpProjVec,
+              ),
+              l.plateMesh
+                ? getCursorProximity(
+                  l.plateMesh,
+                  130,
+                  state,
+                  stageEl,
+                  camera,
+                  tmpProjVec,
+                ) * 0.75
+                : 0,
+            )
+            : 0
 
         l.hover += (targetHover - l.hover) * hoverSmooth
         l.loupeGroup.scale.setScalar(l.baseScale * (1 + 0.58 * l.hover))
@@ -1347,19 +1368,21 @@ export function mountSceneEngine({
 
       // Subtle orange glow on the Zebra side latches when hovered or targeted
       let zebraLatchProx = 0
-      if (state.pointerLocked && state.currentTargetKind === 'zebra-latch') {
-        zebraLatchProx = 1
-      } else {
-        for (const zMesh of zebraTargets) {
-          const p = getCursorProximity(
-            zMesh,
-            95,
-            state,
-            stageEl,
-            camera,
-            tmpProjVec,
-          )
-          if (p > zebraLatchProx) zebraLatchProx = p
+      if (!scannerActive) {
+        if (state.pointerLocked && state.currentTargetKind === 'zebra-latch') {
+          zebraLatchProx = 1
+        } else {
+          for (const zMesh of zebraTargets) {
+            const p = getCursorProximity(
+              zMesh,
+              95,
+              state,
+              stageEl,
+              camera,
+              tmpProjVec,
+            )
+            if (p > zebraLatchProx) zebraLatchProx = p
+          }
         }
       }
       zebraLatchMat.emissive.set('#f59e0b')
@@ -1394,28 +1417,32 @@ export function mountSceneEngine({
         scanSuccessFlash = Math.max(0, scanSuccessFlash - dt * 2.8)
       }
 
-      const btnTargetHover = getCursorProximity(
-        cashBtnMesh,
-        140,
-        state,
-        stageEl,
-        camera,
-        tmpProjVec,
-      )
+      const btnTargetHover = scannerActive
+        ? 0
+        : getCursorProximity(
+          cashBtnMesh,
+          140,
+          state,
+          stageEl,
+          camera,
+          tmpProjVec,
+        )
       cashBtnHover += (btnTargetHover - cashBtnHover) * hoverSmooth
       const btnScale = 1 + 0.42 * cashBtnHover
       cashBtnMesh.scale.set(btnScale, btnScale, 1 + 0.25 * cashBtnHover)
 
       // Monitor power/reload buttons hover, press & flash animations
       for (const t of tabletInstances) {
-        const pTargetHover = getCursorProximity(
-          t.powerBtnGroup,
-          105,
-          state,
-          stageEl,
-          camera,
-          tmpProjVec,
-        )
+        const pTargetHover = scannerActive
+          ? 0
+          : getCursorProximity(
+            t.powerBtnGroup,
+            105,
+            state,
+            stageEl,
+            camera,
+            tmpProjVec,
+          )
         t.powerHover += (pTargetHover - t.powerHover) * hoverSmooth
         const pScale = 1 + 0.45 * t.powerHover
         t.powerBtnGroup.scale.set(pScale, pScale, 1 + 0.2 * t.powerHover)
@@ -1436,14 +1463,16 @@ export function mountSceneEngine({
         }
 
         // Fullscreen bezel button hover, press & active icon state
-        const fsTargetHover = getCursorProximity(
-          t.fullscreenBtnGroup,
-          105,
-          state,
-          stageEl,
-          camera,
-          tmpProjVec,
-        )
+        const fsTargetHover = scannerActive
+          ? 0
+          : getCursorProximity(
+            t.fullscreenBtnGroup,
+            105,
+            state,
+            stageEl,
+            camera,
+            tmpProjVec,
+          )
         t.fullscreenHover += (fsTargetHover - t.fullscreenHover) * hoverSmooth
         const fsScale = 1 + 0.45 * t.fullscreenHover
         t.fullscreenBtnGroup.scale.set(
@@ -1706,6 +1735,26 @@ export function mountSceneEngine({
         }
       }
 
+      // Smooth optical camera zoom (mouse wheel & HUD zoom slider)
+      const zoomLerp = 1 - Math.exp(-16 * dt)
+      state.zoomNorm += (state.targetZoomNorm - state.zoomNorm) * zoomLerp
+      if (Math.abs(state.targetZoomNorm - state.zoomNorm) < 0.0005) {
+        state.zoomNorm = state.targetZoomNorm
+      }
+      const nextFov = MAX_ZOOM_FOV - state.zoomNorm * (MAX_ZOOM_FOV - MIN_ZOOM_FOV)
+      if (Math.abs(camera.fov - nextFov) > 0.005) {
+        camera.fov = nextFov
+        camera.updateProjectionMatrix()
+      }
+      if (stickRefs.zoomKnobRef.current) {
+        const knobY = (0.5 - state.zoomNorm) * 2 * ZOOM_KNOB_TRAVEL_PX
+        stickRefs.zoomKnobRef.current.style.transform = `translateY(${knobY.toFixed(1)}px)`
+      }
+      stickRefs.zoomCtrlRef.current?.classList.toggle(
+        'is-engaged',
+        state.zoomEngaged || Math.abs(state.zoomNorm - DEFAULT_ZOOM_NORM) > 0.03,
+      )
+
       camera.updateMatrixWorld(true)
 
       // Compute active aim coordinates in stage pixels (cursor in desktop unlocked mode, center in FPS/touch)
@@ -1942,13 +1991,7 @@ export function mountSceneEngine({
           heldMode === 'label'
             ? []
             : heldMode === 'scanner'
-              ? [
-                ...scannerDockTargets,
-                ...powerTargets,
-                ...fullscreenTargets,
-                ...plateTargets,
-                ...drawerTargets,
-              ]
+              ? [...scannerDockTargets]
               : [
                 ...printManager.getZebraLabelTargets(),
                 ...scannerTargets,

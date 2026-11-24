@@ -191,6 +191,9 @@ export interface SceneRuntimeState {
   touchAimY: number
   moveStickEngaged: boolean
   aimStickEngaged: boolean
+  zoomEngaged: boolean
+  zoomNorm: number
+  targetZoomNorm: number
   mouseAimVisualX: number
   mouseAimVisualY: number
 }
@@ -204,6 +207,8 @@ export interface TouchStickRefs {
   aimKnobRef: RefObject<HTMLDivElement | null>
   aimMirrorRef: RefObject<HTMLDivElement | null>
   aimMirrorDotRef: RefObject<HTMLDivElement | null>
+  zoomCtrlRef: RefObject<HTMLDivElement | null>
+  zoomKnobRef: RefObject<HTMLDivElement | null>
 }
 
 export interface SceneCallbacks {

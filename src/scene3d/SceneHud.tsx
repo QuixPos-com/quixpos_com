@@ -424,6 +424,82 @@ export function SceneHud({
         </div>
       </div>
 
+      {/* Zoom Control Slider (matches virtual sticks + scroll-wheel mouse icon) */}
+      <div
+        ref={stickRefs.zoomCtrlRef}
+        class="scene3d-zoom-ctrl"
+        role="slider"
+        aria-label="Zoom (Mausrad oder Ziehen, Doppelklick zum Zurücksetzen)"
+        title="Zoom (Mausrad oder Ziehen · Doppelklick: 1×)"
+      >
+        <span class="scene3d-stick-label">Zoom</span>
+        <span class="scene3d-zoom-sign is-plus" aria-hidden="true">+</span>
+        <div class="scene3d-zoom-track" aria-hidden="true" />
+        <span class="scene3d-zoom-sign is-minus" aria-hidden="true">−</span>
+        <div
+          ref={stickRefs.zoomKnobRef}
+          class="scene3d-stick-knob scene3d-zoom-knob"
+          aria-hidden="true"
+        >
+          {/* Scroll-wheel mouse icon matching the stick mouse SVGs */}
+          <svg
+            class="scene3d-knob-mouse"
+            viewBox="0 0 24 28"
+            width="20"
+            height="22"
+            aria-hidden="true"
+          >
+            {/* Up/down scroll chevrons above & below wheel */}
+            <path
+              d="M9.5 3 L12 0.8 L14.5 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            {/* Mouse body */}
+            <rect
+              x="4"
+              y="4.5"
+              width="16"
+              height="20.5"
+              rx="8"
+              fill="rgba(255, 255, 255, 0.22)"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+            {/* Button split lines */}
+            <line
+              x1="4"
+              y1="13.5"
+              x2="20"
+              y2="13.5"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            {/* Highlighted scroll wheel */}
+            <rect
+              x="10.2"
+              y="6.8"
+              width="3.6"
+              height="6"
+              rx="1.8"
+              fill="currentColor"
+            />
+            {/* Down scroll arrow inside lower body */}
+            <path
+              d="M9.8 18.2 L12 20.6 L14.2 18.2"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </div>
+      </div>
+
       {/* Scanner Quick-Draw Control Button (matching virtual stick style + middle-mouse indicator) */}
       <button
         type="button"

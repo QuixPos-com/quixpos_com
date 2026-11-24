@@ -58,6 +58,9 @@ export interface InputControllerParams {
 }
 
 const MAX_POSE_HISTORY = 20
+const DEFAULT_ZOOM_FOV = 58
+const DEFAULT_ZOOM_NORM = (70 - DEFAULT_ZOOM_FOV) / (70 - 22)
+const ZOOM_KNOB_TRAVEL_PX = 28
 
 export function attachInputController({
   stageEl,
@@ -104,13 +107,14 @@ export function attachInputController({
   let mouseDragged = false
   let lastDragX = 0
   let lastDragY = 0
-  let mouseStickMode: 'move' | 'aim' | null = null
+  let mouseStickMode: 'move' | 'aim' | 'zoom' | null = null
 
   let hoveredTabletId: string | null = null
   let hasPointerActivity = false
   let lastTouchTime = 0
   let moveTouchId: number | null = null
   let aimTouchId: number | null = null
+  let zoomTouchId: number | null = null
   let tapTouchId: number | null = null
   let tapStartX = 0
   let tapStartY = 0
@@ -182,10 +186,35 @@ export function attachInputController({
     }
   }
 
+  const setZoomFromClientY = (clientY: number) => {
+    const ctrlEl = stickRefs.zoomCtrlRef.current
+    if (!ctrlEl) return
+    const rect = ctrlEl.getBoundingClientRect()
+    const cy = rect.top + rect.height * 0.5
+    const dy = clientY - cy
+    const norm = Math.max(
+      0,
+      Math.min(1, 0.5 - dy / (ZOOM_KNOB_TRAVEL_PX * 2)),
+    )
+    state.targetZoomNorm = norm
+  }
+
+  const adjustZoom = (deltaNorm: number) => {
+    state.targetZoomNorm = Math.max(
+      0,
+      Math.min(1, state.targetZoomNorm + deltaNorm),
+    )
+  }
+
+  const resetZoom = () => {
+    state.targetZoomNorm = DEFAULT_ZOOM_NORM
+  }
+
   const navigateToFocusView = (view: FocusViewId) => {
+    resetZoom()
     const pose = getViewCameraPose(
       THREE,
-      camera.fov,
+      DEFAULT_ZOOM_FOV,
       stageEl.clientWidth,
       stageEl.clientHeight,
       view,
@@ -244,9 +273,10 @@ export function attachInputController({
       return
     }
 
+    resetZoom()
     const pose = getTabletFullscreenPose(
       THREE,
-      camera.fov,
+      DEFAULT_ZOOM_FOV,
       stageEl.clientWidth,
       stageEl.clientHeight,
       target,
@@ -685,6 +715,7 @@ export function attachInputController({
     }
     if (mouseStickMode === 'move') resetStick(true)
     if (mouseStickMode === 'aim') resetStick(false)
+    if (mouseStickMode === 'zoom') state.zoomEngaged = false
     mouseStickMode = null
     window.setTimeout(() => {
       if (disposed || state.pointerLocked) return
@@ -744,7 +775,13 @@ export function attachInputController({
       return
     }
 
-    const sensitivity = 0.0022
+    if (mouseStickMode === 'zoom') {
+      setZoomFromClientY(e.clientY)
+      return
+    }
+
+    const fovScale = camera.fov / DEFAULT_ZOOM_FOV
+    const sensitivity = 0.0022 * fovScale
     const moveSensitivity = 0.003
     const addMouseMoveStick = (dx: number, dy: number) => {
       let nx = state.mouseMoveX + dx * moveSensitivity
@@ -862,13 +899,8 @@ export function attachInputController({
         return
       }
       if (held === 'scanner') {
-        const hitInteractive =
-          hitScannerDockAtClient(e.clientX, e.clientY) ||
-          Boolean(hitPowerAtClient(e.clientX, e.clientY)) ||
-          Boolean(hitFullscreenAtClient(e.clientX, e.clientY)) ||
-          Boolean(hitPlateAtClient(e.clientX, e.clientY)) ||
-          hitDrawerAtClient(e.clientX, e.clientY)
-        stageEl.style.cursor = hitInteractive ? 'pointer' : 'none'
+        const hitDock = hitScannerDockAtClient(e.clientX, e.clientY)
+        stageEl.style.cursor = hitDock ? 'pointer' : 'none'
         return
       }
       const hitLabel = Boolean(hitZebraLabelAtClient(e.clientX, e.clientY))
@@ -970,6 +1002,13 @@ export function attachInputController({
     }
 
     if (e.button === 0 && target) {
+      if (stickRefs.zoomCtrlRef.current?.contains(target)) {
+        e.preventDefault()
+        mouseStickMode = 'zoom'
+        state.zoomEngaged = true
+        setZoomFromClientY(e.clientY)
+        return
+      }
       if (stickRefs.moveStickRef.current?.contains(target)) {
         e.preventDefault()
         mouseStickMode = 'move'
@@ -1078,6 +1117,11 @@ export function attachInputController({
       mouseStickMode = null
       return
     }
+    if (mouseStickMode === 'zoom') {
+      state.zoomEngaged = false
+      mouseStickMode = null
+      return
+    }
 
     setIframeDragShield(false)
 
@@ -1131,25 +1175,6 @@ export function attachInputController({
       if (held === 'scanner') {
         if (hitScannerDockAtClient(e.clientX, e.clientY)) {
           putDownScanner()
-          return
-        }
-        const powerId = hitPowerAtClient(e.clientX, e.clientY)
-        if (powerId) {
-          reloadTablet(powerId)
-          return
-        }
-        const fullscreenId = hitFullscreenAtClient(e.clientX, e.clientY)
-        if (fullscreenId) {
-          navigateToTabletFullscreen(fullscreenId)
-          return
-        }
-        const plateId = hitPlateAtClient(e.clientX, e.clientY)
-        if (plateId) {
-          navigateToFocusView(plateId)
-          return
-        }
-        if (hitDrawerAtClient(e.clientX, e.clientY)) {
-          toggleCashDrawer()
           return
         }
         triggerScannerPulse()
@@ -1210,7 +1235,17 @@ export function attachInputController({
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
       const touchTarget = touch.target as HTMLElement | null
-      if (touchTarget && stickRefs.moveStickRef.current?.contains(touchTarget)) {
+      if (touchTarget && stickRefs.zoomCtrlRef.current?.contains(touchTarget)) {
+        if (zoomTouchId === null) {
+          zoomTouchId = touch.identifier
+          state.zoomEngaged = true
+          setZoomFromClientY(touch.clientY)
+        }
+        e.preventDefault()
+      } else if (
+        touchTarget &&
+        stickRefs.moveStickRef.current?.contains(touchTarget)
+      ) {
         if (moveTouchId === null) {
           moveTouchId = touch.identifier
           setMirrorVisibility(true, true)
@@ -1255,7 +1290,10 @@ export function attachInputController({
     lastTouchTime = Date.now()
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
-      if (touch.identifier === moveTouchId) {
+      if (touch.identifier === zoomTouchId) {
+        setZoomFromClientY(touch.clientY)
+        e.preventDefault()
+      } else if (touch.identifier === moveTouchId) {
         updateStickVector(
           stickRefs.moveStickRef.current,
           stickRefs.moveKnobRef.current,
@@ -1285,7 +1323,10 @@ export function attachInputController({
     lastTouchTime = Date.now()
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i]
-      if (touch.identifier === moveTouchId) {
+      if (touch.identifier === zoomTouchId) {
+        zoomTouchId = null
+        state.zoomEngaged = false
+      } else if (touch.identifier === moveTouchId) {
         resetStick(true)
       } else if (touch.identifier === aimTouchId) {
         resetStick(false)
@@ -1303,27 +1344,7 @@ export function attachInputController({
             if (hitScannerDockAtClient(touch.clientX, touch.clientY)) {
               putDownScanner()
             } else {
-              const powerId = hitPowerAtClient(touch.clientX, touch.clientY)
-              if (powerId) {
-                reloadTablet(powerId)
-              } else {
-                const fullscreenId = hitFullscreenAtClient(
-                  touch.clientX,
-                  touch.clientY,
-                )
-                if (fullscreenId) {
-                  navigateToTabletFullscreen(fullscreenId)
-                } else {
-                  const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
-                  if (plateId) {
-                    navigateToFocusView(plateId)
-                  } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
-                    toggleCashDrawer()
-                  } else {
-                    triggerScannerPulse()
-                  }
-                }
-              }
+              triggerScannerPulse()
             }
           } else {
             const labelObj = hitZebraLabelAtClient(touch.clientX, touch.clientY)
@@ -1362,6 +1383,24 @@ export function attachInputController({
     }
   }
 
+  const onStageWheel = (e: WheelEvent) => {
+    const target = e.target as HTMLElement | null
+    if (
+      target &&
+      target.closest('.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal')
+    ) {
+      return
+    }
+    e.preventDefault()
+    const step = -Math.sign(e.deltaY) * Math.min(0.14, Math.max(0.05, Math.abs(e.deltaY) * 0.0012))
+    adjustZoom(step)
+  }
+
+  const onZoomDoubleClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    resetZoom()
+  }
+
   document.addEventListener('pointerlockchange', onPointerLockChange)
   document.addEventListener('pointerlockerror', onPointerLockError)
   window.addEventListener('keydown', onKeyDown)
@@ -1375,7 +1414,9 @@ export function attachInputController({
   stageEl.addEventListener('mousedown', onStageMouseDown)
   stageEl.addEventListener('auxclick', onStageAuxClick)
   stageEl.addEventListener('contextmenu', onStageContextMenu)
+  stageEl.addEventListener('wheel', onStageWheel, { passive: false })
   stageEl.addEventListener('touchstart', onStageTouchStart, { passive: false })
+  stickRefs.zoomCtrlRef.current?.addEventListener('dblclick', onZoomDoubleClick)
 
   const cleanup = () => {
     disposed = true
@@ -1392,7 +1433,12 @@ export function attachInputController({
     stageEl.removeEventListener('mousedown', onStageMouseDown)
     stageEl.removeEventListener('auxclick', onStageAuxClick)
     stageEl.removeEventListener('contextmenu', onStageContextMenu)
+    stageEl.removeEventListener('wheel', onStageWheel)
     stageEl.removeEventListener('touchstart', onStageTouchStart)
+    stickRefs.zoomCtrlRef.current?.removeEventListener(
+      'dblclick',
+      onZoomDoubleClick,
+    )
 
     for (const fn of cleanupFns) fn()
   }

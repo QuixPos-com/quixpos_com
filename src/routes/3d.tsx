@@ -33,6 +33,9 @@ export function ThreeDRoute() {
   const aimMirrorRef = useRef<HTMLDivElement>(null)
   const aimMirrorDotRef = useRef<HTMLDivElement>(null)
 
+  const zoomCtrlRef = useRef<HTMLDivElement>(null)
+  const zoomKnobRef = useRef<HTMLDivElement>(null)
+
   const laserReticleRef = useRef<HTMLDivElement>(null)
   const scannerPreviewCanvasRef = useRef<HTMLCanvasElement>(null)
   const audioMutedRef = useRef(false)
@@ -83,6 +86,8 @@ export function ThreeDRoute() {
         aimKnobRef,
         aimMirrorRef,
         aimMirrorDotRef,
+        zoomCtrlRef,
+        zoomKnobRef,
       },
       laserReticleRef,
       scannerPreviewCanvasRef,
@@ -127,6 +132,8 @@ export function ThreeDRoute() {
     aimKnobRef,
     aimMirrorRef,
     aimMirrorDotRef,
+    zoomCtrlRef,
+    zoomKnobRef,
   }
 
   const isScreenFocusBlur =

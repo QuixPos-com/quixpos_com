@@ -373,6 +373,70 @@
   flex-shrink: 0;
 }
 
+/* Zoom Control Slider (matches virtual sticks) */
+.scene3d-zoom-ctrl {
+  position: absolute;
+  bottom: 22px;
+  left: 152px;
+  width: 56px;
+  height: 118px;
+  border-radius: 999px;
+  z-index: 12;
+  background: rgba(11, 18, 32, 0.56);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 24px rgba(11, 18, 32, 0.28);
+  touch-action: none;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.scene3d-zoom-ctrl:hover,
+.scene3d-zoom-ctrl.is-engaged {
+  background: rgba(11, 18, 32, 0.74);
+  border-color: rgba(30, 201, 168, 0.68);
+}
+
+.scene3d-zoom-track {
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.scene3d-zoom-sign {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  color: rgba(247, 250, 252, 0.78);
+  pointer-events: none;
+}
+
+.scene3d-zoom-sign.is-plus {
+  top: 8px;
+}
+
+.scene3d-zoom-sign.is-minus {
+  bottom: 8px;
+}
+
+.scene3d-zoom-knob {
+  width: 40px;
+  height: 40px;
+}
+
 /* Scanner Quick-Draw Control Button (matches virtual sticks) */
 .scene3d-scanner-btn {
   position: absolute;
@@ -557,8 +621,14 @@
     max-width: calc(100vw - 24px);
   }
 
+  .scene3d-zoom-ctrl {
+    left: calc(50% - 44px);
+    bottom: 22px;
+    transform: translateX(-50%);
+  }
+
   .scene3d-scanner-btn {
-    left: 50%;
+    left: calc(50% + 36px);
     right: auto;
     bottom: 39px;
     transform: translateX(-50%);
@@ -574,6 +644,34 @@
 }
 
 @media (max-width: 720px) {
+  .scene3d-stick {
+    width: 96px;
+    height: 96px;
+    bottom: 20px;
+  }
+
+  .scene3d-stick.is-left {
+    left: 12px;
+  }
+
+  .scene3d-stick.is-right {
+    right: 12px;
+  }
+
+  .scene3d-zoom-ctrl {
+    height: 96px;
+    width: 48px;
+    bottom: 20px;
+    left: calc(50% - 38px);
+  }
+
+  .scene3d-scanner-btn {
+    width: 74px;
+    height: 74px;
+    bottom: 31px;
+    left: calc(50% + 30px);
+  }
+
   .scene3d-hud-top {
     top: 10px;
     left: 10px;
