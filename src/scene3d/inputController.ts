@@ -24,6 +24,7 @@ export interface InputControllerParams {
   raycaster: InstanceType<ThreeModule['Raycaster']>
   state: SceneRuntimeState
   tabletInstances: TabletInstance[]
+  cutoutTargets: Array<InstanceType<ThreeModule['Mesh']>>
   plateTargets: Array<InstanceType<ThreeModule['Mesh']>>
   drawerTargets: Array<InstanceType<ThreeModule['Mesh']>>
   powerTargets: Array<InstanceType<ThreeModule['Mesh']>>
@@ -45,6 +46,7 @@ export function attachInputController({
   raycaster,
   state,
   tabletInstances,
+  cutoutTargets,
   plateTargets,
   drawerTargets,
   powerTargets,
@@ -259,6 +261,11 @@ export function attachInputController({
     return raycaster.intersectObjects(zebraTargets, false).length > 0
   }
 
+  const hitScreenAtClient = (clientX: number, clientY: number) => {
+    if (!setNdcFromClient(clientX, clientY)) return false
+    return raycaster.intersectObjects(cutoutTargets, false).length > 0
+  }
+
   const setIframeDragShield = (shielded: boolean) => {
     state.dragTurning = shielded
     const mode = shielded || state.pointerLocked ? 'none' : 'auto'
@@ -276,6 +283,7 @@ export function attachInputController({
       holdPointerLocked = false
     }
     if (locked) {
+      hoveredTabletId = null
       dragLooking = false
       state.cameraTween = null
       state.targetYaw = state.yaw
@@ -460,6 +468,7 @@ export function attachInputController({
 
   const onWindowBlur = () => {
     state.pressedKeys.clear()
+    state.wheelMoveY = 0
     dragLooking = false
     mouseDownOnStage = false
     setIframeDragShield(false)
@@ -718,6 +727,35 @@ export function attachInputController({
     }
   }
 
+  const onStageWheel = (e: WheelEvent) => {
+    if (e.ctrlKey || e.deltaY === 0) return
+    const target = e.target as HTMLElement | null
+    if (
+      target &&
+      target.closest('.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal')
+    ) {
+      return
+    }
+    if (
+      hoveredTabletId !== null ||
+      (!state.pointerLocked && hitScreenAtClient(e.clientX, e.clientY))
+    ) {
+      return
+    }
+    e.preventDefault()
+
+    let normDeltaY = e.deltaY
+    if (e.deltaMode === 1) {
+      normDeltaY *= 32
+    } else if (e.deltaMode === 2) {
+      normDeltaY *= 400
+    }
+    state.wheelMoveY = Math.max(
+      -1.2,
+      Math.min(1.2, state.wheelMoveY - normDeltaY / 120),
+    )
+  }
+
   const onStageTouchStart = (e: TouchEvent) => {
     lastTouchTime = Date.now()
     const target = e.target as HTMLElement | null
@@ -839,6 +877,7 @@ export function attachInputController({
   window.addEventListener('touchend', onWindowTouchEnd)
   window.addEventListener('touchcancel', onWindowTouchEnd)
   stageEl.addEventListener('mousedown', onStageMouseDown)
+  stageEl.addEventListener('wheel', onStageWheel, { passive: false })
   stageEl.addEventListener('touchstart', onStageTouchStart, { passive: false })
 
   const cleanup = () => {
@@ -854,6 +893,7 @@ export function attachInputController({
     window.removeEventListener('touchend', onWindowTouchEnd)
     window.removeEventListener('touchcancel', onWindowTouchEnd)
     stageEl.removeEventListener('mousedown', onStageMouseDown)
+    stageEl.removeEventListener('wheel', onStageWheel)
     stageEl.removeEventListener('touchstart', onStageTouchStart)
 
     for (const fn of cleanupFns) fn()
