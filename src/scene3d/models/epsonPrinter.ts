@@ -1,4 +1,5 @@
 import { PRINTER_SIZE, PRINTER_X, PRINTER_Z, TABLE_TOP_Y } from '../config'
+import { markFocusSharp } from '../focusBlurPass'
 import { createPrinterFrontTexture } from '../textures'
 import type { Disposable, ThreeModule } from '../types'
 
@@ -98,6 +99,8 @@ export function buildEpsonPrinter(
   const netLed = new THREE.Mesh(ledGeo, printerNetLedMat)
   netLed.position.set(-84, PRINTER_SIZE - 38, PRINTER_SIZE / 2 + 2)
   printerGroup.add(netLed)
+
+  markFocusSharp(printerGroup)
 
   return {
     printerNetLedMat,

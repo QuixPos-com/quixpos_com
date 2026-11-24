@@ -5,6 +5,7 @@ import {
   TABLE_TOP_Y,
   TILT_ANGLE,
 } from '../config'
+import { FOCUS_SHARP_LAYER, markFocusSharp } from '../focusBlurPass'
 import { SCENE_WINDOW_NAME_PREFIX } from '../iframeChannel'
 import {
   createLoginFirstOsdTexture,
@@ -265,6 +266,8 @@ export function buildTablets(
     powerFace.userData = powerUserData
     powerBtnGroup.add(powerFace)
 
+    markFocusSharp(powerBoss)
+    markFocusSharp(powerBtnGroup)
     powerTargets.push(powerBody, powerFace)
 
     // Transparent NoBlending cutout plane (when ON) or dark screen surface (when OFF)
@@ -273,6 +276,9 @@ export function buildTablets(
       poweredOn ? cutoutOnMat : screenOffMat,
     )
     cutoutMesh.position.set(0, 0, 2)
+    if (!touchCapable && poweredOn) {
+      cutoutMesh.layers.enable(FOCUS_SHARP_LAYER)
+    }
     cutoutMesh.userData = {
       tabletTitle: spec.title,
       tabletId: spec.id,

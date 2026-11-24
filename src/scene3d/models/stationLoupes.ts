@@ -1,4 +1,5 @@
 import { DRAWER_D, TABLET_Z, TABLE_TOP_Y } from '../config'
+import { markFocusSharp } from '../focusBlurPass'
 import { createNameplateTexture } from '../textures'
 import type {
   Disposable,
@@ -120,6 +121,7 @@ export function buildStationLoupes(
     plate.castShadow = true
     plate.receiveShadow = true
     plate.userData = userData
+    markFocusSharp(plate)
     webglScene.add(plate)
     plateTargets.push(plate)
 
@@ -149,6 +151,7 @@ export function buildStationLoupes(
     lHandle.userData = userData
     loupeGroup.add(lHandle)
 
+    markFocusSharp(loupeGroup)
     webglScene.add(loupeGroup)
     plateTargets.push(lRing, lLens, lHandle)
 
@@ -176,6 +179,7 @@ export function buildStationLoupes(
   drawerSocket.position.set(568, 193, DRAWER_D / 2 + 4)
   drawerSocket.castShadow = true
   drawerSocket.userData = drawerUserData
+  markFocusSharp(drawerSocket)
   drawerTrayGroup.add(drawerSocket)
   plateTargets.push(drawerSocket)
 
@@ -202,6 +206,7 @@ export function buildStationLoupes(
   dHandle.userData = drawerUserData
   drawerLoupeGroup.add(dHandle)
 
+  markFocusSharp(drawerLoupeGroup)
   drawerTrayGroup.add(drawerLoupeGroup)
   plateTargets.push(dRing, dLens, dHandle)
 

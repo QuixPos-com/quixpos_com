@@ -136,10 +136,7 @@ export function ThreeDRoute() {
         class={`scene3d-stage ${isLocked ? '' : 'is-cursor-mode'}`}
       >
         <div ref={cssLayerRef} class="scene3d-css-layer" />
-        <canvas
-          ref={webglCanvasRef}
-          class={`scene3d-webgl-layer ${isScreenFocusBlur ? 'is-blurred' : ''}`}
-        />
+        <canvas ref={webglCanvasRef} class="scene3d-webgl-layer" />
         <div
           class={`scene3d-drawer-blur ${isDrawerFocusBlur ? 'is-visible' : ''}`}
           aria-hidden="true"

@@ -1,4 +1,5 @@
 import { TABLE_TOP_Y, ZEBRA_D, ZEBRA_W, ZEBRA_X, ZEBRA_Z } from '../config'
+import { markFocusSharp } from '../focusBlurPass'
 import { createZebraBadgeTexture } from '../textures'
 import type { Disposable, ThreeModule } from '../types'
 
@@ -157,6 +158,8 @@ export function buildZebraPrinter(
   const zebraSlot = new THREE.Mesh(zebraSlotGeo, zebraSlotMat)
   zebraSlot.position.set(0, 196, 338)
   zebraGroup.add(zebraSlot)
+
+  markFocusSharp(zebraGroup)
 
   const setZebraReelVisual = (widthMm: number) => {
     const widthRatio = Math.max(0.24, Math.min(1, widthMm / 101))

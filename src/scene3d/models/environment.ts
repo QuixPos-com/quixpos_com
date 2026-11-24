@@ -5,6 +5,7 @@ import {
   TABLE_TOP_Y,
   TABLE_W,
 } from '../config'
+import { markFocusSharp } from '../focusBlurPass'
 import { createFloorTexture, createWoodTexture } from '../textures'
 import type { Disposable, ThreeModule } from '../types'
 
@@ -16,6 +17,7 @@ export function buildLightingAndFloor(
   // Lighting
   const hemiLight = new THREE.HemisphereLight('#ffffff', '#9eb3c4', 1.15)
   hemiLight.position.set(0, 30000, 0)
+  markFocusSharp(hemiLight)
   webglScene.add(hemiLight)
 
   const dirLight = new THREE.DirectionalLight('#fffaf0', 1.5)
@@ -31,6 +33,7 @@ export function buildLightingAndFloor(
   dirLight.shadow.camera.top = shadowExtent
   dirLight.shadow.camera.bottom = -shadowExtent
   dirLight.shadow.bias = -0.0005
+  markFocusSharp(dirLight)
   webglScene.add(dirLight)
 
   // Flat Area Floor

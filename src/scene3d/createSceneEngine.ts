@@ -18,6 +18,10 @@ import {
   WALK_SPEED,
 } from './config'
 import {
+  createFocusBlurPass,
+  FOCUS_SHARP_LAYER,
+} from './focusBlurPass'
+import {
   createSceneBroadcastChannel,
   type PosPairingEntry,
   type PosPairingPayload,
@@ -148,6 +152,17 @@ export function mountSceneEngine({
     camera.rotation.order = 'YXZ'
     camera.position.set(SPAWN_POS.x, SPAWN_POS.y, SPAWN_POS.z)
     camera.rotation.set(SPAWN_PITCH, SPAWN_YAW, 0, 'YXZ')
+
+    const focusBlurPass = createFocusBlurPass(
+      THREE,
+      webglRenderer,
+      webglScene,
+      camera,
+      stageEl.clientWidth,
+      stageEl.clientHeight,
+      webglRenderer.getPixelRatio(),
+    )
+    disposables.push(focusBlurPass)
 
     // 3. Environment & POS Hardware Models
     buildLightingAndFloor(THREE, webglScene, disposables)
@@ -368,6 +383,9 @@ export function mountSceneEngine({
           target.powerFaceMat.needsUpdate = true
 
           target.cutoutMesh.material = cutoutOnMat
+          if (!touchCapable) {
+            target.cutoutMesh.layers.enable(FOCUS_SHARP_LAYER)
+          }
           target.camDot.material = camDotOnMat
           target.cssObject.visible = true
           target.wrapperEl.style.visibility = 'visible'
@@ -380,6 +398,9 @@ export function mountSceneEngine({
 
           channel.notifyTabletReloading(target.spec.id)
           target.cutoutMesh.material = screenOffMat
+          if (!touchCapable) {
+            target.cutoutMesh.layers.disable(FOCUS_SHARP_LAYER)
+          }
           target.camDot.material = camDotOffMat
           target.cssObject.visible = false
           target.wrapperEl.style.visibility = 'hidden'
@@ -987,6 +1008,7 @@ export function mountSceneEngine({
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       webglRenderer.setSize(w, h)
+      focusBlurPass.setSize(w, h, webglRenderer.getPixelRatio())
       cssRenderer.setSize(w, h)
     }
 
@@ -1026,6 +1048,7 @@ export function mountSceneEngine({
 
     let lastTime = performance.now()
     let smoothedDt = 1 / 60
+    let focusBlurAmount = 0
 
     const tick = (now: number) => {
       if (disposed) return
@@ -1439,7 +1462,19 @@ export function mountSceneEngine({
         }
       }
 
-      webglRenderer.render(webglScene, camera)
+      const targetBlur =
+        state.activeView === 'left' ||
+        state.activeView === 'center' ||
+        state.activeView === 'right'
+          ? 1
+          : 0
+      focusBlurAmount +=
+        (targetBlur - focusBlurAmount) * (1 - Math.exp(-14 * dt))
+      if (Math.abs(focusBlurAmount - targetBlur) < 0.002) {
+        focusBlurAmount = targetBlur
+      }
+
+      focusBlurPass.render(focusBlurAmount)
       cssRenderer.render(cssScene, camera)
       animId = requestAnimationFrame(tick)
     }

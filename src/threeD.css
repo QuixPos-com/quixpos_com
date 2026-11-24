@@ -32,7 +32,6 @@
   z-index: 2;
   pointer-events: none;
   display: block;
-  transition: filter 0.25s ease;
 }
 
 .scene3d-page.is-touch .scene3d-webgl-layer {
@@ -41,10 +40,6 @@
 
 .scene3d-page.is-touch .scene3d-css-layer {
   z-index: 2;
-}
-
-.scene3d-webgl-layer.is-blurred {
-  filter: blur(3.5px) brightness(0.92);
 }
 
 .scene3d-drawer-blur {

@@ -10,6 +10,7 @@ import {
   ZEBRA_X,
   ZEBRA_Z,
 } from '../config'
+import { markFocusSharp } from '../focusBlurPass'
 import type { Disposable, ThreeModule, ZebraMediaInfo } from '../types'
 import {
   escPosBytesToBase64,
@@ -241,6 +242,7 @@ export function createPrintManager(
       cfg.slotY + feedDirY * offset,
       cfg.slotZ + feedDirZ * offset,
     )
+    markFocusSharp(mesh)
 
     webglScene.add(mesh)
 
