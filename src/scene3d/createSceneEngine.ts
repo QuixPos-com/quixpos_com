@@ -105,6 +105,7 @@ export function mountSceneEngine({
     | null = null
   let rotateHeldLabelImpl: (() => void) | null = null
   let dropHeldItemImpl: (() => void) | null = null
+  let toggleScannerImpl: (() => void) | null = null
 
   const scanListeners = new Set<(scan: BarcodeScanEvent) => void>()
 
@@ -430,6 +431,14 @@ export function mountSceneEngine({
       setHeldMode('none')
     }
 
+    const toggleScanner = () => {
+      if (heldMode === 'scanner') {
+        putDownScanner()
+      } else {
+        pickUpScanner()
+      }
+    }
+
     const triggerScannerPulse = () => {
       if (heldMode !== 'scanner') return
       scannerTriggerAnim = 1
@@ -693,6 +702,7 @@ export function mountSceneEngine({
       cancelHeldItem,
       pickUpScanner,
       putDownScanner,
+      toggleScanner,
       triggerScannerPulse,
       stickRefs,
       callbacks: sceneCallbacks,
@@ -1235,6 +1245,10 @@ export function mountSceneEngine({
 
     dropHeldItemImpl = () => {
       cancelHeldItem()
+    }
+
+    toggleScannerImpl = () => {
+      toggleScanner()
     }
 
     const onResize = () => {
@@ -2028,6 +2042,7 @@ export function mountSceneEngine({
       printEscPosImpl?.(payload),
     rotateHeldLabel: () => rotateHeldLabelImpl?.(),
     dropHeldItem: () => dropHeldItemImpl?.(),
+    toggleScanner: () => toggleScannerImpl?.(),
     onBarcodeScan: (callback) => {
       scanListeners.add(callback)
       return () => {

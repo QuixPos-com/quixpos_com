@@ -231,6 +231,7 @@ export interface SceneController {
   printEscPos: (payload: string | Uint8Array | number[]) => void
   rotateHeldLabel: () => void
   dropHeldItem: () => void
+  toggleScanner: () => void
   onBarcodeScan: (callback: (scan: BarcodeScanEvent) => void) => () => void
   dispose: () => void
 }

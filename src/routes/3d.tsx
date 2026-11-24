@@ -184,6 +184,7 @@ export function ThreeDRoute() {
           onCloseReelPicker={() => setIsReelPickerOpen(false)}
           onRotateHeldLabel={() => controllerRef.current?.rotateHeldLabel()}
           onDropHeldItem={() => controllerRef.current?.dropHeldItem()}
+          onToggleScanner={() => controllerRef.current?.toggleScanner()}
         />
       </div>
     </div>

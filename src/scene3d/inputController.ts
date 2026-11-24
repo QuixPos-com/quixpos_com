@@ -47,6 +47,7 @@ export interface InputControllerParams {
   cancelHeldItem: () => void
   pickUpScanner: () => void
   putDownScanner: () => void
+  toggleScanner: () => void
   triggerScannerPulse: () => void
   stickRefs: TouchStickRefs
   callbacks: SceneCallbacks
@@ -81,6 +82,7 @@ export function attachInputController({
   cancelHeldItem,
   pickUpScanner,
   putDownScanner,
+  toggleScanner,
   triggerScannerPulse,
   stickRefs,
   callbacks,
@@ -914,7 +916,7 @@ export function attachInputController({
     if (
       target &&
       target.closest(
-        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
+        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal, .scene3d-scanner-btn',
       )
     ) {
       return
@@ -925,15 +927,27 @@ export function attachInputController({
     }
   }
 
+  const onStageAuxClick = (e: MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault()
+    }
+  }
+
   const onStageMouseDown = (e: MouseEvent) => {
     if (Date.now() - lastTouchTime < 700) return
     const target = e.target as HTMLElement | null
     if (
       target &&
       target.closest(
-        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
+        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal, .scene3d-scanner-btn',
       )
     ) {
+      return
+    }
+
+    if (e.button === 1) {
+      e.preventDefault()
+      toggleScanner()
       return
     }
 
@@ -1187,7 +1201,7 @@ export function attachInputController({
     if (
       target &&
       target.closest(
-        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
+        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal, .scene3d-scanner-btn',
       )
     ) {
       return
@@ -1359,6 +1373,7 @@ export function attachInputController({
   window.addEventListener('touchend', onWindowTouchEnd)
   window.addEventListener('touchcancel', onWindowTouchEnd)
   stageEl.addEventListener('mousedown', onStageMouseDown)
+  stageEl.addEventListener('auxclick', onStageAuxClick)
   stageEl.addEventListener('contextmenu', onStageContextMenu)
   stageEl.addEventListener('touchstart', onStageTouchStart, { passive: false })
 
@@ -1375,6 +1390,7 @@ export function attachInputController({
     window.removeEventListener('touchend', onWindowTouchEnd)
     window.removeEventListener('touchcancel', onWindowTouchEnd)
     stageEl.removeEventListener('mousedown', onStageMouseDown)
+    stageEl.removeEventListener('auxclick', onStageAuxClick)
     stageEl.removeEventListener('contextmenu', onStageContextMenu)
     stageEl.removeEventListener('touchstart', onStageTouchStart)
 

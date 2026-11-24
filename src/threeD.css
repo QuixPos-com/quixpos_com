@@ -373,6 +373,66 @@
   flex-shrink: 0;
 }
 
+/* Scanner Quick-Draw Control Button (matches virtual sticks) */
+.scene3d-scanner-btn {
+  position: absolute;
+  bottom: 39px;
+  right: 152px;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border-radius: 50%;
+  z-index: 12;
+  background: rgba(11, 18, 32, 0.56);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 24px rgba(11, 18, 32, 0.28);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+.scene3d-scanner-btn:hover {
+  background: rgba(11, 18, 32, 0.74);
+  border-color: rgba(30, 201, 168, 0.72);
+  transform: translateY(-1px);
+}
+
+.scene3d-scanner-btn:active {
+  transform: scale(0.95);
+}
+
+.scene3d-scanner-btn.is-active {
+  background: rgba(11, 18, 32, 0.82);
+  border-color: #c9e53d;
+  box-shadow: 0 0 0 3px rgba(201, 229, 61, 0.22), 0 8px 24px rgba(11, 18, 32, 0.36);
+}
+
+.scene3d-scanner-btn.is-active .scene3d-scanner-knob {
+  background: #c9e53d;
+}
+
+.scene3d-scanner-knob {
+  width: 52px;
+  height: 52px;
+  transition: background 0.15s ease;
+}
+
+.scene3d-knob-scanner-combo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5px;
+}
+
+.scene3d-knob-scanner-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
 /* Precision Crosshair Mirror above touched/dragged stick */
 .scene3d-stick-mirror {
   position: absolute;
@@ -495,6 +555,21 @@
   .scene3d-hud-bottom {
     bottom: 152px;
     max-width: calc(100vw - 24px);
+  }
+
+  .scene3d-scanner-btn {
+    left: 50%;
+    right: auto;
+    bottom: 39px;
+    transform: translateX(-50%);
+  }
+
+  .scene3d-scanner-btn:hover {
+    transform: translateX(-50%) translateY(-1px);
+  }
+
+  .scene3d-scanner-btn:active {
+    transform: translateX(-50%) scale(0.95);
   }
 }
 

@@ -32,6 +32,7 @@ export interface SceneHudProps {
   onCloseReelPicker: () => void
   onRotateHeldLabel: () => void
   onDropHeldItem: () => void
+  onToggleScanner: () => void
 }
 
 const NAV_ITEMS: Array<{
@@ -64,6 +65,7 @@ export function SceneHud({
   onCloseReelPicker,
   onRotateHeldLabel,
   onDropHeldItem,
+  onToggleScanner,
 }: SceneHudProps) {
   useEffect(() => {
     if (!isReelPickerOpen) return
@@ -421,6 +423,108 @@ export function SceneHud({
           </span>
         </div>
       </div>
+
+      {/* Scanner Quick-Draw Control Button (matching virtual stick style + middle-mouse indicator) */}
+      <button
+        type="button"
+        class={`scene3d-scanner-btn ${heldMode === 'scanner' ? 'is-active' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleScanner()
+        }}
+        aria-pressed={heldMode === 'scanner'}
+        aria-label={
+          heldMode === 'scanner'
+            ? 'Barcode-Scanner ablegen (Mittelklick)'
+            : 'Barcode-Scanner aufnehmen (Mittelklick)'
+        }
+        title={
+          heldMode === 'scanner'
+            ? 'Barcode-Scanner ablegen (Mittelklick)'
+            : 'Barcode-Scanner aufnehmen (Mittelklick)'
+        }
+      >
+        <span class="scene3d-stick-label">Scanner</span>
+        <span class="scene3d-stick-knob scene3d-scanner-knob" aria-hidden="true">
+          <span class="scene3d-knob-scanner-combo">
+            {/* Handheld barcode scanner silhouette */}
+            <svg
+              class="scene3d-knob-scanner-icon"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              {/* Scanner head */}
+              <path d="M4 6.5 C4 5.1 5.1 4 6.5 4 H16.5 C17.9 4 19 5.1 19 6.5 V9.5 C19 10.6 18.1 11.5 17 11.5 H12.5 L10.2 19.5 C9.9 20.4 9.1 21 8.1 21 H7.4 C6.3 21 5.5 20 5.8 18.9 L7.4 11.5 H6.5 C5.1 11.5 4 10.4 4 9 V6.5 Z" fill="rgba(11, 18, 32, 0.16)" />
+              {/* Scan beam rays */}
+              <line x1="21" y1="6" x2="22.5" y2="5.2" />
+              <line x1="21" y1="8.2" x2="23" y2="8.2" />
+              <line x1="21" y1="10.4" x2="22.5" y2="11.2" />
+            </svg>
+            <span class="scene3d-knob-slash">/</span>
+            {/* Middle-mouse-button icon matching the stick mouse SVGs */}
+            <svg
+              class="scene3d-knob-mouse"
+              viewBox="0 0 24 28"
+              width="14"
+              height="16"
+              aria-hidden="true"
+            >
+              {/* Click indicator arc above middle wheel */}
+              <path
+                d="M8.5 2.4 Q12 0.2 15.5 2.4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+              {/* Mouse body */}
+              <rect
+                x="4"
+                y="4"
+                width="16"
+                height="21"
+                rx="8"
+                fill="rgba(255, 255, 255, 0.22)"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              {/* Button split lines */}
+              <line
+                x1="4"
+                y1="13"
+                x2="20"
+                y2="13"
+                stroke="currentColor"
+                stroke-width="1.8"
+              />
+              <line
+                x1="12"
+                y1="4"
+                x2="12"
+                y2="13"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+              {/* Highlighted middle scroll wheel */}
+              <rect
+                x="10.2"
+                y="6"
+                width="3.6"
+                height="6.4"
+                rx="1.8"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
+        </span>
+      </button>
 
       <div
         ref={stickRefs.aimStickRef}
