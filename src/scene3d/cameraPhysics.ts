@@ -8,11 +8,13 @@ import {
   TABLET_Z,
   TABLE_D,
   TABLE_W,
+  TILT_ANGLE,
 } from './config'
 import type {
   CameraTween,
   FocusViewId,
   SceneRuntimeState,
+  TabletInstance,
   ThreeModule,
 } from './types'
 
@@ -167,6 +169,39 @@ export function getViewCameraPose(
     z: SPAWN_POS.z,
     yaw: SPAWN_YAW,
     pitch: SPAWN_PITCH,
+  }
+}
+
+export function getTabletFullscreenPose(
+  THREE: ThreeModule,
+  cameraFov: number,
+  stageWidth: number,
+  stageHeight: number,
+  tablet: TabletInstance,
+) {
+  const fovRad = THREE.MathUtils.degToRad(cameraFov)
+  const halfV = Math.tan(fovRad / 2)
+  const aspect = Math.max(0.5, stageWidth / Math.max(1, stageHeight))
+
+  // Frame the full tablet (screen + bezel + bottom buttons) closely and straight-on
+  const fillV = 0.88
+  const fillH = 0.92
+  const dVert = tablet.tabletH / 2 / (fillV * halfV)
+  const dHoriz = tablet.tabletW / 2 / (fillH * aspect * halfV)
+  const dist = Math.max(dVert, dHoriz, 240)
+
+  // Position camera strictly along the tilted screen's outward surface normal
+  const normalY = -Math.sin(TILT_ANGLE)
+  const normalZ = Math.cos(TILT_ANGLE)
+  const screenWorldPos = new THREE.Vector3()
+  tablet.cutoutMesh.getWorldPosition(screenWorldPos)
+
+  return {
+    x: screenWorldPos.x,
+    y: screenWorldPos.y + normalY * dist,
+    z: screenWorldPos.z + normalZ * dist,
+    yaw: 0,
+    pitch: TILT_ANGLE,
   }
 }
 

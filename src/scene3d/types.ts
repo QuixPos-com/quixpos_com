@@ -14,6 +14,7 @@ export type TargetKind =
   | 'screen'
   | 'drawer'
   | 'power'
+  | 'fullscreen'
   | 'zebra-latch'
   | 'zebra-label'
   | 'scanner'
@@ -112,6 +113,11 @@ export interface TabletInstance {
   powerHover: number
   powerPressAnim: number
   reloadFlash: number
+  fullscreenBtnGroup: InstanceType<ThreeModule['Group']>
+  fullscreenFaceMat: InstanceType<ThreeModule['MeshStandardMaterial']>
+  fullscreenBaseZ: number
+  fullscreenHover: number
+  fullscreenPressAnim: number
   cssObject: InstanceType<CSS3DObjectConstructor>
   wrapperEl: HTMLDivElement
   iframeEl: HTMLIFrameElement
@@ -153,6 +159,7 @@ export interface SavedPose {
   yaw: number
   pitch: number
   activeView: FocusViewId | null
+  fullscreenTabletId?: string | null
 }
 
 export interface SceneRuntimeState {
@@ -165,6 +172,7 @@ export interface SceneRuntimeState {
   pointerLocked: boolean
   dragTurning: boolean
   activeView: FocusViewId | null
+  fullscreenTabletId: string | null
   poseHistory: SavedPose[]
   cameraTween: CameraTween | null
   currentTargetTitle: string | null

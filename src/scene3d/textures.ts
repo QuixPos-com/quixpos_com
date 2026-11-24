@@ -131,6 +131,93 @@ export function createPowerButtonTexture(
   return tex
 }
 
+export function createFullscreenButtonTexture(
+  THREE: ThreeModule,
+  active = false,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const accent = active ? '#f59e0b' : '#1ec9a8'
+
+  ctx.fillStyle = '#0b1220'
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Outer illuminated ring matching the power button
+  ctx.strokeStyle = accent
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 54, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.strokeStyle = accent
+  ctx.lineWidth = 7.5
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  if (!active) {
+    // Expand / fullscreen 4 corner brackets
+    const o = 38
+    const b = 54
+    ctx.beginPath()
+    ctx.moveTo(o, b)
+    ctx.lineTo(o, o)
+    ctx.lineTo(b, o)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(128 - b, o)
+    ctx.lineTo(128 - o, o)
+    ctx.lineTo(128 - o, b)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(o, 128 - b)
+    ctx.lineTo(o, 128 - o)
+    ctx.lineTo(b, 128 - o)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(128 - b, 128 - o)
+    ctx.lineTo(128 - o, 128 - o)
+    ctx.lineTo(128 - o, 128 - b)
+    ctx.stroke()
+  } else {
+    // Collapse / exit fullscreen 4 inward corner brackets
+    const inner = 54
+    const outer = 38
+    ctx.beginPath()
+    ctx.moveTo(outer, inner)
+    ctx.lineTo(inner, inner)
+    ctx.lineTo(inner, outer)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(128 - outer, inner)
+    ctx.lineTo(128 - inner, inner)
+    ctx.lineTo(128 - inner, outer)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(outer, 128 - inner)
+    ctx.lineTo(inner, 128 - inner)
+    ctx.lineTo(inner, 128 - outer)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(128 - outer, 128 - inner)
+    ctx.lineTo(128 - inner, 128 - inner)
+    ctx.lineTo(128 - inner, 128 - outer)
+    ctx.stroke()
+  }
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
 export function createLoginFirstOsdTexture(THREE: ThreeModule) {
   const canvas = document.createElement('canvas')
   canvas.width = 512

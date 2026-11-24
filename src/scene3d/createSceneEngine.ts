@@ -214,6 +214,7 @@ export function mountSceneEngine({
       tabletInstances,
       cutoutTargets,
       powerTargets,
+      fullscreenTargets,
       tabletSurfaceMeshes,
       cutoutOnMat,
       screenOffMat,
@@ -222,6 +223,8 @@ export function mountSceneEngine({
       powerIdleTex,
       powerActiveTex,
       powerOffTex,
+      fullscreenIdleTex,
+      fullscreenActiveTex,
     } = buildTablets(
       THREE,
       CSS3DObject,
@@ -294,6 +297,7 @@ export function mountSceneEngine({
 
     const staticRaycastTargets = [
       ...powerTargets,
+      ...fullscreenTargets,
       ...zebraTargets,
       ...plateTargets,
       ...cutoutTargets,
@@ -311,6 +315,7 @@ export function mountSceneEngine({
       pointerLocked: false,
       dragTurning: false,
       activeView: 'total',
+      fullscreenTabletId: null,
       poseHistory: [],
       cameraTween: null,
       currentTargetTitle: null,
@@ -682,6 +687,7 @@ export function mountSceneEngine({
       plateTargets,
       drawerTargets,
       powerTargets,
+      fullscreenTargets,
       zebraTargets,
       scannerTargets,
       scannerDockTargets,
@@ -1422,6 +1428,42 @@ export function mountSceneEngine({
           }
         }
 
+        // Fullscreen bezel button hover, press & active icon state
+        const fsTargetHover = getCursorProximity(
+          t.fullscreenBtnGroup,
+          105,
+          state,
+          stageEl,
+          camera,
+          tmpProjVec,
+        )
+        t.fullscreenHover += (fsTargetHover - t.fullscreenHover) * hoverSmooth
+        const fsScale = 1 + 0.45 * t.fullscreenHover
+        t.fullscreenBtnGroup.scale.set(
+          fsScale,
+          fsScale,
+          1 + 0.2 * t.fullscreenHover,
+        )
+
+        if (t.fullscreenPressAnim > 0) {
+          t.fullscreenPressAnim = Math.max(0, t.fullscreenPressAnim - dt * 5.5)
+          t.fullscreenBtnGroup.position.z =
+            t.fullscreenBaseZ - Math.sin(t.fullscreenPressAnim * Math.PI) * 6.5
+        } else {
+          t.fullscreenBtnGroup.position.z = t.fullscreenBaseZ
+        }
+
+        const isFullscreen = state.fullscreenTabletId === t.spec.id
+        const desiredFsTex = isFullscreen
+          ? fullscreenActiveTex
+          : fullscreenIdleTex
+        if (t.fullscreenFaceMat.map !== desiredFsTex) {
+          t.fullscreenFaceMat.map = desiredFsTex
+          t.fullscreenFaceMat.emissive.set(isFullscreen ? '#f59e0b' : '#0f9f86')
+          t.fullscreenFaceMat.emissiveIntensity = isFullscreen ? 0.55 : 0.32
+          t.fullscreenFaceMat.needsUpdate = true
+        }
+
         if (t.loginPromptTimer > 0 && !t.poweredOn) {
           t.loginPromptTimer = Math.max(0, t.loginPromptTimer - dt)
           const elapsed = LOGIN_PROMPT_DURATION - t.loginPromptTimer
@@ -1898,6 +1940,7 @@ export function mountSceneEngine({
               ? [
                 ...scannerDockTargets,
                 ...powerTargets,
+                ...fullscreenTargets,
                 ...plateTargets,
                 ...drawerTargets,
               ]
@@ -1959,7 +2002,8 @@ export function mountSceneEngine({
       const targetBlur =
         (state.activeView === 'left' ||
           state.activeView === 'center' ||
-          state.activeView === 'right') &&
+          state.activeView === 'right' ||
+          state.fullscreenTabletId !== null) &&
           heldMode === 'none'
           ? 1
           : 0

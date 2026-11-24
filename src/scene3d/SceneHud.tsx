@@ -186,7 +186,9 @@ export function SceneHud({
                             ? 'Klicken oder E drücken zum Ausschalten'
                             : 'Klicken oder E drücken zum Einschalten'
                           : 'Klicken oder E drücken zum Neu laden'
-                        : targetedTablet.kind === 'zebra-latch'
+                        : targetedTablet.kind === 'fullscreen'
+                          ? 'Klicken oder E drücken für Vollbild'
+                          : targetedTablet.kind === 'zebra-latch'
                           ? 'Klicken oder E drücken für Rollenwechsel'
                           : targetedTablet.kind === 'drawer'
                             ? isDrawerOpen

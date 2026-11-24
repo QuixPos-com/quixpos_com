@@ -8,6 +8,7 @@ import {
 import { FOCUS_SHARP_LAYER, markFocusSharp } from '../focusBlurPass'
 import { SCENE_WINDOW_NAME_PREFIX } from '../iframeChannel'
 import {
+  createFullscreenButtonTexture,
   createLoginFirstOsdTexture,
   createPowerButtonTexture,
 } from '../textures'
@@ -85,6 +86,8 @@ export function buildTablets(
   const powerIdleTex = createPowerButtonTexture(THREE, 'on')
   const powerActiveTex = createPowerButtonTexture(THREE, 'active')
   const powerOffTex = createPowerButtonTexture(THREE, 'off')
+  const fullscreenIdleTex = createFullscreenButtonTexture(THREE, false)
+  const fullscreenActiveTex = createFullscreenButtonTexture(THREE, true)
   const loginFirstOsdTex = createLoginFirstOsdTexture(THREE)
 
   const camDotGeo = new THREE.CircleGeometry(7, 16)
@@ -106,6 +109,8 @@ export function buildTablets(
     powerIdleTex,
     powerActiveTex,
     powerOffTex,
+    fullscreenIdleTex,
+    fullscreenActiveTex,
     loginFirstOsdTex,
     camDotGeo,
     vesaArmGeo,
@@ -118,6 +123,7 @@ export function buildTablets(
   const tabletInstances: TabletInstance[] = []
   const cutoutTargets: Array<InstanceType<ThreeModule['Mesh']>> = []
   const powerTargets: Array<InstanceType<ThreeModule['Mesh']>> = []
+  const fullscreenTargets: Array<InstanceType<ThreeModule['Mesh']>> = []
   const tabletSurfaceMeshes: Array<InstanceType<ThreeModule['Mesh']>> = []
 
   for (const spec of TABLETS) {
@@ -156,6 +162,17 @@ export function buildTablets(
       polygonOffsetUnits: -1,
     })
 
+    const fullscreenFaceMat = new THREE.MeshStandardMaterial({
+      map: fullscreenIdleTex,
+      emissive: '#0f9f86',
+      emissiveIntensity: 0.32,
+      roughness: 0.25,
+      metalness: 0.15,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    })
+
     disposables.push(
       backShellGeo,
       bezelTopGeo,
@@ -164,6 +181,7 @@ export function buildTablets(
       baseFootGeo,
       neckGeo,
       powerFaceMat,
+      fullscreenFaceMat,
     )
 
     // Stand on tabletop
@@ -270,6 +288,44 @@ export function buildTablets(
     markFocusSharp(powerBoss)
     markFocusSharp(powerBtnGroup)
     powerTargets.push(powerBody, powerFace)
+
+    // Bottom-right bezel Fullscreen focus button (mounted immediately left of the power button)
+    const fullscreenBtnX = powerBtnX - 66
+    const fullscreenBtnY = powerBtnY
+    const fullscreenBaseZ = powerBaseZ
+
+    const fullscreenUserData = {
+      tabletTitle: spec.title,
+      tabletId: spec.id,
+      kind: 'fullscreen' as const,
+    }
+
+    const fullscreenBoss = new THREE.Mesh(powerBossGeo, bezelMat)
+    fullscreenBoss.rotation.x = Math.PI / 2
+    fullscreenBoss.position.set(fullscreenBtnX, fullscreenBtnY, 2)
+    fullscreenBoss.castShadow = true
+    fullscreenBoss.userData = fullscreenUserData
+    tabletGroup.add(fullscreenBoss)
+    fullscreenTargets.push(fullscreenBoss)
+
+    const fullscreenBtnGroup = new THREE.Group()
+    fullscreenBtnGroup.position.set(fullscreenBtnX, fullscreenBtnY, fullscreenBaseZ)
+    tabletGroup.add(fullscreenBtnGroup)
+
+    const fullscreenBody = new THREE.Mesh(powerBodyGeo, powerRimMat)
+    fullscreenBody.rotation.x = Math.PI / 2
+    fullscreenBody.castShadow = true
+    fullscreenBody.userData = fullscreenUserData
+    fullscreenBtnGroup.add(fullscreenBody)
+
+    const fullscreenFace = new THREE.Mesh(powerFaceGeo, fullscreenFaceMat)
+    fullscreenFace.position.set(0, 0, 5.2)
+    fullscreenFace.userData = fullscreenUserData
+    fullscreenBtnGroup.add(fullscreenFace)
+
+    markFocusSharp(fullscreenBoss)
+    markFocusSharp(fullscreenBtnGroup)
+    fullscreenTargets.push(fullscreenBody, fullscreenFace)
 
     // Transparent NoBlending cutout plane (when ON) or dark screen surface (when OFF)
     const cutoutMesh = new THREE.Mesh(
@@ -382,6 +438,11 @@ export function buildTablets(
       powerHover: 0,
       powerPressAnim: 0,
       reloadFlash: 0,
+      fullscreenBtnGroup,
+      fullscreenFaceMat,
+      fullscreenBaseZ,
+      fullscreenHover: 0,
+      fullscreenPressAnim: 0,
       cssObject,
       wrapperEl,
       iframeEl,
@@ -407,6 +468,7 @@ export function buildTablets(
     tabletInstances,
     cutoutTargets,
     powerTargets,
+    fullscreenTargets,
     tabletSurfaceMeshes,
     cutoutOnMat,
     screenOffMat,
@@ -415,5 +477,7 @@ export function buildTablets(
     powerIdleTex,
     powerActiveTex,
     powerOffTex,
+    fullscreenIdleTex,
+    fullscreenActiveTex,
   }
 }

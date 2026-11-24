@@ -1,4 +1,8 @@
-import { createCameraTween, getViewCameraPose } from './cameraPhysics'
+import {
+  createCameraTween,
+  getTabletFullscreenPose,
+  getViewCameraPose,
+} from './cameraPhysics'
 import {
   SPAWN_PITCH,
   SPAWN_POS,
@@ -29,6 +33,7 @@ export interface InputControllerParams {
   plateTargets: Array<InstanceType<ThreeModule['Mesh']>>
   drawerTargets: Array<InstanceType<ThreeModule['Mesh']>>
   powerTargets: Array<InstanceType<ThreeModule['Mesh']>>
+  fullscreenTargets: Array<InstanceType<ThreeModule['Mesh']>>
   zebraTargets: Array<InstanceType<ThreeModule['Mesh']>>
   scannerTargets: Array<InstanceType<ThreeModule['Mesh']>>
   scannerDockTargets: Array<InstanceType<ThreeModule['Mesh']>>
@@ -65,6 +70,7 @@ export function attachInputController({
   plateTargets,
   drawerTargets,
   powerTargets,
+  fullscreenTargets,
   zebraTargets,
   scannerTargets,
   scannerDockTargets,
@@ -140,9 +146,11 @@ export function attachInputController({
   }
 
   const isFocusedWithBlur = () =>
-    state.activeView !== null && state.activeView !== 'total'
+    (state.activeView !== null && state.activeView !== 'total') ||
+    state.fullscreenTabletId !== null
 
   const clearActiveFocusForFreeMove = () => {
+    state.fullscreenTabletId = null
     if (state.activeView !== null) {
       setActiveView(null)
     }
@@ -156,6 +164,7 @@ export function attachInputController({
       yaw: state.yaw,
       pitch: state.pitch,
       activeView: state.activeView,
+      fullscreenTabletId: state.fullscreenTabletId,
     }
     const last = state.poseHistory[state.poseHistory.length - 1]
     if (
@@ -198,7 +207,65 @@ export function attachInputController({
       ensureCashDrawerOpen()
     }
 
+    state.fullscreenTabletId = null
     setActiveView(view)
+    if (getHeldMode() === 'none') {
+      stageEl.style.cursor = ''
+    }
+    state.velX = 0
+    state.velZ = 0
+
+    if (document.pointerLockElement === stageEl) {
+      document.exitPointerLock()
+    }
+
+    state.cameraTween = createCameraTween(
+      camera.position,
+      state.yaw,
+      state.pitch,
+      pose.x,
+      pose.y,
+      pose.z,
+      pose.yaw,
+      pose.pitch,
+    )
+    state.targetYaw = state.cameraTween.toYaw
+    state.targetPitch = pose.pitch
+  }
+
+  const navigateToTabletFullscreen = (tabletId: string) => {
+    const target = tabletInstances.find((t) => t.spec.id === tabletId)
+    if (!target) return
+    target.fullscreenPressAnim = 1
+
+    if (state.fullscreenTabletId === tabletId) {
+      returnToPreviousPose()
+      return
+    }
+
+    const pose = getTabletFullscreenPose(
+      THREE,
+      camera.fov,
+      stageEl.clientWidth,
+      stageEl.clientHeight,
+      target,
+    )
+
+    const distToTarget = Math.hypot(
+      camera.position.x - pose.x,
+      camera.position.y - pose.y,
+      camera.position.z - pose.z,
+    )
+    if (
+      distToTarget > 25 ||
+      Math.abs(state.yaw - pose.yaw) > 0.02 ||
+      Math.abs(state.pitch - pose.pitch) > 0.02
+    ) {
+      pushCurrentPoseToHistory()
+    }
+
+    state.fullscreenTabletId = tabletId
+    setActiveView(null)
     if (getHeldMode() === 'none') {
       stageEl.style.cursor = ''
     }
@@ -229,6 +296,7 @@ export function attachInputController({
     state.velZ = 0
     const prev = state.poseHistory.pop()
     if (prev) {
+      state.fullscreenTabletId = prev.fullscreenTabletId ?? null
       setActiveView(prev.activeView)
       state.cameraTween = createCameraTween(
         camera.position,
@@ -243,6 +311,7 @@ export function attachInputController({
       state.targetYaw = state.cameraTween.toYaw
       state.targetPitch = prev.pitch
     } else if (isFocusedWithBlur()) {
+      state.fullscreenTabletId = null
       setActiveView('total')
       state.cameraTween = createCameraTween(
         camera.position,
@@ -273,6 +342,13 @@ export function attachInputController({
   const hitPowerAtClient = (clientX: number, clientY: number) => {
     if (!setNdcFromClient(clientX, clientY)) return null
     const hits = raycaster.intersectObjects(powerTargets, false)
+    if (hits.length === 0) return null
+    return (hits[0].object.userData.tabletId as string) ?? null
+  }
+
+  const hitFullscreenAtClient = (clientX: number, clientY: number) => {
+    if (!setNdcFromClient(clientX, clientY)) return null
+    const hits = raycaster.intersectObjects(fullscreenTargets, false)
     if (hits.length === 0) return null
     return (hits[0].object.userData.tabletId as string) ?? null
   }
@@ -567,6 +643,11 @@ export function attachInputController({
           pickUpScanner()
         } else if (state.currentTargetKind === 'power' && state.currentTargetId) {
           reloadTablet(state.currentTargetId)
+        } else if (
+          state.currentTargetKind === 'fullscreen' &&
+          state.currentTargetId
+        ) {
+          navigateToTabletFullscreen(state.currentTargetId)
         } else if (state.currentTargetKind === 'zebra-latch') {
           document.exitPointerLock()
           openZebraReelPicker()
@@ -743,6 +824,7 @@ export function attachInputController({
         const hitInteractive =
           hitScannerDockAtClient(e.clientX, e.clientY) ||
           Boolean(hitPowerAtClient(e.clientX, e.clientY)) ||
+          Boolean(hitFullscreenAtClient(e.clientX, e.clientY)) ||
           Boolean(hitPlateAtClient(e.clientX, e.clientY)) ||
           hitDrawerAtClient(e.clientX, e.clientY)
         stageEl.style.cursor = hitInteractive ? 'pointer' : 'none'
@@ -752,19 +834,25 @@ export function attachInputController({
       const hitScanner = !hitLabel && hitScannerAtClient(e.clientX, e.clientY)
       const hitPower =
         !hitLabel && !hitScanner ? hitPowerAtClient(e.clientX, e.clientY) : null
+      const hitFullscreen =
+        !hitLabel && !hitScanner && !hitPower
+          ? hitFullscreenAtClient(e.clientX, e.clientY)
+          : null
       const hitZebra =
         !hitLabel &&
         !hitScanner &&
         !hitPower &&
+        !hitFullscreen &&
         hitZebraLatchAtClient(e.clientX, e.clientY)
       const hitPlate =
-        !hitLabel && !hitScanner && !hitPower && !hitZebra
+        !hitLabel && !hitScanner && !hitPower && !hitFullscreen && !hitZebra
           ? hitPlateAtClient(e.clientX, e.clientY)
           : null
       const hitDrawer =
         !hitLabel &&
         !hitScanner &&
         !hitPower &&
+        !hitFullscreen &&
         !hitZebra &&
         !hitPlate &&
         hitDrawerAtClient(e.clientX, e.clientY)
@@ -772,6 +860,7 @@ export function attachInputController({
         hitLabel ||
         hitScanner ||
         hitPower ||
+        hitFullscreen ||
         hitZebra ||
         hitDrawer ||
         hitPlate ||
@@ -860,6 +949,8 @@ export function attachInputController({
             pickUpScanner()
           } else if (state.currentTargetKind === 'power') {
             reloadTablet(state.currentTargetId)
+          } else if (state.currentTargetKind === 'fullscreen') {
+            navigateToTabletFullscreen(state.currentTargetId)
           } else if (state.currentTargetKind === 'zebra-latch') {
             document.exitPointerLock()
             openZebraReelPicker()
@@ -889,6 +980,7 @@ export function attachInputController({
         Boolean(hitZebraLabelAtClient(e.clientX, e.clientY)) ||
         hitScannerAtClient(e.clientX, e.clientY) ||
         Boolean(hitPowerAtClient(e.clientX, e.clientY)) ||
+        Boolean(hitFullscreenAtClient(e.clientX, e.clientY)) ||
         hitZebraLatchAtClient(e.clientX, e.clientY) ||
         Boolean(hitPlateAtClient(e.clientX, e.clientY)) ||
         hitDrawerAtClient(e.clientX, e.clientY)
@@ -949,6 +1041,11 @@ export function attachInputController({
           reloadTablet(powerId)
           return
         }
+        const fullscreenId = hitFullscreenAtClient(e.clientX, e.clientY)
+        if (fullscreenId) {
+          navigateToTabletFullscreen(fullscreenId)
+          return
+        }
         const plateId = hitPlateAtClient(e.clientX, e.clientY)
         if (plateId) {
           navigateToFocusView(plateId)
@@ -974,6 +1071,11 @@ export function attachInputController({
       const powerId = hitPowerAtClient(e.clientX, e.clientY)
       if (powerId) {
         reloadTablet(powerId)
+        return
+      }
+      const fullscreenId = hitFullscreenAtClient(e.clientX, e.clientY)
+      if (fullscreenId) {
+        navigateToTabletFullscreen(fullscreenId)
         return
       }
       if (hitZebraLatchAtClient(e.clientX, e.clientY)) {
@@ -1140,13 +1242,21 @@ export function attachInputController({
               if (powerId) {
                 reloadTablet(powerId)
               } else {
-                const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
-                if (plateId) {
-                  navigateToFocusView(plateId)
-                } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
-                  toggleCashDrawer()
+                const fullscreenId = hitFullscreenAtClient(
+                  touch.clientX,
+                  touch.clientY,
+                )
+                if (fullscreenId) {
+                  navigateToTabletFullscreen(fullscreenId)
                 } else {
-                  triggerScannerPulse()
+                  const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
+                  if (plateId) {
+                    navigateToFocusView(plateId)
+                  } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
+                    toggleCashDrawer()
+                  } else {
+                    triggerScannerPulse()
+                  }
                 }
               }
             }
@@ -1160,16 +1270,24 @@ export function attachInputController({
               const powerId = hitPowerAtClient(touch.clientX, touch.clientY)
               if (powerId) {
                 reloadTablet(powerId)
-              } else if (hitZebraLatchAtClient(touch.clientX, touch.clientY)) {
-                openZebraReelPicker()
               } else {
-                const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
-                if (plateId) {
-                  navigateToFocusView(plateId)
-                } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
-                  toggleCashDrawer()
-                } else if (isFocusedWithBlur()) {
-                  returnToPreviousPose()
+                const fullscreenId = hitFullscreenAtClient(
+                  touch.clientX,
+                  touch.clientY,
+                )
+                if (fullscreenId) {
+                  navigateToTabletFullscreen(fullscreenId)
+                } else if (hitZebraLatchAtClient(touch.clientX, touch.clientY)) {
+                  openZebraReelPicker()
+                } else {
+                  const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
+                  if (plateId) {
+                    navigateToFocusView(plateId)
+                  } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
+                    toggleCashDrawer()
+                  } else if (isFocusedWithBlur()) {
+                    returnToPreviousPose()
+                  }
                 }
               }
             }
