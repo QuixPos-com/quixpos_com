@@ -431,6 +431,10 @@ export function attachInputController({
     }
     state.pointerLocked = locked
     if (!locked) {
+      if (holdPointerLockMode === 'move') {
+        state.mouseMoveX = 0
+        state.mouseMoveY = 0
+      }
       holdPointerLockMode = null
       abortedHoldPointerLock = false
       pointerLockSkipFirstMove = false
@@ -739,7 +743,18 @@ export function attachInputController({
     }
 
     const sensitivity = 0.0022
-    const moveSensitivity = 0.018
+    const moveSensitivity = 0.014
+    const addMouseMoveStick = (dx: number, dy: number) => {
+      let nx = state.mouseMoveX + dx * moveSensitivity
+      let ny = state.mouseMoveY - dy * moveSensitivity
+      const mag = Math.hypot(nx, ny)
+      if (mag > 1) {
+        nx /= mag
+        ny /= mag
+      }
+      state.mouseMoveX = nx
+      state.mouseMoveY = ny
+    }
     if (state.pointerLocked) {
       // Ignore synthetic browser cursor-warp deltas emitted right as pointer lock engages
       const moveMag = Math.hypot(e.movementX, e.movementY)
@@ -754,14 +769,7 @@ export function attachInputController({
         return
       }
       if (holdPointerLockMode === 'move') {
-        state.mouseMoveX = Math.max(
-          -1.4,
-          Math.min(1.4, state.mouseMoveX + e.movementX * moveSensitivity),
-        )
-        state.mouseMoveY = Math.max(
-          -1.4,
-          Math.min(1.4, state.mouseMoveY - e.movementY * moveSensitivity),
-        )
+        addMouseMoveStick(e.movementX, e.movementY)
         return
       }
       if (state.cameraTween) {
@@ -800,14 +808,7 @@ export function attachInputController({
         const dx = e.clientX - lastDragX
         const dy = e.clientY - lastDragY
         if (Math.hypot(dx, dy) <= 150) {
-          state.mouseMoveX = Math.max(
-            -1.4,
-            Math.min(1.4, state.mouseMoveX + dx * moveSensitivity),
-          )
-          state.mouseMoveY = Math.max(
-            -1.4,
-            Math.min(1.4, state.mouseMoveY - dy * moveSensitivity),
-          )
+          addMouseMoveStick(dx, dy)
         }
       }
       lastDragX = e.clientX
@@ -1032,6 +1033,8 @@ export function attachInputController({
       mouseDownStartX = e.clientX
       mouseDownStartY = e.clientY
       dragMoving = true
+      state.mouseMoveX = 0
+      state.mouseMoveY = 0
       lastDragX = e.clientX
       lastDragY = e.clientY
 
@@ -1069,6 +1072,10 @@ export function attachInputController({
       ((holdPointerLockMode === 'move' && e.button === 0) ||
         (holdPointerLockMode === 'look' && e.button === 2))
     ) {
+      if (holdPointerLockMode === 'move') {
+        state.mouseMoveX = 0
+        state.mouseMoveY = 0
+      }
       holdPointerLockMode = null
       dragLooking = false
       dragMoving = false
@@ -1088,6 +1095,10 @@ export function attachInputController({
     }
 
     const wasClickOnStage = mouseDownOnStage && !mouseDragged && e.button === 0
+    if (e.button === 0) {
+      state.mouseMoveX = 0
+      state.mouseMoveY = 0
+    }
     dragLooking = false
     dragMoving = false
     mouseDownOnStage = false

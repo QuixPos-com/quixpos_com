@@ -1650,14 +1650,6 @@ export function mountSceneEngine({
       const moveRight = manualRight + state.touchMoveX
       const hasMoveInput = Math.abs(moveForward) > 0.005 || Math.abs(moveRight) > 0.005
 
-      if (state.mouseMoveX !== 0 || state.mouseMoveY !== 0) {
-        const moveDecay = Math.exp(-12 * dt)
-        state.mouseMoveX *= moveDecay
-        state.mouseMoveY *= moveDecay
-        if (Math.abs(state.mouseMoveX) < 0.01) state.mouseMoveX = 0
-        if (Math.abs(state.mouseMoveY) < 0.01) state.mouseMoveY = 0
-      }
-
       if (hasMoveInput) {
         clearActiveFocusForFreeMove()
         if (state.cameraTween) {
