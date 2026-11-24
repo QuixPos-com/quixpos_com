@@ -61,6 +61,9 @@ export function attachInputController({
   let disposed = false
   let dragLooking = false
   let holdPointerLocked = false
+  let abortedHoldPointerLock = false
+  let pointerLockEnteredAt = 0
+  let pointerLockSkipFirstMove = false
   let mouseDownOnStage = false
   let mouseDownStartX = 0
   let mouseDownStartY = 0
@@ -278,13 +281,25 @@ export function attachInputController({
   }
 
   const syncPointerMode = (locked: boolean) => {
+    if (locked && abortedHoldPointerLock) {
+      abortedHoldPointerLock = false
+      holdPointerLocked = false
+      if (document.pointerLockElement === stageEl) {
+        document.exitPointerLock()
+      }
+      return
+    }
     state.pointerLocked = locked
     if (!locked) {
       holdPointerLocked = false
+      abortedHoldPointerLock = false
+      pointerLockSkipFirstMove = false
     }
     if (locked) {
       hoveredTabletId = null
       dragLooking = false
+      pointerLockEnteredAt = performance.now()
+      pointerLockSkipFirstMove = true
       state.cameraTween = null
       state.targetYaw = state.yaw
       state.targetPitch = state.pitch
@@ -457,6 +472,8 @@ export function attachInputController({
           document.exitPointerLock()
         }
       } else {
+        abortedHoldPointerLock = false
+        holdPointerLocked = false
         tryEnterPointerLock()
       }
     }
@@ -535,6 +552,18 @@ export function attachInputController({
 
     const sensitivity = 0.0022
     if (state.pointerLocked) {
+      // Ignore synthetic browser cursor-warp deltas emitted right as pointer lock engages
+      const moveMag = Math.hypot(e.movementX, e.movementY)
+      if (pointerLockSkipFirstMove) {
+        pointerLockSkipFirstMove = false
+        return
+      }
+      if (
+        (performance.now() - pointerLockEnteredAt < 180 && moveMag > 40) ||
+        moveMag > 250
+      ) {
+        return
+      }
       if (state.cameraTween) {
         state.targetYaw = state.yaw
         state.targetPitch = state.pitch
@@ -560,6 +589,7 @@ export function attachInputController({
         mouseDragged = true
         clearActiveFocusForFreeMove()
         setIframeDragShield(true)
+        abortedHoldPointerLock = false
         holdPointerLocked = true
         tryEnterPointerLock()
       }
@@ -573,14 +603,16 @@ export function attachInputController({
         const prevPitch = state.targetPitch
         const dx = e.clientX - lastDragX
         const dy = e.clientY - lastDragY
-        state.targetYaw -= dx * sensitivity * 1.25
-        state.targetPitch -= dy * sensitivity * 1.25
-        const maxPitch = Math.PI * 0.46
-        state.targetPitch = Math.max(-maxPitch, Math.min(maxPitch, state.targetPitch))
-        const dYaw = state.targetYaw - prevYaw
-        const dPitch = state.targetPitch - prevPitch
-        if (dYaw !== 0 || dPitch !== 0) {
-          pushMouseAimVisual(-dYaw * 640, -dPitch * 640)
+        if (Math.hypot(dx, dy) <= 150) {
+          state.targetYaw -= dx * sensitivity * 1.25
+          state.targetPitch -= dy * sensitivity * 1.25
+          const maxPitch = Math.PI * 0.46
+          state.targetPitch = Math.max(-maxPitch, Math.min(maxPitch, state.targetPitch))
+          const dYaw = state.targetYaw - prevYaw
+          const dPitch = state.targetPitch - prevPitch
+          if (dYaw !== 0 || dPitch !== 0) {
+            pushMouseAimVisual(-dYaw * 640, -dPitch * 640)
+          }
         }
       }
       lastDragX = e.clientX
@@ -693,6 +725,8 @@ export function attachInputController({
       mouseDownOnStage = false
       if (document.pointerLockElement === stageEl) {
         document.exitPointerLock()
+      } else {
+        abortedHoldPointerLock = true
       }
       return
     }
