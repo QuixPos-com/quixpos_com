@@ -728,3 +728,36 @@ export function createExampleBoxLabelTexture(THREE: ThreeModule) {
   tex.anisotropy = 4
   return tex
 }
+
+export function createShelfLedWashTexture(THREE: ThreeModule) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  ctx.clearRect(0, 0, 128, 128)
+
+  // Soft vertical warm-white LED falloff along the wall beneath each shelf
+  const vGrad = ctx.createLinearGradient(0, 0, 0, 128)
+  vGrad.addColorStop(0.0, 'rgba(255, 226, 176, 0.95)')
+  vGrad.addColorStop(0.18, 'rgba(255, 222, 168, 0.55)')
+  vGrad.addColorStop(0.55, 'rgba(255, 218, 160, 0.16)')
+  vGrad.addColorStop(1.0, 'rgba(255, 214, 152, 0.0)')
+  ctx.fillStyle = vGrad
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Gentle horizontal feathering at bay posts
+  ctx.globalCompositeOperation = 'destination-in'
+  const hGrad = ctx.createLinearGradient(0, 0, 128, 0)
+  hGrad.addColorStop(0.0, 'rgba(0, 0, 0, 0.15)')
+  hGrad.addColorStop(0.14, 'rgba(0, 0, 0, 1.0)')
+  hGrad.addColorStop(0.86, 'rgba(0, 0, 0, 1.0)')
+  hGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.15)')
+  ctx.fillStyle = hGrad
+  ctx.fillRect(0, 0, 128, 128)
+  ctx.globalCompositeOperation = 'source-over'
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}

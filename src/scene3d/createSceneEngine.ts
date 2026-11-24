@@ -211,7 +211,11 @@ export function mountSceneEngine({
     disposables.push(focusBlurPass)
 
     // 3. Environment & POS Hardware Models
-    const floorMesh = buildLightingAndFloor(THREE, webglScene, disposables)
+    const { floorMesh, updateBerlinTimeLighting } = buildLightingAndFloor(
+      THREE,
+      webglScene,
+      disposables,
+    )
     const { tableMeshes } = buildTable(THREE, webglScene, disposables)
     const { wallAndShelfSurfaceMeshes } = buildWallsAndShelves(
       THREE,
@@ -1325,6 +1329,7 @@ export function mountSceneEngine({
     const tmpScannerHitNormal = new THREE.Vector3()
 
     let lastTime = performance.now()
+    let lastSunSyncMs = lastTime
     let smoothedDt = 1 / 60
     let focusBlurAmount = 0
 
@@ -1334,6 +1339,11 @@ export function mountSceneEngine({
       lastTime = now
       smoothedDt += (rawDt - smoothedDt) * 0.35
       const dt = smoothedDt
+
+      if (now - lastSunSyncMs >= 30000) {
+        lastSunSyncMs = now
+        updateBerlinTimeLighting(new Date())
+      }
 
       // Proximity grow animations for the 4 navigation loupes & cash drawer button
       // Disabled while holding the barcode scanner so aiming/clicking never triggers loupes or buttons

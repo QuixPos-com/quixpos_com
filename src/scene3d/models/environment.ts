@@ -1,9 +1,14 @@
+import { applyBerlinLighting } from '../berlinSun'
 import {
   ARENA_HALF,
+  ROOM_BACK_Z,
+  ROOM_FRONT_Z,
+  ROOM_HEIGHT,
   TABLE_D,
   TABLE_THICKNESS,
   TABLE_TOP_Y,
   TABLE_W,
+  TABLE_Z,
 } from '../config'
 import { markFocusSharp } from '../focusBlurPass'
 import { createFloorTexture, createWoodTexture } from '../textures'
@@ -14,27 +19,66 @@ export function buildLightingAndFloor(
   webglScene: InstanceType<ThreeModule['Scene']>,
   disposables: Disposable[],
 ) {
-  // Lighting
-  const hemiLight = new THREE.HemisphereLight('#ffffff', '#9eb3c4', 1.15)
+  // 1. Berlin real-time sky & sun lighting
+  const hemiLight = new THREE.HemisphereLight('#ffffff', '#9eb3c4', 1.05)
   hemiLight.position.set(0, 30000, 0)
   markFocusSharp(hemiLight)
   webglScene.add(hemiLight)
 
-  const dirLight = new THREE.DirectionalLight('#fffaf0', 1.5)
-  dirLight.position.set(8000, 18000, 11000)
+  const roomMidZ = (ROOM_BACK_Z + ROOM_FRONT_Z) / 2
+  const dirLight = new THREE.DirectionalLight('#fffaf0', 1.45)
+  dirLight.position.set(8000, 18000, roomMidZ + 11000)
+  dirLight.target.position.set(0, 0, roomMidZ)
   dirLight.castShadow = true
   dirLight.shadow.mapSize.width = 2048
   dirLight.shadow.mapSize.height = 2048
   dirLight.shadow.camera.near = 2000
-  dirLight.shadow.camera.far = 50000
-  const shadowExtent = 12500
+  dirLight.shadow.camera.far = 55000
+  const shadowExtent = 14800
   dirLight.shadow.camera.left = -shadowExtent
   dirLight.shadow.camera.right = shadowExtent
   dirLight.shadow.camera.top = shadowExtent
   dirLight.shadow.camera.bottom = -shadowExtent
   dirLight.shadow.bias = -0.0005
   markFocusSharp(dirLight)
+  markFocusSharp(dirLight.target)
   webglScene.add(dirLight)
+  webglScene.add(dirLight.target)
+
+  // 2. Average indoor overhead room light centered for the POS table
+  const tableRoomLight = new THREE.SpotLight(
+    '#fff4e2',
+    1.25,
+    28000,
+    Math.PI * 0.44,
+    0.85,
+    0,
+  )
+  tableRoomLight.position.set(350, ROOM_HEIGHT - 600, TABLE_Z + 1900)
+  tableRoomLight.target.position.set(0, TABLE_TOP_Y - 800, TABLE_Z + 300)
+  tableRoomLight.castShadow = true
+  tableRoomLight.shadow.mapSize.width = 1024
+  tableRoomLight.shadow.mapSize.height = 1024
+  tableRoomLight.shadow.camera.near = 1500
+  tableRoomLight.shadow.camera.far = 22000
+  tableRoomLight.shadow.bias = -0.0005
+  markFocusSharp(tableRoomLight)
+  markFocusSharp(tableRoomLight.target)
+  webglScene.add(tableRoomLight)
+  webglScene.add(tableRoomLight.target)
+
+  const roomFillLight = new THREE.PointLight('#f8efe2', 0.42, 28000, 0)
+  roomFillLight.position.set(0, ROOM_HEIGHT - 1400, TABLE_Z + 2200)
+  roomFillLight.castShadow = false
+  markFocusSharp(roomFillLight)
+  webglScene.add(roomFillLight)
+
+  disposables.push(hemiLight, dirLight, tableRoomLight, roomFillLight)
+
+  const updateBerlinTimeLighting = (date: Date = new Date()) =>
+    applyBerlinLighting(THREE, webglScene, hemiLight, dirLight, date)
+
+  updateBerlinTimeLighting(new Date())
 
   // Flat Area Floor (4-color pastel checkered carpet)
   const floorTex = createFloorTexture(THREE)
@@ -51,7 +95,10 @@ export function buildLightingAndFloor(
   floorMesh.receiveShadow = true
   webglScene.add(floorMesh)
 
-  return floorMesh
+  return {
+    floorMesh,
+    updateBerlinTimeLighting,
+  }
 }
 
 export function buildTable(
@@ -60,6 +107,7 @@ export function buildTable(
   disposables: Disposable[],
 ) {
   const tableGroup = new THREE.Group()
+  tableGroup.position.set(0, 0, TABLE_Z)
   const woodTex = createWoodTexture(THREE)
   disposables.push(woodTex)
 

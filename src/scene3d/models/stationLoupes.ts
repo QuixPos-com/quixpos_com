@@ -1,4 +1,4 @@
-import { DRAWER_X, TABLET_Z, TABLE_D, TABLE_TOP_Y } from '../config'
+import { DRAWER_X, TABLET_Z, TABLE_D, TABLE_TOP_Y, TABLE_Z } from '../config'
 import { markFocusSharp } from '../focusBlurPass'
 import { createNameplateTexture } from '../textures'
 import type {
@@ -342,7 +342,7 @@ export function buildStationLoupes(
   }
 
   const drawerLoupeX = DRAWER_X + 460
-  const drawerLoupeZ = TABLE_D / 2 - 90
+  const drawerLoupeZ = TABLE_Z + TABLE_D / 2 - 90
 
   const drawerSocket = new THREE.Mesh(drawerSocketGeo, drawerBadgeSocketMat)
   drawerSocket.position.set(drawerLoupeX, TABLE_TOP_Y, drawerLoupeZ)

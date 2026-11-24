@@ -16,6 +16,7 @@ import {
   TABLET_Z,
   TABLE_D,
   TABLE_W,
+  TABLE_Z,
   TILT_ANGLE,
 } from './config'
 import type {
@@ -29,13 +30,13 @@ import type {
 export function resolveTableCollision(px: number, pz: number): [number, number] {
   const halfW = TABLE_W / 2 + PLAYER_RADIUS
   const halfD = TABLE_D / 2 + PLAYER_RADIUS
-  if (Math.abs(px) < halfW && Math.abs(pz) < halfD) {
+  if (Math.abs(px) < halfW && Math.abs(pz - TABLE_Z) < halfD) {
     const overlapX = halfW - Math.abs(px)
-    const overlapZ = halfD - Math.abs(pz)
+    const overlapZ = halfD - Math.abs(pz - TABLE_Z)
     if (overlapX < overlapZ) {
       px = px >= 0 ? halfW : -halfW
     } else {
-      pz = pz >= 0 ? halfD : -halfD
+      pz = pz >= TABLE_Z ? TABLE_Z + halfD : TABLE_Z - halfD
     }
   }
 
@@ -79,7 +80,7 @@ function frameBoxPose(
   const dVert = boxH / 2 / (fillV * halfV)
   const dHoriz = boxW / 2 / (fillH * aspect * halfV)
   const dy = EYE_HEIGHT - centerY
-  const minClearZ = TABLE_D / 2 + PLAYER_RADIUS + 10
+  const minClearZ = TABLE_Z + TABLE_D / 2 + PLAYER_RADIUS + 10
   const cosYaw = Math.max(0.25, Math.cos(yaw))
   const minHorizForTable = Math.max(0, (minClearZ - centerZ) / cosYaw)
   const minDistForTable = Math.hypot(minHorizForTable, dy)
@@ -121,7 +122,7 @@ export function getViewCameraPose(
       stageHeight,
       -2140,
       3760,
-      960,
+      TABLE_Z + 960,
       3140,
       1580,
       1500,
@@ -139,7 +140,7 @@ export function getViewCameraPose(
     const anchorZ = TABLET_Z
     const yaw = -0.29
     const dy = EYE_HEIGHT - anchorY
-    const minClearZ = TABLE_D / 2 + PLAYER_RADIUS + 10
+    const minClearZ = TABLE_Z + TABLE_D / 2 + PLAYER_RADIUS + 10
     const minHoriz = Math.max(0, (minClearZ - anchorZ) / Math.cos(yaw))
     const dist = Math.max(1760 * aspectScale, Math.hypot(minHoriz, dy))
     const horizDist = Math.sqrt(Math.max(1, dist * dist - dy * dy))
@@ -162,7 +163,7 @@ export function getViewCameraPose(
       stageHeight,
       1825,
       3445,
-      950,
+      TABLE_Z + 950,
       1860,
       980,
       1920,
@@ -181,7 +182,7 @@ export function getViewCameraPose(
       stageHeight,
       DRAWER_X,
       2660,
-      1920,
+      TABLE_Z + 1920,
       1540,
       1120,
       2550,

@@ -6,6 +6,7 @@ import {
   PRINTER_Z,
   TABLE_D,
   TABLE_TOP_Y,
+  TABLE_Z,
   ZEBRA_DPI,
   ZEBRA_X,
   ZEBRA_Z,
@@ -838,7 +839,7 @@ export function createPrintManager(
     }
 
     // 2. Animate previous sheets sliding off the desk front edge and fluttering to the floor
-    const tableFrontEdgeZ = TABLE_D / 2
+    const tableFrontEdgeZ = TABLE_Z + TABLE_D / 2
     for (let i = droppingSheets.length - 1; i >= 0; i--) {
       const s = droppingSheets[i]
       s.dropTime += dt

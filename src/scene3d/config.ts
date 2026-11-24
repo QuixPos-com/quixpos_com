@@ -4,9 +4,10 @@ import type { TabletSpec, ZebraMediaInfo, ZebraReelId } from './types'
 // 27" 16:9 widescreen (1920x1080 CSS px @ scale 1.2418 -> 2384x1341 units, 596x335mm, 27.0" diag)
 // 12" 16:10 (1024x640 CSS px @ scale 1.0 -> 256x160mm, 11.9" diag)
 // 8" 10:16 portrait (432x688 CSS px @ scale 1.0 -> 108x172mm, 8.0" diag)
+export const TABLE_Z = 8000 // Pulled 2.00m back into the room away from the back shelves
 export const TABLET_DEPTH = 28
 export const TILT_ANGLE = -0.36 // ~20.6 degrees tilted back toward viewer
-export const TABLET_Z = 920 // Near front edge of the table (front edge at +1600)
+export const TABLET_Z = TABLE_Z + 920 // Near front edge of the table (front edge at TABLE_Z + 1600)
 
 export const TABLE_W = 7800 // 1.95m
 export const TABLE_D = 3200 // 0.80m
@@ -20,8 +21,8 @@ export const ARENA_HALF = 72000 // 18m
 
 // Shop room walls & shelving
 export const ROOM_HALF_W = 11200 // 5.60m wide
-export const ROOM_BACK_Z = -6400 // 1.60m behind table center
-export const ROOM_FRONT_Z = 12800 // 3.20m in front of table center
+export const ROOM_BACK_Z = -6400 // 3.60m behind table center
+export const ROOM_FRONT_Z = 20800 // 3.20m in front of table center
 export const ROOM_HEIGHT = 11200 // 2.80m wall height
 export const WALL_THICKNESS = 400
 export const SHELF_DEPTH = 1360 // 0.34m deep
@@ -32,7 +33,7 @@ export const SHELF_LEVEL_YS = [1100, 3300, 5500, 7700] as const
 export const BACK_SHELF_BAYS = 4
 export const SIDE_SHELF_BAYS = 2
 
-export const SPAWN_POS = { x: 0, y: EYE_HEIGHT, z: 5400 }
+export const SPAWN_POS = { x: 0, y: EYE_HEIGHT, z: TABLE_Z + 5400 }
 export const SPAWN_YAW = 0
 export const SPAWN_PITCH = -0.27
 
@@ -47,7 +48,7 @@ export const STICK_PITCH_SPEED = 0.60 // rad/s at full stick deflection
 // Under-table cash drawer
 export const DRAWER_H = 380
 export const DRAWER_X = 74
-export const DRAWER_Z = 980
+export const DRAWER_Z = TABLE_Z + 980
 export const DRAWER_W = 1360
 export const DRAWER_D = 1120
 export const DRAWER_OPEN_OFFSET = 820
@@ -55,11 +56,11 @@ export const DRAWER_OPEN_OFFSET = 820
 // Epson TM-m30III thermal receipt printer
 export const PRINTER_SIZE = 340
 export const PRINTER_X = 2118
-export const PRINTER_Z = 900
+export const PRINTER_Z = TABLE_Z + 900
 
 // Zebra ZD420 shipping label printer
 export const ZEBRA_X = -844
-export const ZEBRA_Z = 780
+export const ZEBRA_Z = TABLE_Z + 780
 export const ZEBRA_W = 540
 export const ZEBRA_D = 700
 export const ZEBRA_DPI = 203
@@ -118,7 +119,7 @@ export function getZebraReelById(id: string): ZebraMediaInfo {
 
 // Inateck BCST-70 barcode scanner
 export const SCANNER_X = 2580
-export const SCANNER_Z = 920
+export const SCANNER_Z = TABLE_Z + 920
 
 export const TABLETS: TabletSpec[] = [
   {

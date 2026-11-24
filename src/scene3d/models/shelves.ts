@@ -13,7 +13,11 @@ import {
   WALL_THICKNESS,
 } from '../config'
 import { markFocusSharp } from '../focusBlurPass'
-import { createExampleBoxLabelTexture, createWoodTexture } from '../textures'
+import {
+  createExampleBoxLabelTexture,
+  createShelfLedWashTexture,
+  createWoodTexture,
+} from '../textures'
 import type { Disposable, ShelfSlot, ShelfWallId, ThreeModule } from '../types'
 
 interface ShelvingUnitSpec {
@@ -116,19 +120,68 @@ export function buildWallsAndShelves(
     roughness: 0.56,
     metalness: 0.05,
   })
-  disposables.push(steelMat, shelfWoodTex, shelfWoodMat)
+  const ledChannelMat = new THREE.MeshStandardMaterial({
+    color: '#27303f',
+    roughness: 0.42,
+    metalness: 0.65,
+  })
+  const ledDiffuserMat = new THREE.MeshStandardMaterial({
+    color: '#fff7e8',
+    emissive: '#ffdfa8',
+    emissiveIntensity: 1.45,
+    roughness: 0.25,
+    metalness: 0.0,
+  })
+  const ledWashTex = createShelfLedWashTexture(THREE)
+  const ledWashMat = new THREE.MeshBasicMaterial({
+    map: ledWashTex,
+    transparent: true,
+    opacity: 0.22,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  })
+  disposables.push(
+    steelMat,
+    shelfWoodTex,
+    shelfWoodMat,
+    ledChannelMat,
+    ledDiffuserMat,
+    ledWashTex,
+    ledWashMat,
+  )
 
   const postSize = 80
   const railH = 56
   const railD = 32
   const plankW = SHELF_BAY_W - postSize
   const plankD = SHELF_DEPTH - 24
+  const ledChannelW = plankW - 140
+  const ledChannelD = 36
+  const ledChannelH = 14
+  const ledStripW = ledChannelW - 36
+  const ledStripD = 20
+  const ledStripH = 8
+  const ledWashH = 820
 
   const postGeo = new THREE.BoxGeometry(postSize, SHELF_HEIGHT, postSize)
   const plankGeo = new THREE.BoxGeometry(plankW, SHELF_BOARD_THICKNESS, plankD)
   const railGeo = new THREE.BoxGeometry(plankW, railH, railD)
   const sideBarGeo = new THREE.BoxGeometry(36, 48, SHELF_DEPTH - postSize)
-  disposables.push(postGeo, plankGeo, railGeo, sideBarGeo)
+  const ledChannelGeo = new THREE.BoxGeometry(ledChannelW, ledChannelH, ledChannelD)
+  const ledStripGeo = new THREE.BoxGeometry(ledStripW, ledStripH, ledStripD)
+  const ledWashGeo = new THREE.PlaneGeometry(plankW - 40, ledWashH)
+  disposables.push(
+    postGeo,
+    plankGeo,
+    railGeo,
+    sideBarGeo,
+    ledChannelGeo,
+    ledStripGeo,
+    ledWashGeo,
+  )
 
   const shelvingUnits: ShelvingUnitSpec[] = [
     {
@@ -221,6 +274,26 @@ export function buildWallsAndShelves(
           unitGroup.add(rail)
         }
 
+        // Subtle under-shelf LED strip (aluminum profile + warm-white diffuser + soft wall wash)
+        const ledY = surfaceY - SHELF_BOARD_THICKNESS
+        const ledZ = SHELF_DEPTH - railD - 68
+
+        const ledChannel = new THREE.Mesh(ledChannelGeo, ledChannelMat)
+        ledChannel.position.set(bayCenterX, ledY - ledChannelH / 2, ledZ)
+        unitGroup.add(ledChannel)
+
+        const ledStrip = new THREE.Mesh(ledStripGeo, ledDiffuserMat)
+        ledStrip.position.set(
+          bayCenterX,
+          ledY - ledChannelH - ledStripH / 2 + 2,
+          ledZ,
+        )
+        unitGroup.add(ledStrip)
+
+        const ledWash = new THREE.Mesh(ledWashGeo, ledWashMat)
+        ledWash.position.set(bayCenterX, ledY - ledWashH / 2, 12)
+        unitGroup.add(ledWash)
+
         const localZ = SHELF_DEPTH / 2
         shelfSlots.push({
           id: `${unit.wall}-bay${b}-lvl${l}`,
@@ -235,6 +308,20 @@ export function buildWallsAndShelves(
           clearanceHeight,
           facingYaw: unit.facingYaw,
         })
+      }
+    }
+
+    // Subtle warm under-shelf bounce lights for upper shelf levels
+    const lightXs =
+      unit.bays >= 4 ? [-totalW / 4, totalW / 4] : [0]
+    for (let l = 1; l < SHELF_LEVEL_YS.length; l++) {
+      const lightY = SHELF_LEVEL_YS[l] - SHELF_BOARD_THICKNESS - 160
+      for (const lx of lightXs) {
+        const shelfLight = new THREE.PointLight('#ffe2b4', 0.28, 5200, 0)
+        shelfLight.position.set(lx, lightY, SHELF_DEPTH * 0.62)
+        shelfLight.castShadow = false
+        disposables.push(shelfLight)
+        unitGroup.add(shelfLight)
       }
     }
 
