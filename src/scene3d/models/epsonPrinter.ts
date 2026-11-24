@@ -1,5 +1,5 @@
 import { PRINTER_SIZE, PRINTER_X, PRINTER_Z, TABLE_TOP_Y } from '../config'
-import { createPrinterFrontTexture, createReceiptTexture } from '../textures'
+import { createPrinterFrontTexture } from '../textures'
 import type { Disposable, ThreeModule } from '../types'
 
 export function buildEpsonPrinter(
@@ -31,12 +31,6 @@ export function buildEpsonPrinter(
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   })
-  const receiptTex = createReceiptTexture(THREE)
-  const receiptMat = new THREE.MeshStandardMaterial({
-    map: receiptTex,
-    roughness: 0.85,
-    side: THREE.DoubleSide,
-  })
   const printerPowerLedMat = new THREE.MeshStandardMaterial({
     color: '#1ec9a8',
     emissive: '#1ec9a8',
@@ -58,7 +52,6 @@ export function buildEpsonPrinter(
   const printerTopCapGeo = new THREE.BoxGeometry(PRINTER_SIZE - 28, 12, PRINTER_SIZE - 28)
   const printerSlotGeo = new THREE.BoxGeometry(220, 18, 28)
   const printerBadgeGeo = new THREE.PlaneGeometry(180, 90)
-  const receiptGeo = new THREE.PlaneGeometry(190, 180)
   const ledGeo = new THREE.CircleGeometry(7, 14)
 
   disposables.push(
@@ -67,15 +60,12 @@ export function buildEpsonPrinter(
     printerSlotMat,
     printerBadgeTex,
     printerBadgeMat,
-    receiptTex,
-    receiptMat,
     printerPowerLedMat,
     printerNetLedMat,
     printerBoxGeo,
     printerTopCapGeo,
     printerSlotGeo,
     printerBadgeGeo,
-    receiptGeo,
     ledGeo,
   )
 
@@ -97,12 +87,6 @@ export function buildEpsonPrinter(
   printerSlot.position.set(0, PRINTER_SIZE - 22, PRINTER_SIZE / 2 - 12)
   printerGroup.add(printerSlot)
 
-  const receiptMesh = new THREE.Mesh(receiptGeo, receiptMat)
-  receiptMesh.position.set(0, PRINTER_SIZE - 8, PRINTER_SIZE / 2 + 52)
-  receiptMesh.rotation.x = -0.95
-  receiptMesh.castShadow = true
-  printerGroup.add(receiptMesh)
-
   const printerBadge = new THREE.Mesh(printerBadgeGeo, printerBadgeMat)
   printerBadge.position.set(0, PRINTER_SIZE * 0.42, PRINTER_SIZE / 2 + 2)
   printerGroup.add(printerBadge)
@@ -114,4 +98,8 @@ export function buildEpsonPrinter(
   const netLed = new THREE.Mesh(ledGeo, printerNetLedMat)
   netLed.position.set(-84, PRINTER_SIZE - 38, PRINTER_SIZE / 2 + 2)
   printerGroup.add(netLed)
+
+  return {
+    printerNetLedMat,
+  }
 }

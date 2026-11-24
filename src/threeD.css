@@ -53,6 +53,7 @@
   z-index: 5;
   pointer-events: none;
   opacity: 0;
+  visibility: hidden;
   backdrop-filter: blur(3.5px) brightness(0.92);
   -webkit-backdrop-filter: blur(3.5px) brightness(0.92);
   mask-image: radial-gradient(
@@ -65,19 +66,20 @@
     transparent 56%,
     rgba(0, 0, 0, 1) 86%
   );
-  transition: opacity 0.25s ease;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
 .scene3d-drawer-blur.is-visible {
   opacity: 1;
+  visibility: visible;
 }
 
+/* Note: avoid backface-visibility: hidden, will-change: transform, or box-shadow here —
+   inside CSS3DRenderer's Y-inverted preserve-3d matrix they cause Mobile Chrome's Viz
+   compositor to cull or drop cross-origin OOPIF iframe surfaces. Front-face culling is
+   handled explicitly in createSceneEngine.ts. */
 .tablet-screen-frame {
   background: #0b1220;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  will-change: transform;
-  box-shadow: 0 0 0 2px #0b0f17;
 }
 
 .tablet-screen-crop {
@@ -91,6 +93,7 @@
   border: 0;
   display: block;
   background: #ffffff;
+  touch-action: auto;
 }
 
 /* HUD Top Menu */

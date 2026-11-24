@@ -31,6 +31,7 @@ export interface ScenePresencePayload extends ScenePresenceState {
   tabletId: string
   title: string
   canControlScreens: boolean
+  printers: Array<'zebra' | 'epson'>
   peers: string[]
 }
 
@@ -137,6 +138,7 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
       tabletId: tablet.spec.id,
       title: tablet.spec.title,
       canControlScreens: Boolean(tablet.spec.canControlScreens),
+      printers: ['zebra', 'epson'],
       activeView: state.activeView,
       drawerOpen: state.drawerOpen,
       pointerLocked: state.pointerLocked,

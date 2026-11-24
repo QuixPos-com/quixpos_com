@@ -172,5 +172,7 @@ export interface SceneController {
   toggleDrawer: () => void
   setTabletPower: (tabletId: string, poweredOn: boolean) => void
   toggleTabletPower: (tabletId: string) => void
+  printZpl: (zpl: string) => void
+  printEscPos: (payload: string | Uint8Array | number[]) => void
   dispose: () => void
 }

@@ -306,12 +306,25 @@ export function buildTablets(
     tabletGroup.updateMatrixWorld(true)
 
     // Real DOM iframe inside CSS3DObject
+    // On mobile/touch GPUs (DPR 2.6-3.0), cap uncropped widescreen CSS resolution to 1280px
+    // and compensate via cssObject.scale so backing surface width*DPR stays under 4096px
+    // while preserving exact 3D monitor dimensions and desktop layout breakpoints.
+    const MAX_TOUCH_CSS_W = 1280
+    const domDownscale =
+      touchCapable && !spec.crop && spec.cssW > MAX_TOUCH_CSS_W
+        ? MAX_TOUCH_CSS_W / spec.cssW
+        : 1
+    const domCssW = Math.round(spec.cssW * domDownscale)
+    const domCssH = Math.round(spec.cssH * domDownscale)
+    const domVisibleW = spec.crop ? visibleCssW : domCssW
+    const domVisibleH = spec.crop ? visibleCssH : domCssH
+    const cssScale = spec.physicalScale * (spec.cssW / domCssW)
+
     const wrapperEl = document.createElement('div')
     wrapperEl.className = 'tablet-screen-frame'
-    wrapperEl.style.width = `${visibleCssW}px`
-    wrapperEl.style.height = `${visibleCssH}px`
+    wrapperEl.style.width = `${domVisibleW}px`
+    wrapperEl.style.height = `${domVisibleH}px`
     if (!poweredOn) {
-      wrapperEl.style.display = 'none'
       wrapperEl.style.visibility = 'hidden'
       wrapperEl.style.pointerEvents = 'none'
     }
@@ -319,15 +332,12 @@ export function buildTablets(
     const iframeEl = document.createElement('iframe')
     iframeEl.className = 'tablet-screen-iframe'
     iframeEl.name = `${SCENE_WINDOW_NAME_PREFIX}${spec.id}`
-    iframeEl.style.width = `${spec.cssW}px`
-    iframeEl.style.height = `${spec.cssH}px`
-    if (poweredOn) {
-      iframeEl.src = spec.url
-    } else {
+    iframeEl.style.width = `${domCssW}px`
+    iframeEl.style.height = `${domCssH}px`
+    if (!poweredOn) {
       iframeEl.style.pointerEvents = 'none'
     }
     iframeEl.title = `${spec.title} (${spec.subtitle})`
-    iframeEl.loading = 'eager'
     iframeEl.allow = 'clipboard-read; clipboard-write'
 
     if (spec.crop) {
@@ -343,9 +353,10 @@ export function buildTablets(
     }
 
     const cssObject = new CSS3DObject(wrapperEl)
+    cssObject.visible = poweredOn
     cutoutMesh.getWorldPosition(cssObject.position)
     cutoutMesh.getWorldQuaternion(cssObject.quaternion)
-    cssObject.scale.set(spec.physicalScale, spec.physicalScale, 1)
+    cssObject.scale.set(cssScale, cssScale, 1)
     cssScene.add(cssObject)
 
     tabletInstances.push({

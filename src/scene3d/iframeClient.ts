@@ -34,11 +34,21 @@ export interface ScenePresenceInfo {
   tabletId: string
   title: string
   canControlScreens: boolean
+  printers: Array<'zebra' | 'epson'>
   activeView: 'total' | 'left' | 'center' | 'right' | 'drawer' | null
   drawerOpen: boolean
   pointerLocked: boolean
   screens: Record<string, ScreenPowerSummary>
   peers: string[]
+}
+
+export interface PrinterPrintedPayload {
+  [key: string]: unknown
+  printer: 'zebra' | 'epson'
+  protocol: 'zpl' | 'escpos'
+  jobId?: string
+  droppedPrevious: boolean
+  requestedBy: string
 }
 
 export interface ScreensChangedPayload {
@@ -347,6 +357,58 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     }
   }
 
+  // ── Thermal Printer Helpers (Zebra ZPL & Epson ESC/POS) ──────────────────
+
+  /**
+   * Print a ZPL II label on the 3D Zebra ZD420 shipping/barcode label printer.
+   * Feeds the rendered label out of the slot; drops the previous label to the floor.
+   */
+  const printZpl = (zpl: string, jobId?: string) => {
+    send('printer:zpl', jobId ? { zpl, jobId } : { zpl })
+  }
+
+  /**
+   * Print an ESC/POS receipt on the 3D Epson TM-m30III thermal receipt printer.
+   * Accepts a raw ESC/POS string, Base64 string (with `encoding: 'base64'`), `Uint8Array`, or `number[]`.
+   */
+  const printEscPos = (
+    payload: string | Uint8Array | number[],
+    opts: { encoding?: 'utf8' | 'base64' | 'latin1'; jobId?: string } = {},
+  ) => {
+    if (payload instanceof Uint8Array) {
+      let binary = ''
+      for (let i = 0; i < payload.length; i++) {
+        binary += String.fromCharCode(payload[i])
+      }
+      send('printer:escpos', {
+        base64: btoa(binary),
+        jobId: opts.jobId,
+      })
+      return
+    }
+    if (Array.isArray(payload)) {
+      send('printer:escpos', {
+        bytes: payload,
+        jobId: opts.jobId,
+      })
+      return
+    }
+    send('printer:escpos', {
+      escpos: payload,
+      encoding: opts.encoding,
+      jobId: opts.jobId,
+    })
+  }
+
+  /** Subscribe to `'printer:printed'` confirmations when any printer job starts feeding */
+  const onPrinted = (
+    callback: (info: PrinterPrintedPayload) => void,
+  ): (() => void) => {
+    return on<PrinterPrintedPayload>('printer:printed', (data) => {
+      callback(data)
+    })
+  }
+
   const dispose = () => {
     if (disposed) return
     disposed = true
@@ -384,6 +446,9 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     toggleScreenPower,
     requestScreensState,
     onScreensChanged,
+    printZpl,
+    printEscPos,
+    onPrinted,
     dispose,
   }
 }

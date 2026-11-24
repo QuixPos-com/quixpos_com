@@ -24,6 +24,7 @@ import { buildEpsonPrinter } from './models/epsonPrinter'
 import { buildStationLoupes } from './models/stationLoupes'
 import { buildTablets } from './models/tablets'
 import { buildZebraPrinter } from './models/zebraPrinter'
+import { createPrintManager } from './printers/printManager'
 import type {
   Disposable,
   NavPresetId,
@@ -62,6 +63,10 @@ export function mountSceneEngine({
   let setTabletPowerImpl: ((tabletId: string, poweredOn: boolean) => void) | null =
     null
   let toggleTabletPowerImpl: ((tabletId: string) => void) | null = null
+  let printZplImpl: ((zpl: string) => void) | null = null
+  let printEscPosImpl:
+    | ((payload: string | Uint8Array | number[]) => void)
+    | null = null
 
   const channel = createSceneBroadcastChannel()
   if (typeof window !== 'undefined') {
@@ -111,6 +116,7 @@ export function mountSceneEngine({
     webglRenderer.setSize(stageEl.clientWidth, stageEl.clientHeight)
     webglRenderer.shadowMap.enabled = true
     webglRenderer.shadowMap.type = THREE.PCFSoftShadowMap
+    webglRenderer.localClippingEnabled = true
     webglRenderer.outputColorSpace = THREE.SRGBColorSpace
 
     const cssRenderer = new CSS3DRenderer({ element: cssLayerEl })
@@ -173,9 +179,20 @@ export function mountSceneEngine({
       disposables,
     )
 
-    buildEpsonPrinter(THREE, webglScene, disposables)
+    const { printerNetLedMat } = buildEpsonPrinter(
+      THREE,
+      webglScene,
+      disposables,
+    )
     buildZebraPrinter(THREE, webglScene, disposables)
     buildBarcodeScanner(THREE, webglScene, disposables)
+
+    const printManager = createPrintManager(
+      THREE,
+      webglScene,
+      printerNetLedMat,
+    )
+    disposables.push(printManager)
 
     const raycastTargets = [
       ...powerTargets,
@@ -337,7 +354,10 @@ export function mountSceneEngine({
 
           target.cutoutMesh.material = cutoutOnMat
           target.camDot.material = camDotOnMat
-          target.wrapperEl.style.display = 'block'
+          target.cssObject.visible = true
+          target.wrapperEl.style.visibility = 'visible'
+          // Mount wrapperEl into CSS3DRenderer's DOM tree before navigating src
+          cssRenderer.render(cssScene, camera)
           target.iframeEl.src = target.spec.url
         } else {
           target.reloadFlash = 0
@@ -346,7 +366,7 @@ export function mountSceneEngine({
           channel.notifyTabletReloading(target.spec.id)
           target.cutoutMesh.material = screenOffMat
           target.camDot.material = camDotOffMat
-          target.wrapperEl.style.display = 'none'
+          target.cssObject.visible = false
           target.wrapperEl.style.visibility = 'hidden'
           target.wrapperEl.style.pointerEvents = 'none'
           target.iframeEl.style.pointerEvents = 'none'
@@ -466,6 +486,15 @@ export function mountSceneEngine({
       pointerLocked: state.pointerLocked,
       screens: getControllableScreensMap(),
     }))
+
+    // Render CSS3D once first so CSS3DRenderer appends powered-on wrapper elements
+    // into the live DOM before assigning iframe.src (avoids aborted navigation on Mobile Chrome)
+    cssRenderer.render(cssScene, camera)
+    for (const t of tabletInstances) {
+      if (t.poweredOn) {
+        t.iframeEl.src = t.spec.url
+      }
+    }
 
     const isAuthorizedScreenController = (sender: string): boolean => {
       if (sender === 'host') return true
@@ -601,6 +630,70 @@ export function mountSceneEngine({
       reloadTablet(targetId)
     })
 
+    const handleZplChannelJob = (
+      data: Record<string, unknown>,
+      sender: string,
+    ) => {
+      const rawZpl =
+        typeof data.zpl === 'string'
+          ? data.zpl
+          : typeof data.raw === 'string'
+            ? data.raw
+            : typeof data.content === 'string'
+              ? data.content
+              : ''
+      if (!rawZpl.trim()) return
+
+      const outcome = printManager.printZpl(rawZpl)
+      channel.send('printer:printed', {
+        printer: 'zebra',
+        protocol: 'zpl',
+        jobId: typeof data.jobId === 'string' ? data.jobId : undefined,
+        droppedPrevious: outcome.droppedPrevious,
+        requestedBy: sender,
+      })
+    }
+
+    const handleEscPosChannelJob = (
+      data: Record<string, unknown>,
+      sender: string,
+    ) => {
+      const hasPayload =
+        typeof data.escpos === 'string' ||
+        typeof data.base64 === 'string' ||
+        typeof data.raw === 'string' ||
+        typeof data.data === 'string' ||
+        Array.isArray(data.bytes) ||
+        Array.isArray(data.data) ||
+        data.bytes instanceof Uint8Array
+      if (!hasPayload) return
+
+      const outcome = printManager.printEscPos(data)
+      if (outcome.kickDrawer) {
+        setCashDrawerOpen(true)
+      }
+      channel.send('printer:printed', {
+        printer: 'epson',
+        protocol: 'escpos',
+        jobId: typeof data.jobId === 'string' ? data.jobId : undefined,
+        droppedPrevious: outcome.droppedPrevious,
+        requestedBy: sender,
+      })
+    }
+
+    channel.on('printer:zpl', (data, meta) => {
+      handleZplChannelJob(data, meta.sender)
+    })
+    channel.on('print:zpl', (data, meta) => {
+      handleZplChannelJob(data, meta.sender)
+    })
+    channel.on('printer:escpos', (data, meta) => {
+      handleEscPosChannelJob(data, meta.sender)
+    })
+    channel.on('print:escpos', (data, meta) => {
+      handleEscPosChannelJob(data, meta.sender)
+    })
+
     navigateImpl = (view: NavPresetId) => {
       navigateToFocusView(view)
     }
@@ -621,6 +714,18 @@ export function mountSceneEngine({
       const target = tabletInstances.find((t) => t.spec.id === tabletId)
       if (target && !target.spec.canControlScreens) {
         setSingleTabletPower(tabletId, !target.poweredOn, true)
+      }
+    }
+
+    printZplImpl = (zpl: string) => {
+      handleZplChannelJob({ zpl }, 'host')
+    }
+
+    printEscPosImpl = (payload: string | Uint8Array | number[]) => {
+      if (typeof payload === 'string') {
+        handleEscPosChannelJob({ escpos: payload }, 'host')
+      } else {
+        handleEscPosChannelJob({ bytes: payload }, 'host')
       }
     }
 
@@ -784,6 +889,9 @@ export function mountSceneEngine({
       } else {
         cashBtnMesh.position.z = DRAWER_D / 2 + 8
       }
+
+      // Printer label/receipt emerging & floor-drop physics
+      printManager.update(dt)
 
       // Smooth focus / return-to-previous camera transition + drive virtual sticks during flight
       let tweenStickMoveX = 0
@@ -980,18 +1088,16 @@ export function mountSceneEngine({
         tmpToCam.copy(camera.position).sub(tmpWorldPos)
 
         const isFrontFacing = tmpNormal.dot(tmpToCam) > 0
+        t.cssObject.visible = t.poweredOn
         if (!t.poweredOn) {
-          t.wrapperEl.style.display = 'none'
           t.wrapperEl.style.visibility = 'hidden'
           t.wrapperEl.style.pointerEvents = 'none'
           t.iframeEl.style.pointerEvents = 'none'
         } else if (!isFrontFacing) {
-          t.wrapperEl.style.display = 'block'
           t.wrapperEl.style.visibility = 'hidden'
           t.wrapperEl.style.pointerEvents = 'none'
           t.iframeEl.style.pointerEvents = 'none'
         } else {
-          t.wrapperEl.style.display = 'block'
           t.wrapperEl.style.visibility = 'visible'
           const interactive = !state.pointerLocked && !state.dragTurning ? 'auto' : 'none'
           t.wrapperEl.style.pointerEvents = interactive
@@ -1065,6 +1171,9 @@ export function mountSceneEngine({
     setTabletPower: (tabletId: string, poweredOn: boolean) =>
       setTabletPowerImpl?.(tabletId, poweredOn),
     toggleTabletPower: (tabletId: string) => toggleTabletPowerImpl?.(tabletId),
+    printZpl: (zpl: string) => printZplImpl?.(zpl),
+    printEscPos: (payload: string | Uint8Array | number[]) =>
+      printEscPosImpl?.(payload),
     dispose: () => {
       disposed = true
       if (animId) cancelAnimationFrame(animId)

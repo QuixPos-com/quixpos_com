@@ -1,5 +1,5 @@
 import { TABLE_TOP_Y, ZEBRA_D, ZEBRA_W, ZEBRA_X, ZEBRA_Z } from '../config'
-import { createShippingLabelTexture, createZebraBadgeTexture } from '../textures'
+import { createZebraBadgeTexture } from '../textures'
 import type { Disposable, ThreeModule } from '../types'
 
 export function buildZebraPrinter(
@@ -46,12 +46,6 @@ export function buildZebraPrinter(
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   })
-  const shippingLabelTex = createShippingLabelTexture(THREE)
-  const shippingLabelMat = new THREE.MeshStandardMaterial({
-    map: shippingLabelTex,
-    roughness: 0.85,
-    side: THREE.DoubleSide,
-  })
 
   // Side-profile clamshell silhouette matching Zebra ZD420/ZD421
   const zebraShape = new THREE.Shape()
@@ -81,7 +75,6 @@ export function buildZebraPrinter(
   const zebraSlotGeo = new THREE.BoxGeometry(430, 14, 26)
   const zebraSeamGeo = new THREE.BoxGeometry(ZEBRA_W + 2, 6, 440)
   const zebraBadgeGeo = new THREE.PlaneGeometry(300, 150)
-  const shippingLabelGeo = new THREE.PlaneGeometry(310, 250)
 
   disposables.push(
     zebraBodyMat,
@@ -92,8 +85,6 @@ export function buildZebraPrinter(
     zebraSlotMat,
     zebraBadgeTex,
     zebraBadgeMat,
-    shippingLabelTex,
-    shippingLabelMat,
     zebraShellGeo,
     zebraPlinthGeo,
     zebraLatchGeo,
@@ -103,7 +94,6 @@ export function buildZebraPrinter(
     zebraSlotGeo,
     zebraSeamGeo,
     zebraBadgeGeo,
-    shippingLabelGeo,
   )
 
   const zebraGroup = new THREE.Group()
@@ -156,14 +146,8 @@ export function buildZebraPrinter(
   zebraBadge.rotation.x = -0.914
   zebraGroup.add(zebraBadge)
 
-  // Front label exit slot + emerging shipping label
+  // Front label exit slot
   const zebraSlot = new THREE.Mesh(zebraSlotGeo, zebraSlotMat)
   zebraSlot.position.set(0, 196, 338)
   zebraGroup.add(zebraSlot)
-
-  const shippingLabelMesh = new THREE.Mesh(shippingLabelGeo, shippingLabelMat)
-  shippingLabelMesh.position.set(0, 146, 412)
-  shippingLabelMesh.rotation.x = -0.95
-  shippingLabelMesh.castShadow = true
-  zebraGroup.add(shippingLabelMesh)
 }

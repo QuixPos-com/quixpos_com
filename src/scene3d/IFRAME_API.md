@@ -19,7 +19,7 @@ Because the 3D host (`quixpos.com`) and the embedded apps (`dashdemo.quixpos.com
 
 Instead, the 3D scene exposes a **cross-origin Broadcast Message Channel** over `window.postMessage`. Every message on the channel consists of:
 
-1. **`name`** (`string`) — the message/event name (e.g. `'screen:on'`, `'drawer:open'`, `'pos:receiptUpdated'`)
+1. **`name`** (`string`) — the message/event name (e.g. `'screen:on'`, `'printer:escpos'`, `'drawer:open'`)
 2. **`data`** (`object`) — a plain JSON-serializable payload object (e.g. `{ tabletId: 'pos-center' }`)
 
 Any message sent by a powered-on iframe is:
@@ -75,6 +75,7 @@ const tabletId = isIn3DScene
     "tabletId": "dash-left",
     "title": "Artikelverwaltung",
     "canControlScreens": true,
+    "printers": ["zebra", "epson"],
     "activeView": "total",
     "drawerOpen": false,
     "pointerLocked": false,
@@ -83,19 +84,22 @@ const tabletId = isIn3DScene
         "id": "pos-center",
         "title": "POS",
         "subtitle": "pos.quixpos.com",
-        "poweredOn": false
+        "poweredOn": false,
+        "enabled": false
       },
       "pos-vertical": {
         "id": "pos-vertical",
         "title": "Kundendisplay",
         "subtitle": "posdemo.quixpos.com",
-        "poweredOn": false
+        "poweredOn": false,
+        "enabled": false
       },
       "sumup-far-right": {
         "id": "sumup-far-right",
         "title": "SumUp Virtual Solo",
         "subtitle": "virtual-solo.sumup.com",
-        "poweredOn": false
+        "poweredOn": false,
+        "enabled": false
       }
     },
     "peers": ["dash-left", "pos-center", "pos-vertical", "sumup-far-right"]
@@ -109,11 +113,6 @@ const tabletId = isIn3DScene
 
 Only the leftmost screen (`dash-left`, `dashdemo.quixpos.com`) is authorized to switch the other 3 screens (`'pos-center'`, `'pos-vertical'`, `'sumup-far-right'`) **ON** or **OFF**. Power commands sent from any other iframe are ignored by the host.
 
-- Switching a screen **ON** illuminates its 3D power LED & webcam dot, reveals the screen panel, and boots its iframe URL.
-- Switching a screen **OFF** unloads its iframe (`about:blank`), hides the DOM frame, and renders a dark powered-off 3D monitor surface.
-
-### Screen Power Commands (`dash-left` -> 3D Host)
-
 | Message `name` | `data` object | Description |
 | --- | --- | --- |
 | `'screen:on'` | `{ tabletId: 'pos-center' }` or `{ tabletIds: string[] }` or `{ all: true }` | Enable and switch one, several, or all 3 controllable screens **ON**. |
@@ -124,65 +123,112 @@ Only the leftmost screen (`dash-left`, `dashdemo.quixpos.com`) is authorized to 
 | `'screen:toggle'` | `{ tabletId: 'pos-center' }` (or `{ tabletIds: string[] }` / `{ all: true }`) | Toggle screen(s) between ON and OFF. |
 | `'screens:get'` | `{}` | Replies directly to the caller with `'screens:state'` `{ screens }`. |
 
-### Keeping `dash-left` UI in Sync (`screens:changed`)
-Users in the 3D scene can also press the physical power button on the bottom-right bezel of any monitor. Whenever any screen's power changes (via API or 3D bezel button), the host broadcasts **`'screens:changed'`**:
+---
 
-```json
-{
-  "channel": "quixpos-scene3d",
-  "name": "screens:changed",
-  "sender": "host",
-  "data": {
-    "tabletId": "pos-center",
-    "poweredOn": true,
-    "screens": {
-      "pos-center": { "id": "pos-center", "title": "POS", "subtitle": "pos.quixpos.com", "poweredOn": true },
-      "pos-vertical": { "id": "pos-vertical", "title": "Kundendisplay", "subtitle": "posdemo.quixpos.com", "poweredOn": false },
-      "sumup-far-right": { "id": "sumup-far-right", "title": "SumUp Virtual Solo", "subtitle": "virtual-solo.sumup.com", "poweredOn": false }
-    }
-  }
-}
-```
+## 3. Printing on the Two 3D Printers (ZPL & ESC/POS)
 
-### Minimal Example for `dashdemo.quixpos.com` (`dash-left`)
+The 3D desk includes two physical printers that any powered-on iframe can print to:
 
-```ts
-function sendToScene(name: string, data: Record<string, unknown> = {}) {
-  if (window.parent === window) return
-  window.parent.postMessage({ channel: 'quixpos-scene3d', name, data }, '*')
-}
+1. **Zebra ZD420 Label Printer (`'printer:zpl'`)** — between `dash-left` and `pos-center`, emulating **ZPL II** (203 dpi thermal shipping & product barcode labels).
+2. **Epson TM-m30III Receipt Printer (`'printer:escpos'`)** — to the right of the customer/SumUp displays, emulating **ESC/POS** (80mm / 576-dot thermal receipts).
 
-// Switch POS & Customer Display ON:
-sendToScene('screen:on', { tabletIds: ['pos-center', 'pos-vertical'] })
-
-// Switch SumUp terminal ON:
-sendToScene('screen:power', { tabletId: 'sumup-far-right', poweredOn: true })
-
-// Switch all 3 screens OFF:
-sendToScene('screen:off', { all: true })
-
-// Listen for initial state & live power changes (including 3D bezel button clicks):
-window.addEventListener('message', (event) => {
-  if (event.source !== window.parent) return
-  const msg = event.data
-  if (msg?.channel !== 'quixpos-scene3d') return
-
-  if (msg.name === 'scene:presence' || msg.name === 'screens:changed' || msg.name === 'screens:state') {
-    console.log('Controllable screens state:', msg.data.screens)
-  }
-})
-```
+### How 3D Print & Floor-Drop Animation Works
+- **Print #1**: Emulates the ZPL or ESC/POS commands onto a thermal label/receipt texture and smoothly **feeds the printed sheet out of the printer's front slot**.
+- **Next Print**: Detaches the **previous** label/receipt from the printer slot so it **slides off the front of the desk and flutters face-up onto the floor**, while the newly printed sheet feeds out of the slot.
 
 ---
 
-## 3. General Host Commands & Events (All Powered-On Screens)
+### A. Printing a ZPL Label on Zebra ZD420 (`'printer:zpl'`)
+
+Send message name `'printer:zpl'` (alias `'print:zpl'`) with `{ zpl: string, jobId?: string }`:
+
+```ts
+window.parent.postMessage(
+  {
+    channel: 'quixpos-scene3d',
+    name: 'printer:zpl',
+    data: {
+      jobId: 'label-101',
+      zpl: [
+        '^XA',
+        '^PW812^LL600',
+        '^FO30,30^GB752,84,84^FS',
+        '^FO50,48^FR^A0N,48,48^FDPAKETVERSAND - DHL^FS',
+        '^FO40,145^A0N,34,34^FDAn: Max Mustermann^FS',
+        '^FO40,190^A0N,30,30^FDMusterstrasse 12, 10115 Berlin^FS',
+        '^FO40,250^GB732,3,3^FS',
+        '^BY3,3,110^FO60,285^BCN,110,Y,N^FD003404341610928142^FS',
+        '^FO580,270^BQN,2,6^FDQA,https://quixpos.com^FS',
+        '^XZ',
+      ].join('\n'),
+    },
+  },
+  '*',
+)
+```
+
+**Supported ZPL II commands:**
+- Label setup: `^XA` ... `^XZ`, `^PW<width>`, `^LL<length>`, `^LH<x>,<y>`, `^CF<font>,<h>,<w>`, `^CI`
+- Positioning & text: `^FO<x>,<y>`, `^FT<x>,<y>`, `^A0N,<h>,<w>` (orientations `N`, `R`, `I`, `B`), `^FB<width>,<maxLines>,<lineSpacing>,<align>` (including `\&` line breaks), `^FD...^FS`, `^FH` hex escapes (`_C3_A4` UTF-8 / Latin-1), `^FR` white-on-black reverse print
+- Graphics: `^GB<w>,<h>,<t>,<color>,<rounding>` (boxes, rules, filled bars, rounded rects), `^GC` circles, `^GD` diagonals, `^GFA` ASCII hex bitmaps
+- Barcodes & QR: `^BY<mw>,<ratio>,<h>`, `^BC` (Code 128), `^B3` (Code 39), `^BE`/`^BU` (EAN/UPC), `^BQ` (QR Code)
+
+---
+
+### B. Printing an ESC/POS Receipt on Epson TM-m30III (`'printer:escpos'`)
+
+Send message name `'printer:escpos'` (alias `'print:escpos'`). You can pass the ESC/POS stream in whichever format your app produces:
+- `{ escpos: string, encoding?: 'utf8' | 'base64' | 'latin1', jobId?: string }`
+- `{ base64: string, jobId?: string }` *(recommended for binary buffers)*
+- `{ bytes: number[], jobId?: string }`
+
+```ts
+const escposReceipt =
+  '\x1b@' +                         // Initialize
+  '\x1ba\x01' +                     // Center align
+  '\x1d!\x11\x1bE\x01QuixPOS Café\x1bE\x00\x1d!\x00\n' +
+  'Musterstr. 12 · 10115 Berlin\n\n' +
+  '\x1ba\x00' +                     // Left align
+  '1x Espresso             2,80 EUR\n' +
+  '2x Croissant            6,40 EUR\n' +
+  '--------------------------------\n' +
+  '\x1bE\x01SUMME                   9,20 EUR\x1bE\x00\n' +
+  'inkl. 19% MwSt.         1,47 EUR\n\n' +
+  '\x1ba\x01' +                     // Center QR + barcode
+  '\x1d(k\x03\x001C\x06' +          // QR module size 6
+  '\x1d(k\x1c\x001P0TSE-SIG-OK-2026-QUIXPOS-001' +
+  '\x1d(k\x03\x001Q0\n' +           // Print QR
+  'Vielen Dank!\n' +
+  '\x1dV\x42\x00'                   // Partial cut
+
+window.parent.postMessage(
+  {
+    channel: 'quixpos-scene3d',
+    name: 'printer:escpos',
+    data: { escpos: escposReceipt, jobId: 'bon-42' },
+  },
+  '*',
+)
+```
+
+**Supported ESC/POS commands:**
+- Control & feed: `ESC @` (init), `LF`, `CR`, `HT`, `ESC D` (tab stops), `ESC d n` (feed lines), `ESC J n` (feed dots), `ESC 2` / `ESC 3 n` (line spacing)
+- Styling & layout: `ESC a n` (left/center/right), `ESC ! n` (master mode), `ESC E n` (bold), `ESC - n` (underline), `ESC M n` (Font A 48-col / Font B 64-col), `GS ! n` (1x–6x width/height magnification), `GS B n` (white-on-black reverse print), UTF-8 + CP858 (`äöüß€`)
+- Barcodes, QR & Graphics: `GS h`, `GS w`, `GS H`, `GS k` (1D barcodes incl. Code 128 / EAN / Code 39), `GS ( k` (QR code size/store/print — e.g. German TSE KassenSichV QR codes), `GS v 0` (raster bit images / logos)
+- Hardware actions: `GS V` (paper cut) and **`ESC p` (`\x1b\x70...`)** — automatically kicks open the 3D cash drawer!
+
+---
+
+## 4. All Built-in Host Commands & Events
 
 ### Built-in Host Commands (Iframe -> 3D Scene)
 
 | Message `name` | `data` object | Description |
 | --- | --- | --- |
 | `'scene:ping'` | `{}` | Requests an immediate `'scene:presence'` snapshot back to the caller. |
-| `'drawer:open'` | `{}` | Slides the 3D cash drawer open (e.g. on cash checkout). |
+| `'printer:zpl'` | `{ zpl: string, jobId?: string }` | Renders ZPL II onto Zebra ZD420; drops previous Zebra label to the floor. |
+| `'printer:escpos'` | `{ escpos?: string, base64?: string, bytes?: number[], encoding?: string, jobId?: string }` | Renders ESC/POS onto Epson TM-m30III; drops previous receipt to the floor (and opens drawer on `ESC p`). |
+| `'drawer:open'` | `{}` | Slides the 3D cash drawer open. |
 | `'drawer:close'` | `{}` | Slides the 3D cash drawer closed. |
 | `'drawer:toggle'` | `{}` | Toggles the 3D cash drawer open/closed. |
 | `'camera:focus'` | `{ view: 'total' \| 'left' \| 'center' \| 'right' \| 'drawer' }` | Smoothly flies the 3D camera to the specified station preset. |
@@ -193,9 +239,10 @@ window.addEventListener('message', (event) => {
 
 | Message `name` | `data` object | When it fires |
 | --- | --- | --- |
-| `'scene:presence'` | `{ version, tabletId, title, canControlScreens, activeView, drawerOpen, pointerLocked, screens, peers }` | On iframe `load` and in response to `'scene:ping'`. |
+| `'scene:presence'` | `{ version, tabletId, title, canControlScreens, printers, activeView, drawerOpen, pointerLocked, screens, peers }` | On iframe `load` and in response to `'scene:ping'`. |
+| `'printer:printed'` | `{ printer: 'zebra' \| 'epson', protocol: 'zpl' \| 'escpos', jobId?, droppedPrevious, requestedBy }` | Whenever a ZPL or ESC/POS print job begins feeding out of a printer. |
 | `'screens:changed'` | `{ tabletId?, poweredOn?, enabled?, screens }` | Whenever any of the 3 controllable screens changes power or enabled state. |
-| `'screen:powerBlocked'` | `{ tabletId, reason: 'login_required' }` | When a visitor clicks the 3D power button on an off screen that has not been enabled by `dash-left` yet (`<- Login first` shown). |
+| `'screen:powerBlocked'` | `{ tabletId, reason: 'login_required' }` | When a visitor clicks the 3D power button on an off screen not yet enabled by `dash-left` (`<- Login first` shown). |
 | `'screens:state'` | `{ screens }` | Direct reply to `'screens:get'`. |
 | `'drawer:changed'` | `{ open: boolean }` | Whenever the 3D cash drawer opens or closes. |
 | `'camera:viewChanged'` | `{ view: 'total' \| 'left' \| 'center' \| 'right' \| 'drawer' \| null }` | Whenever the active camera preset changes (or `null` during free walk/look). |
@@ -213,33 +260,14 @@ import { createSceneChannelClient } from './iframeClient'
 
 const scene = createSceneChannelClient()
 
-// 1. Detect presence
-if (scene.isPresent()) {
-  console.log('Running in 3D tablet:', scene.getTabletId())
-}
+// Print a ZPL shipping/article label on Zebra ZD420
+scene.printZpl('^XA^FO40,40^A0N,44,44^FDArtikel #10042^FS^BY3^FO40,110^BCN,90,Y,N^FD4012345678901^FS^XZ')
 
-// 2. On 'dash-left': observe & control the other 3 screens
-const offScreens = scene.onScreensChanged((screens) => {
-  console.log('POS powered on?', screens['pos-center']?.poweredOn)
+// Print an ESC/POS receipt (accepts string, Uint8Array, or number[]) on Epson TM-m30III
+scene.printEscPos('\x1b@\x1ba\x01QuixPOS Beleg\n\x1ba\x00Espresso   2,80 EUR\n\x1dV\x42\x00')
+
+// Optional callback when print jobs feed
+scene.onPrinted((job) => {
+  console.log('Printed on', job.printer, 'droppedPrevious=', job.droppedPrevious)
 })
-
-scene.setScreenPower('pos-center', true)
-scene.setScreenPower('pos-vertical', true)
-scene.setAllScreensPower(false) // switches all 3 off
-
-// 3. Register callbacks & send custom or hardware messages
-const offDrawer = scene.on<{ open: boolean }>('drawer:changed', (data) => {
-  console.log('Cash drawer open:', data.open)
-})
-
-scene.send('drawer:open', {})
-```
-
-### Tip: Live Testing in Browser DevTools
-
-When viewing `/3d` in the browser, `window.quixposSceneChannel` is exposed on the host window:
-
-```js
-// Switch all 3 right-hand screens ON from the host DevTools console:
-window.quixposSceneChannel.on('*', (data, meta) => console.log('[scene3d]', meta.sender, meta.name, data))
 ```
