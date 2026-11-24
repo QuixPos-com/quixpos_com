@@ -15,6 +15,11 @@ import {
   type EuroNoteDenom,
 } from '../textures'
 import type { Disposable, EuroCashBreakdown, ThreeModule } from '../types'
+import {
+  type CoinCupBounds,
+  CoinCupSimulation,
+  type DrawerMotionStep,
+} from './coinPhysics'
 
 interface NoteSlotSpec {
   denom: EuroNoteDenom
@@ -225,7 +230,7 @@ export function buildCashDrawer(
   const trayBackWallGeo = new THREE.BoxGeometry(innerW, 165, 22)
   const trayDividerGeo = new THREE.BoxGeometry(12, 145, 560)
   const trayMidWallGeo = new THREE.BoxGeometry(innerW, 130, 18)
-  const coinCupGeo = new THREE.BoxGeometry(10, 95, 390)
+  const coinCupGeo = new THREE.BoxGeometry(10, 95, 434)
   const handleBarGeo = new THREE.BoxGeometry(440, 28, 36)
   const lockGeo = new THREE.CylinderGeometry(30, 30, 26, 20)
   const cashBtnGeo = new THREE.BoxGeometry(260, 114, 26)
@@ -367,12 +372,12 @@ export function buildCashDrawer(
     drawerTrayGroup.add(div)
   }
 
-  // 8 Euro coin cup dividers (front section)
+  // 8 Euro coin cup dividers (front section, flush from trayMidWall z=89 to trayFront z=523)
   const coinCupW = innerW / COIN_CUPS.length
   for (let i = 1; i < COIN_CUPS.length; i++) {
     const divX = -innerW / 2 + i * coinCupW
     const cupDiv = new THREE.Mesh(coinCupGeo, drawerTrayMat)
-    cupDiv.position.set(divX, 112, 300)
+    cupDiv.position.set(divX, 112, 306)
     drawerTrayGroup.add(cupDiv)
   }
 
@@ -430,6 +435,18 @@ export function buildCashDrawer(
   drawerTrayGroup.add(cashContentsGroup)
 
   const TRAY_SURFACE_Y = 68.2
+  const coinCupBounds: CoinCupBounds[] = COIN_CUPS.map((_, cupIdx) => ({
+    xMin: cupIdx === 0 ? -innerW / 2 : -innerW / 2 + cupIdx * coinCupW + 5,
+    xMax:
+      cupIdx === COIN_CUPS.length - 1
+        ? innerW / 2
+        : -innerW / 2 + (cupIdx + 1) * coinCupW - 5,
+    zMin: 89,
+    zMax: 523,
+    floorY: TRAY_SURFACE_Y,
+  }))
+  const coinSim = new CoinCupSimulation(coinCupBounds)
+
   let currentBreakdown: EuroCashBreakdown = calculateEuroCashBreakdown(
     INITIAL_DEMO_CASH_CENTS,
   )
@@ -439,110 +456,130 @@ export function buildCashDrawer(
     return (x - Math.floor(x)) * 2 - 1
   }
 
-      const rebuildCashMeshes = (breakdown: EuroCashBreakdown) => {
-        while (cashContentsGroup.children.length > 0) {
-          cashContentsGroup.remove(cashContentsGroup.children[0])
-        }
+  const rebuildCashMeshes = (breakdown: EuroCashBreakdown) => {
+    coinSim.clear()
+    while (cashContentsGroup.children.length > 0) {
+      cashContentsGroup.remove(cashContentsGroup.children[0])
+    }
 
-        // 1. Place Euro banknotes in their 5 compartments
-        for (let slotIdx = 0; slotIdx < noteResources.length; slotIdx++) {
-          const { spec, geo, mats } = noteResources[slotIdx]
-          const count = breakdown.notes[spec.key]
-          if (count <= 0) continue
+    // 1. Place Euro banknotes in their 5 compartments
+    for (let slotIdx = 0; slotIdx < noteResources.length; slotIdx++) {
+      const { spec, geo, mats } = noteResources[slotIdx]
+      const count = breakdown.notes[spec.key]
+      if (count <= 0) continue
 
-          const visualCount = Math.min(count, MAX_VISUAL_NOTES_PER_SLOT)
-          const slotCenterX = -innerW / 2 + (slotIdx + 0.5) * noteSlotW
-          const baseZ = -216
+      const visualCount = Math.min(count, MAX_VISUAL_NOTES_PER_SLOT)
+      const slotCenterX = -innerW / 2 + (slotIdx + 0.5) * noteSlotW
+      const baseZ = -216
 
-          for (let n = 0; n < visualCount; n++) {
-            const noteMesh = new THREE.Mesh(geo, mats)
-            const jx = deterministicJitter(slotIdx * 131 + n * 17) * 5.5
-            const jz = deterministicJitter(slotIdx * 197 + n * 29) * 8.0
-            const jy = deterministicJitter(slotIdx * 251 + n * 43) * 0.032
-            noteMesh.position.set(
-              slotCenterX + jx,
-              TRAY_SURFACE_Y + NOTE_THICKNESS * 0.5 + n * (NOTE_THICKNESS + 0.35),
-              baseZ + jz,
-            )
-            noteMesh.rotation.y = jy
-            noteMesh.receiveShadow = true
-            cashContentsGroup.add(noteMesh)
-          }
-        }
-
-        // 2. Place Euro coins in their 8 cups (up to 3 neat stacks per cup when count is high)
-        for (let cupIdx = 0; cupIdx < coinResources.length; cupIdx++) {
-          const { spec, geo, mats } = coinResources[cupIdx]
-          const count = breakdown.coins[spec.key]
-          if (count <= 0) continue
-
-          const visualCount = Math.min(count, MAX_VISUAL_COINS_PER_CUP)
-          const cupCenterX = -innerW / 2 + (cupIdx + 0.5) * coinCupW
-          const maxPerStack = 14
-          const stackZOffsets =
-            visualCount <= maxPerStack
-              ? [300]
-              : visualCount <= maxPerStack * 2
-                ? [235, 365]
-                : [185, 300, 415]
-
-          for (let c = 0; c < visualCount; c++) {
-            const stackIdx = Math.min(
-              stackZOffsets.length - 1,
-              Math.floor(c / maxPerStack),
-            )
-            const levelInStack = c % maxPerStack
-            const jx = deterministicJitter(cupIdx * 311 + c * 19) * 5.0
-            const jz = deterministicJitter(cupIdx * 409 + c * 37) * 5.0
-
-            const coinMesh = new THREE.Mesh(geo, mats)
-            coinMesh.position.set(
-              cupCenterX + jx,
-              TRAY_SURFACE_Y +
-              spec.thickness * 0.5 +
-              levelInStack * (spec.thickness + 0.35),
-              stackZOffsets[stackIdx] + jz,
-            )
-            coinMesh.rotation.y = deterministicJitter(cupIdx * 521 + c * 13) * Math.PI
-            coinMesh.receiveShadow = true
-            cashContentsGroup.add(coinMesh)
-          }
-        }
+      for (let n = 0; n < visualCount; n++) {
+        const noteMesh = new THREE.Mesh(geo, mats)
+        const jx = deterministicJitter(slotIdx * 131 + n * 17) * 5.5
+        const jz = deterministicJitter(slotIdx * 197 + n * 29) * 8.0
+        const jy = deterministicJitter(slotIdx * 251 + n * 43) * 0.032
+        noteMesh.position.set(
+          slotCenterX + jx,
+          TRAY_SURFACE_Y + NOTE_THICKNESS * 0.5 + n * (NOTE_THICKNESS + 0.35),
+          baseZ + jz,
+        )
+        noteMesh.rotation.y = jy
+        noteMesh.receiveShadow = true
+        cashContentsGroup.add(noteMesh)
       }
+    }
 
-      const setCashCents = (cents: number): EuroCashBreakdown => {
-        currentBreakdown = calculateEuroCashBreakdown(cents)
-        rebuildCashMeshes(currentBreakdown)
-        return currentBreakdown
+    // 2. Place Euro coins in their 8 cups and register them with the dynamic coin fluid physics sim
+    for (let cupIdx = 0; cupIdx < coinResources.length; cupIdx++) {
+      const { spec, geo, mats } = coinResources[cupIdx]
+      const count = breakdown.coins[spec.key]
+      if (count <= 0) continue
+
+      const visualCount = Math.min(count, MAX_VISUAL_COINS_PER_CUP)
+      const cupCenterX = -innerW / 2 + (cupIdx + 0.5) * coinCupW
+      const maxPerStack = 14
+      const stackZOffsets =
+        visualCount <= maxPerStack
+          ? [300]
+          : visualCount <= maxPerStack * 2
+            ? [235, 365]
+            : [185, 300, 415]
+
+      for (let c = 0; c < visualCount; c++) {
+        const stackIdx = Math.min(
+          stackZOffsets.length - 1,
+          Math.floor(c / maxPerStack),
+        )
+        const levelInStack = c % maxPerStack
+        const jx = deterministicJitter(cupIdx * 311 + c * 19) * 5.0
+        const jz = deterministicJitter(cupIdx * 409 + c * 37) * 5.0
+        const x = cupCenterX + jx
+        const y =
+          TRAY_SURFACE_Y +
+          spec.thickness * 0.5 +
+          levelInStack * (spec.thickness + 0.35)
+        const z = stackZOffsets[stackIdx] + jz
+        const yaw = deterministicJitter(cupIdx * 521 + c * 13) * Math.PI
+
+        const coinMesh = new THREE.Mesh(geo, mats)
+        coinMesh.rotation.order = 'XZY'
+        coinMesh.position.set(x, y, z)
+        coinMesh.rotation.set(0, yaw, 0)
+        coinMesh.receiveShadow = true
+        cashContentsGroup.add(coinMesh)
+
+        coinSim.addCoin({
+          cupIdx,
+          radius: spec.radius,
+          thickness: spec.thickness,
+          x,
+          y,
+          z,
+          yaw,
+          seed: cupIdx * 100 + c + 1,
+          mesh: coinMesh,
+        })
       }
+    }
+  }
 
-      const setCashAmount = (amountEur: number): EuroCashBreakdown => {
-        return setCashCents(Math.round(amountEur * 100))
-      }
+  const updateCoinPhysics = (dt: number, motion: DrawerMotionStep) => {
+    coinSim.step(dt, motion)
+  }
 
-      const getCashBreakdown = (): EuroCashBreakdown => currentBreakdown
+  const setCashCents = (cents: number): EuroCashBreakdown => {
+    currentBreakdown = calculateEuroCashBreakdown(cents)
+    rebuildCashMeshes(currentBreakdown)
+    return currentBreakdown
+  }
 
-      // Render initial demo Euro float
-      rebuildCashMeshes(currentBreakdown)
+  const setCashAmount = (amountEur: number): EuroCashBreakdown => {
+    return setCashCents(Math.round(amountEur * 100))
+  }
 
-      return {
-        drawerTrayGroup,
-        cashBtnMesh,
-        drawerBtnFaceMat,
-        openBtnTex,
-        closeBtnTex,
-        drawerTargets,
-        setCashAmount,
-        setCashCents,
-        getCashBreakdown,
-        drawerSurfaceMeshes: [
-          dBottom,
-          dTop,
-          dLeft,
-          dRight,
-          dBack,
-          trayFront,
-          trayFloor,
-        ],
-      }
+  const getCashBreakdown = (): EuroCashBreakdown => currentBreakdown
+
+  // Render initial demo Euro float
+  rebuildCashMeshes(currentBreakdown)
+
+  return {
+    drawerTrayGroup,
+    cashBtnMesh,
+    drawerBtnFaceMat,
+    openBtnTex,
+    closeBtnTex,
+    drawerTargets,
+    setCashAmount,
+    setCashCents,
+    getCashBreakdown,
+    updateCoinPhysics,
+    drawerSurfaceMeshes: [
+      dBottom,
+      dTop,
+      dLeft,
+      dRight,
+      dBack,
+      trayFront,
+      trayFloor,
+    ],
+  }
     }

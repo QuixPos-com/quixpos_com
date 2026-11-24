@@ -1,37 +1,79 @@
 import type { ThreeModule } from './types'
 
 export function createFloorTexture(THREE: ThreeModule) {
+  const size = 512
+  const tileSize = size / 2
   const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 512
+  canvas.width = size
+  canvas.height = size
   const ctx = canvas.getContext('2d')!
 
-  ctx.fillStyle = '#e7eef4'
-  ctx.fillRect(0, 0, 512, 512)
+  // Deterministic LCG so carpet fibers render identically every load
+  let seed = 0x51a7c3
+  const nextRand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0
+    return seed / 0xffffffff
+  }
 
-  // Subtle architectural tile seams
-  ctx.strokeStyle = 'rgba(11, 18, 32, 0.08)'
-  ctx.lineWidth = 2
-  ctx.strokeRect(1, 1, 510, 510)
+  const tiles: Array<{ col: number; row: number; base: string; horizontal: boolean }> = [
+    { col: 0, row: 0, base: '#b35235', horizontal: true },
+    { col: 1, row: 0, base: '#d48260', horizontal: false },
+    { col: 0, row: 1, base: '#d48260', horizontal: false },
+    { col: 1, row: 1, base: '#b35235', horizontal: true },
+  ]
 
-  ctx.strokeStyle = 'rgba(11, 18, 32, 0.035)'
-  ctx.lineWidth = 1
-  for (let i = 128; i < 512; i += 128) {
-    ctx.beginPath()
-    ctx.moveTo(i, 0)
-    ctx.lineTo(i, 512)
-    ctx.stroke()
+  for (const tile of tiles) {
+    const x0 = tile.col * tileSize
+    const y0 = tile.row * tileSize
 
-    ctx.beginPath()
-    ctx.moveTo(0, i)
-    ctx.lineTo(512, i)
-    ctx.stroke()
+    ctx.fillStyle = tile.base
+    ctx.fillRect(x0, y0, tileSize, tileSize)
+
+    // Quarter-turn woven carpet loop-pile ribs
+    for (let i = 0; i < tileSize; i += 4) {
+      const isHighlight = (i / 4) % 2 === 0
+      ctx.fillStyle = isHighlight
+        ? 'rgba(255, 232, 214, 0.065)'
+        : 'rgba(62, 20, 10, 0.08)'
+      if (tile.horizontal) {
+        ctx.fillRect(x0, y0 + i, tileSize, 2)
+      } else {
+        ctx.fillRect(x0 + i, y0, 2, tileSize)
+      }
+    }
+
+    // Cross-weave micro threads
+    ctx.fillStyle = 'rgba(72, 24, 12, 0.045)'
+    for (let i = 2; i < tileSize; i += 6) {
+      if (tile.horizontal) {
+        ctx.fillRect(x0 + i, y0, 1, tileSize)
+      } else {
+        ctx.fillRect(x0, y0 + i, tileSize, 1)
+      }
+    }
+
+    // Subtle carpet pile fiber flecks
+    for (let n = 0; n < 1400; n++) {
+      const fx = x0 + Math.floor(nextRand() * tileSize)
+      const fy = y0 + Math.floor(nextRand() * tileSize)
+      ctx.fillStyle =
+        nextRand() > 0.5
+          ? 'rgba(255, 228, 208, 0.075)'
+          : 'rgba(56, 18, 8, 0.085)'
+      ctx.fillRect(fx, fy, 2, 2)
+    }
+
+    // Soft carpet-tile seam around each checkered square
+    ctx.strokeStyle = 'rgba(54, 18, 9, 0.16)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(x0 + 1, y0 + 1, tileSize - 2, tileSize - 2)
   }
 
   const tex = new THREE.CanvasTexture(canvas)
   tex.wrapS = THREE.RepeatWrapping
   tex.wrapT = THREE.RepeatWrapping
   tex.repeat.set(44, 44)
+  tex.anisotropy = 8
   tex.colorSpace = THREE.SRGBColorSpace
   return tex
 }

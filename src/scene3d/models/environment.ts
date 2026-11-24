@@ -36,14 +36,14 @@ export function buildLightingAndFloor(
   markFocusSharp(dirLight)
   webglScene.add(dirLight)
 
-  // Flat Area Floor
+  // Flat Area Floor (terracotta checkered carpet)
   const floorTex = createFloorTexture(THREE)
   disposables.push(floorTex)
   const floorGeo = new THREE.PlaneGeometry(ARENA_HALF * 2.4, ARENA_HALF * 2.4)
   const floorMat = new THREE.MeshStandardMaterial({
     map: floorTex,
-    roughness: 0.85,
-    metalness: 0.05,
+    roughness: 0.96,
+    metalness: 0.0,
   })
   disposables.push(floorGeo, floorMat)
   const floorMesh = new THREE.Mesh(floorGeo, floorMat)

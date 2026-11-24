@@ -30,6 +30,11 @@ import {
 import { attachInputController } from './inputController'
 import { buildBarcodeScanner } from './models/barcodeScanner'
 import { buildCashDrawer } from './models/cashDrawer'
+import {
+  createDrawerMotionState,
+  setDrawerMotionTarget,
+  stepDrawerMotion,
+} from './models/coinPhysics'
 import { buildLightingAndFloor, buildTable } from './models/environment'
 import { buildEpsonPrinter } from './models/epsonPrinter'
 import { buildStationLoupes } from './models/stationLoupes'
@@ -241,6 +246,7 @@ export function mountSceneEngine({
       drawerTargets,
       setCashAmount,
       setCashCents,
+      updateCoinPhysics,
       drawerSurfaceMeshes,
     } = buildCashDrawer(THREE, webglScene, disposables)
 
@@ -335,8 +341,8 @@ export function mountSceneEngine({
     let pendingScanTrigger = false
 
     let drawerOpen = false
-    let drawerZCurrent = 0
-    let drawerZTarget = 0
+    const drawerMotion = createDrawerMotionState()
+    let pendingDrawerKickDv = 0
     let btnPressAnim = 0
     let cashBtnHover = 0
 
@@ -444,7 +450,11 @@ export function mountSceneEngine({
     const setCashDrawerOpen = (nextOpen: boolean) => {
       if (drawerOpen === nextOpen) return
       drawerOpen = nextOpen
-      drawerZTarget = drawerOpen ? DRAWER_OPEN_OFFSET : 0
+      pendingDrawerKickDv += setDrawerMotionTarget(
+        drawerMotion,
+        nextOpen,
+        DRAWER_OPEN_OFFSET,
+      )
       btnPressAnim = 1
       drawerBtnFaceMat.map = drawerOpen ? closeBtnTex : openBtnTex
       drawerBtnFaceMat.needsUpdate = true
@@ -1513,14 +1523,16 @@ export function mountSceneEngine({
         }
       }
 
-      // Cash drawer slide & button press animation
-      if (Math.abs(drawerZTarget - drawerZCurrent) > 0.5) {
-        const lerp = 1 - Math.exp(-12 * dt)
-        drawerZCurrent += (drawerZTarget - drawerZCurrent) * lerp
-      } else {
-        drawerZCurrent = drawerZTarget
-      }
-      drawerTrayGroup.position.z = drawerZCurrent
+      // Cash drawer slide (initial kick, accel, decel, hard stop) & dynamic coin fluid physics
+      const drawerStep = stepDrawerMotion(
+        drawerMotion,
+        dt,
+        DRAWER_OPEN_OFFSET,
+        pendingDrawerKickDv,
+      )
+      pendingDrawerKickDv = 0
+      drawerTrayGroup.position.z = drawerStep.z
+      updateCoinPhysics(dt, drawerStep)
 
       if (btnPressAnim > 0) {
         btnPressAnim = Math.max(0, btnPressAnim - dt * 5)
