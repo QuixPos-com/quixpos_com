@@ -152,6 +152,16 @@
   box-shadow: 0 6px 20px rgba(15, 159, 134, 0.32);
 }
 
+.scene3d-icon-pill {
+  padding: 7px 10px;
+  justify-content: center;
+}
+
+.scene3d-icon-pill.is-muted {
+  color: rgba(247, 250, 252, 0.52);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
 .scene3d-hud-bottom {
   position: absolute;
   bottom: 20px;

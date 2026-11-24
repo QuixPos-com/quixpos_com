@@ -9,10 +9,12 @@ import type {
 export interface SceneHudProps {
   isLocked: boolean
   isDrawerOpen: boolean
+  isAudioMuted: boolean
   activeView: FocusViewId | null
   targetedTablet: TargetedDevice | null
   stickRefs: TouchStickRefs
   onSelectView: (view: NavPresetId) => void
+  onToggleAudioMute: () => void
 }
 
 const NAV_ITEMS: Array<{
@@ -29,10 +31,12 @@ const NAV_ITEMS: Array<{
 export function SceneHud({
   isLocked,
   isDrawerOpen,
+  isAudioMuted,
   activeView,
   targetedTablet,
   stickRefs,
   onSelectView,
+  onToggleAudioMute,
 }: SceneHudProps) {
   return (
     <>
@@ -48,6 +52,50 @@ export function SceneHud({
           <Link class="scene3d-pill" href="/">
             ← Startseite
           </Link>
+          <button
+            type="button"
+            class={`scene3d-pill scene3d-icon-pill ${
+              isAudioMuted ? 'is-muted' : ''
+            }`}
+            onClick={onToggleAudioMute}
+            aria-pressed={isAudioMuted}
+            aria-label={isAudioMuted ? 'Ton einschalten' : 'Ton ausschalten'}
+            title={isAudioMuted ? 'Ton einschalten' : 'Ton ausschalten'}
+          >
+            {isAudioMuted ? (
+              <svg
+                viewBox="0 0 24 24"
+                width="17"
+                height="17"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                width="17"
+                height="17"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+            )}
+          </button>
         </div>
 
         <nav class="scene3d-hud-nav" aria-label="Kamera-Ansichten">
@@ -72,14 +120,20 @@ export function SceneHud({
           <div class="scene3d-target-badge">
             {targetedTablet.title} —{' '}
             {targetedTablet.kind === 'power'
-              ? 'Klicken oder E drücken zum Neu laden'
+              ? targetedTablet.controllablePower
+                ? targetedTablet.poweredOn
+                  ? 'Klicken oder E drücken zum Ausschalten'
+                  : 'Klicken oder E drücken zum Einschalten'
+                : 'Klicken oder E drücken zum Neu laden'
               : targetedTablet.kind === 'drawer'
                 ? isDrawerOpen
                   ? 'Klicken oder E drücken zum Schließen'
                   : 'Klicken oder E drücken zum Öffnen'
                 : targetedTablet.kind === 'label'
                   ? 'Klicken oder E drücken zum Fokussieren'
-                  : 'Klicken oder E drücken zum Bedienen'}
+                  : targetedTablet.poweredOn === false
+                    ? 'Ausgeschaltet'
+                    : 'Klicken oder E drücken zum Bedienen'}
           </div>
         </div>
       )}

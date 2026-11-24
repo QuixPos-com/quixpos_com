@@ -1,12 +1,25 @@
 export interface BackgroundAudioController {
+  setMuted: (muted: boolean) => void
+  setDucked: (ducked: boolean) => void
   dispose: () => void
 }
 
-const TARGET_GAIN = 0.14 // Soft background level (~ -17 dB)
+const NORMAL_GAIN = 0.14 // Soft room background level (~ -17 dB)
+const DUCKED_GAIN = 0.02 // Much quieter when zoomed onto a screen (~ -34 dB)
+const SILENT_GAIN = 0.00001
 
-export function mountBackgroundAudio(src = '/Irish_Coffee.mp3'): BackgroundAudioController {
+// Exponential RC smoothing time constants (seconds)
+const DUCK_SMOOTH_TAU = 0.42 // ~1.3s soft swell/duck transition
+const MUTE_SMOOTH_TAU = 0.16 // ~0.5s soft mute/unmute transition
+
+export function mountBackgroundAudio(
+  src = '/Irish_Coffee.mp3',
+): BackgroundAudioController {
   let disposed = false
   let started = false
+  let isMuted = false
+  let isDucked = false
+  let fallbackRafId = 0
 
   const audio = new Audio(src)
   audio.loop = true
@@ -15,10 +28,50 @@ export function mountBackgroundAudio(src = '/Irish_Coffee.mp3'): BackgroundAudio
 
   const AudioCtx =
     window.AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    (window as unknown as { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext
 
   let ctx: AudioContext | null = null
   let masterGain: GainNode | null = null
+
+  const getTargetGain = () => {
+    if (isMuted) return 0
+    return isDucked ? DUCKED_GAIN : NORMAL_GAIN
+  }
+
+  const rampGainSmoothly = (tau: number) => {
+    if (disposed || !started) return
+    const target = getTargetGain()
+
+    if (ctx && masterGain) {
+      const now = ctx.currentTime
+      const current = Math.max(SILENT_GAIN, masterGain.gain.value)
+      masterGain.gain.cancelScheduledValues(now)
+      masterGain.gain.setValueAtTime(current, now)
+      masterGain.gain.setTargetAtTime(Math.max(SILENT_GAIN, target), now, tau)
+      return
+    }
+
+    // Fallback smooth volume interpolation when Web Audio API is unavailable
+    if (fallbackRafId) cancelAnimationFrame(fallbackRafId)
+    let lastTs = performance.now()
+    const step = (ts: number) => {
+      if (disposed) return
+      const dt = Math.min(0.05, Math.max(0.001, (ts - lastTs) / 1000))
+      lastTs = ts
+      const desired = getTargetGain()
+      const alpha = 1 - Math.exp(-dt / Math.max(0.05, tau))
+      const next = audio.volume + (desired - audio.volume) * alpha
+      if (Math.abs(desired - next) < 0.001) {
+        audio.volume = Math.max(0, Math.min(1, desired))
+        fallbackRafId = 0
+      } else {
+        audio.volume = Math.max(0, Math.min(1, next))
+        fallbackRafId = requestAnimationFrame(step)
+      }
+    }
+    fallbackRafId = requestAnimationFrame(step)
+  }
 
   const ensureGraph = () => {
     if (ctx || !AudioCtx) return
@@ -44,7 +97,7 @@ export function mountBackgroundAudio(src = '/Irish_Coffee.mp3'): BackgroundAudio
     highShelf.gain.value = 2.0
 
     masterGain = ctx.createGain()
-    masterGain.gain.value = 0.0001
+    masterGain.gain.value = SILENT_GAIN
 
     source
       .connect(lowShelf)
@@ -65,12 +118,12 @@ export function mountBackgroundAudio(src = '/Irish_Coffee.mp3'): BackgroundAudio
 
     ensureGraph()
     if (!ctx) {
-      // Fallback if Web Audio API is unavailable
-      audio.volume = 0.1
+      audio.volume = 0
       audio.play().then(
         () => {
           started = true
           removeUnlockListeners()
+          rampGainSmoothly(DUCK_SMOOTH_TAU)
         },
         () => {
           // Wait for user gesture
@@ -93,9 +146,10 @@ export function mountBackgroundAudio(src = '/Irish_Coffee.mp3'): BackgroundAudio
           started = true
           removeUnlockListeners()
           const now = ctx.currentTime
+          const initialTarget = Math.max(SILENT_GAIN, getTargetGain())
           masterGain.gain.cancelScheduledValues(now)
-          masterGain.gain.setValueAtTime(0.0001, now)
-          masterGain.gain.linearRampToValueAtTime(TARGET_GAIN, now + 1.4)
+          masterGain.gain.setValueAtTime(SILENT_GAIN, now)
+          masterGain.gain.setTargetAtTime(initialTarget, now, 0.45)
         }
       })
       .catch(() => {
@@ -111,8 +165,23 @@ export function mountBackgroundAudio(src = '/Irish_Coffee.mp3'): BackgroundAudio
   tryStart()
 
   return {
+    setMuted: (muted: boolean) => {
+      if (isMuted === muted) return
+      isMuted = muted
+      if (!muted && !started) {
+        tryStart()
+      } else {
+        rampGainSmoothly(MUTE_SMOOTH_TAU)
+      }
+    },
+    setDucked: (ducked: boolean) => {
+      if (isDucked === ducked) return
+      isDucked = ducked
+      rampGainSmoothly(DUCK_SMOOTH_TAU)
+    },
     dispose: () => {
       disposed = true
+      if (fallbackRafId) cancelAnimationFrame(fallbackRafId)
       removeUnlockListeners()
       audio.pause()
       audio.removeAttribute('src')

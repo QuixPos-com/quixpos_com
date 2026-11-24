@@ -15,6 +15,7 @@ import {
   STICK_YAW_SPEED,
   WALK_SPEED,
 } from './config'
+import { createSceneBroadcastChannel } from './iframeChannel'
 import { attachInputController } from './inputController'
 import { buildBarcodeScanner } from './models/barcodeScanner'
 import { buildCashDrawer } from './models/cashDrawer'
@@ -29,6 +30,7 @@ import type {
   SceneCallbacks,
   SceneController,
   SceneRuntimeState,
+  ScreenPowerSummary,
   TargetKind,
   TouchStickRefs,
 } from './types'
@@ -57,6 +59,38 @@ export function mountSceneEngine({
   let navigateImpl: ((view: NavPresetId) => void) | null = null
   let returnPrevImpl: (() => void) | null = null
   let toggleDrawerImpl: (() => void) | null = null
+  let setTabletPowerImpl: ((tabletId: string, poweredOn: boolean) => void) | null =
+    null
+  let toggleTabletPowerImpl: ((tabletId: string) => void) | null = null
+
+  const channel = createSceneBroadcastChannel()
+  if (typeof window !== 'undefined') {
+    window.quixposSceneChannel = channel
+  }
+
+  let lastBroadcastView: NavPresetId | null = 'total'
+  let lastBroadcastLocked = false
+  const sceneCallbacks: SceneCallbacks = {
+    onLockChange: (locked) => {
+      callbacks.onLockChange(locked)
+      if (locked !== lastBroadcastLocked) {
+        lastBroadcastLocked = locked
+        channel.send('scene:lockChanged', { locked })
+      }
+    },
+    onTargetChange: callbacks.onTargetChange,
+    onActiveViewChange: (view) => {
+      callbacks.onActiveViewChange(view)
+      if (view !== lastBroadcastView) {
+        lastBroadcastView = view
+        channel.send('camera:viewChanged', { view })
+      }
+    },
+    onDrawerChange: (isOpen) => {
+      callbacks.onDrawerChange(isOpen)
+      channel.send('drawer:changed', { open: isOpen })
+    },
+  }
 
   Promise.all([
     import('three'),
@@ -107,8 +141,13 @@ export function mountSceneEngine({
       tabletInstances,
       cutoutTargets,
       powerTargets,
+      cutoutOnMat,
+      screenOffMat,
+      camDotOnMat,
+      camDotOffMat,
       powerIdleTex,
       powerActiveTex,
+      powerOffTex,
     } = buildTablets(
       THREE,
       CSS3DObject,
@@ -161,6 +200,7 @@ export function mountSceneEngine({
       currentTargetTitle: null,
       currentTargetId: null,
       currentTargetKind: null,
+      currentTargetPoweredOn: null,
       lastMouseX: -9999,
       lastMouseY: -9999,
       pressedKeys: new Set<string>(),
@@ -192,7 +232,7 @@ export function mountSceneEngine({
       btnPressAnim = 1
       drawerBtnFaceMat.map = drawerOpen ? closeBtnTex : openBtnTex
       drawerBtnFaceMat.needsUpdate = true
-      callbacks.onDrawerChange(drawerOpen)
+      sceneCallbacks.onDrawerChange(drawerOpen)
     }
 
     const toggleCashDrawer = () => {
@@ -203,9 +243,112 @@ export function mountSceneEngine({
       setCashDrawerOpen(true)
     }
 
+    const getControllableScreensMap = (): Record<
+      string,
+      ScreenPowerSummary
+    > => {
+      const result: Record<string, ScreenPowerSummary> = {}
+      for (const t of tabletInstances) {
+        if (!t.spec.canControlScreens) {
+          result[t.spec.id] = {
+            id: t.spec.id,
+            title: t.spec.title,
+            subtitle: t.spec.subtitle,
+            poweredOn: t.poweredOn,
+          }
+        }
+      }
+      return result
+    }
+
+    const applyTabletPowerButtonVisual = (
+      target: (typeof tabletInstances)[number],
+    ) => {
+      if (target.poweredOn) {
+        target.powerFaceMat.map = powerIdleTex
+        target.powerFaceMat.emissive.set('#0f9f86')
+        target.powerFaceMat.emissiveIntensity = 0.35
+      } else {
+        target.powerFaceMat.map = powerOffTex
+        target.powerFaceMat.emissive.set('#334155')
+        target.powerFaceMat.emissiveIntensity = 0.12
+      }
+      target.powerFaceMat.needsUpdate = true
+    }
+
+    const setSingleTabletPower = (
+      tabletId: string,
+      nextOn: boolean,
+      broadcast = true,
+    ): boolean => {
+      const target = tabletInstances.find((t) => t.spec.id === tabletId)
+      if (!target || target.spec.canControlScreens) return false
+      if (target.poweredOn === nextOn) return false
+
+      target.poweredOn = nextOn
+      target.powerPressAnim = 1
+      target.powerUserData.poweredOn = nextOn
+      target.cutoutMesh.userData.poweredOn = nextOn
+
+      if (nextOn) {
+        target.reloadFlash = 0.65
+        target.powerFaceMat.map = powerActiveTex
+        target.powerFaceMat.emissive.set('#f59e0b')
+        target.powerFaceMat.emissiveIntensity = 0.75
+        target.powerFaceMat.needsUpdate = true
+
+        target.cutoutMesh.material = cutoutOnMat
+        target.camDot.material = camDotOnMat
+        target.wrapperEl.style.display = 'block'
+        target.iframeEl.src = target.spec.url
+      } else {
+        target.reloadFlash = 0
+        applyTabletPowerButtonVisual(target)
+
+        channel.notifyTabletReloading(target.spec.id)
+        target.cutoutMesh.material = screenOffMat
+        target.camDot.material = camDotOffMat
+        target.wrapperEl.style.display = 'none'
+        target.wrapperEl.style.visibility = 'hidden'
+        target.wrapperEl.style.pointerEvents = 'none'
+        target.iframeEl.style.pointerEvents = 'none'
+        if (document.activeElement === target.iframeEl) {
+          window.focus()
+        }
+        target.iframeEl.src = 'about:blank'
+      }
+
+      if (broadcast) {
+        channel.send('screens:changed', {
+          tabletId: target.spec.id,
+          poweredOn: target.poweredOn,
+          screens: getControllableScreensMap(),
+        })
+      }
+      return true
+    }
+
+    const setMultipleTabletsPower = (ids: string[], nextOn: boolean) => {
+      let lastChangedId: string | null = null
+      let changedCount = 0
+      for (const id of ids) {
+        if (setSingleTabletPower(id, nextOn, false)) {
+          lastChangedId = id
+          changedCount++
+        }
+      }
+      if (changedCount > 0) {
+        channel.send('screens:changed', {
+          tabletId: changedCount === 1 ? lastChangedId : undefined,
+          poweredOn: nextOn,
+          screens: getControllableScreensMap(),
+        })
+      }
+    }
+
     const reloadTablet = (tabletId: string) => {
       const target = tabletInstances.find((t) => t.spec.id === tabletId)
-      if (!target) return
+      if (!target || !target.poweredOn) return
       target.powerPressAnim = 1
       target.reloadFlash = 1
       target.powerFaceMat.map = powerActiveTex
@@ -213,12 +356,23 @@ export function mountSceneEngine({
       target.powerFaceMat.emissiveIntensity = 0.75
       target.powerFaceMat.needsUpdate = true
 
+      channel.notifyTabletReloading(tabletId)
       target.iframeEl.src = 'about:blank'
       requestAnimationFrame(() => {
-        if (!disposed) {
+        if (!disposed && target.poweredOn) {
           target.iframeEl.src = target.spec.url
         }
       })
+    }
+
+    const handleBezelPowerButton = (tabletId: string) => {
+      const target = tabletInstances.find((t) => t.spec.id === tabletId)
+      if (!target) return
+      if (target.spec.canControlScreens) {
+        reloadTablet(tabletId)
+      } else {
+        setSingleTabletPower(tabletId, !target.poweredOn, true)
+      }
     }
 
     const raycaster = new THREE.Raycaster()
@@ -239,10 +393,115 @@ export function mountSceneEngine({
       drawerTargets,
       powerTargets,
       stickRefs,
-      callbacks,
+      callbacks: sceneCallbacks,
       toggleCashDrawer,
       ensureCashDrawerOpen,
-      reloadTablet,
+      reloadTablet: handleBezelPowerButton,
+    })
+
+    const validFocusViews = new Set<NavPresetId>([
+      'total',
+      'left',
+      'center',
+      'right',
+      'drawer',
+    ])
+
+    channel.attachTablets(tabletInstances, () => ({
+      activeView: state.activeView,
+      drawerOpen,
+      pointerLocked: state.pointerLocked,
+      screens: getControllableScreensMap(),
+    }))
+
+    const isAuthorizedScreenController = (sender: string): boolean => {
+      if (sender === 'host') return true
+      const senderTablet = tabletInstances.find((t) => t.spec.id === sender)
+      return Boolean(senderTablet?.spec.canControlScreens)
+    }
+
+    const resolveTargetScreenIds = (
+      data: Record<string, unknown>,
+    ): string[] => {
+      if (data.all === true) {
+        return tabletInstances
+          .filter((t) => !t.spec.canControlScreens)
+          .map((t) => t.spec.id)
+      }
+      if (Array.isArray(data.tabletIds)) {
+        return data.tabletIds.filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        )
+      }
+      if (typeof data.tabletId === 'string' && data.tabletId) {
+        return [data.tabletId]
+      }
+      return []
+    }
+
+    channel.on('screen:on', (data, meta) => {
+      if (!isAuthorizedScreenController(meta.sender)) return
+      setMultipleTabletsPower(resolveTargetScreenIds(data), true)
+    })
+
+    channel.on('screen:off', (data, meta) => {
+      if (!isAuthorizedScreenController(meta.sender)) return
+      setMultipleTabletsPower(resolveTargetScreenIds(data), false)
+    })
+
+    channel.on('screen:power', (data, meta) => {
+      if (!isAuthorizedScreenController(meta.sender)) return
+      const nextOn =
+        typeof data.poweredOn === 'boolean'
+          ? data.poweredOn
+          : typeof data.on === 'boolean'
+            ? data.on
+            : null
+      if (nextOn === null) return
+      setMultipleTabletsPower(resolveTargetScreenIds(data), nextOn)
+    })
+
+    channel.on('screen:toggle', (data, meta) => {
+      if (!isAuthorizedScreenController(meta.sender)) return
+      const ids = resolveTargetScreenIds(data)
+      for (const id of ids) {
+        const target = tabletInstances.find((t) => t.spec.id === id)
+        if (target && !target.spec.canControlScreens) {
+          setSingleTabletPower(id, !target.poweredOn, true)
+        }
+      }
+    })
+
+    channel.on('screens:get', (_data, meta) => {
+      meta.reply('screens:state', {
+        screens: getControllableScreensMap(),
+      })
+    })
+
+    channel.on('drawer:open', () => {
+      setCashDrawerOpen(true)
+    })
+    channel.on('drawer:close', () => {
+      setCashDrawerOpen(false)
+    })
+    channel.on('drawer:toggle', () => {
+      toggleCashDrawer()
+    })
+    channel.on('camera:focus', (data) => {
+      const view = data.view as NavPresetId
+      if (validFocusViews.has(view)) {
+        navigateToFocusView(view)
+      }
+    })
+    channel.on('camera:return', () => {
+      returnToPreviousPose()
+    })
+    channel.on('tablet:reload', (data, meta) => {
+      const targetId =
+        typeof data.tabletId === 'string' && data.tabletId
+          ? data.tabletId
+          : meta.sender
+      reloadTablet(targetId)
     })
 
     navigateImpl = (view: NavPresetId) => {
@@ -255,6 +514,17 @@ export function mountSceneEngine({
 
     toggleDrawerImpl = () => {
       toggleCashDrawer()
+    }
+
+    setTabletPowerImpl = (tabletId: string, poweredOn: boolean) => {
+      setSingleTabletPower(tabletId, poweredOn, true)
+    }
+
+    toggleTabletPowerImpl = (tabletId: string) => {
+      const target = tabletInstances.find((t) => t.spec.id === tabletId)
+      if (target && !target.spec.canControlScreens) {
+        setSingleTabletPower(tabletId, !target.poweredOn, true)
+      }
     }
 
     const onResize = () => {
@@ -381,10 +651,7 @@ export function mountSceneEngine({
         if (t.reloadFlash > 0) {
           t.reloadFlash = Math.max(0, t.reloadFlash - dt * 1.8)
           if (t.reloadFlash === 0) {
-            t.powerFaceMat.map = powerIdleTex
-            t.powerFaceMat.emissive.set('#0f9f86')
-            t.powerFaceMat.emissiveIntensity = 0.35
-            t.powerFaceMat.needsUpdate = true
+            applyTabletPowerButtonVisual(t)
           }
         }
       }
@@ -600,11 +867,18 @@ export function mountSceneEngine({
         tmpToCam.copy(camera.position).sub(tmpWorldPos)
 
         const isFrontFacing = tmpNormal.dot(tmpToCam) > 0
-        if (!isFrontFacing) {
+        if (!t.poweredOn) {
+          t.wrapperEl.style.display = 'none'
+          t.wrapperEl.style.visibility = 'hidden'
+          t.wrapperEl.style.pointerEvents = 'none'
+          t.iframeEl.style.pointerEvents = 'none'
+        } else if (!isFrontFacing) {
+          t.wrapperEl.style.display = 'block'
           t.wrapperEl.style.visibility = 'hidden'
           t.wrapperEl.style.pointerEvents = 'none'
           t.iframeEl.style.pointerEvents = 'none'
         } else {
+          t.wrapperEl.style.display = 'block'
           t.wrapperEl.style.visibility = 'visible'
           const interactive = !state.pointerLocked && !state.dragTurning ? 'auto' : 'none'
           t.wrapperEl.style.pointerEvents = interactive
@@ -617,22 +891,38 @@ export function mountSceneEngine({
         raycaster.setFromCamera(screenCenter, camera)
         const hits = raycaster.intersectObjects(raycastTargets, false)
         const hasHit = hits.length > 0 && hits[0].distance <= 24000
-        const nextTitle = hasHit
-          ? (hits[0].object.userData.tabletTitle as string)
+        const hitData = hasHit ? hits[0].object.userData : null
+        const nextTitle = hitData ? (hitData.tabletTitle as string) : null
+        const nextId = hitData ? (hitData.tabletId as string) : null
+        const nextKind = hitData
+          ? ((hitData.kind as TargetKind) ?? 'screen')
           : null
-        const nextId = hasHit ? (hits[0].object.userData.tabletId as string) : null
-        const nextKind = hasHit
-          ? ((hits[0].object.userData.kind as TargetKind) ?? 'screen')
-          : null
+        const nextPoweredOn =
+          hitData && typeof hitData.poweredOn === 'boolean'
+            ? (hitData.poweredOn as boolean)
+            : null
+        const nextControllable =
+          hitData && typeof hitData.controllablePower === 'boolean'
+            ? (hitData.controllablePower as boolean)
+            : false
         state.currentTargetId = nextId
         if (
           nextTitle !== state.currentTargetTitle ||
-          nextKind !== state.currentTargetKind
+          nextKind !== state.currentTargetKind ||
+          nextPoweredOn !== state.currentTargetPoweredOn
         ) {
           state.currentTargetTitle = nextTitle
           state.currentTargetKind = nextKind
+          state.currentTargetPoweredOn = nextPoweredOn
           callbacks.onTargetChange(
-            nextTitle && nextKind ? { title: nextTitle, kind: nextKind } : null,
+            nextTitle && nextKind
+              ? {
+                  title: nextTitle,
+                  kind: nextKind,
+                  poweredOn: nextPoweredOn ?? undefined,
+                  controllablePower: nextControllable,
+                }
+              : null,
           )
         }
       }
@@ -646,12 +936,23 @@ export function mountSceneEngine({
   })
 
   return {
+    channel,
     navigateToView: (view: NavPresetId) => navigateImpl?.(view),
     returnToPrevious: () => returnPrevImpl?.(),
     toggleDrawer: () => toggleDrawerImpl?.(),
+    setTabletPower: (tabletId: string, poweredOn: boolean) =>
+      setTabletPowerImpl?.(tabletId, poweredOn),
+    toggleTabletPower: (tabletId: string) => toggleTabletPowerImpl?.(tabletId),
     dispose: () => {
       disposed = true
       if (animId) cancelAnimationFrame(animId)
+      channel.dispose()
+      if (
+        typeof window !== 'undefined' &&
+        window.quixposSceneChannel === channel
+      ) {
+        delete window.quixposSceneChannel
+      }
       for (const fn of cleanupFns) fn()
       cleanupFns = []
     },

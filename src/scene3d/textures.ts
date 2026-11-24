@@ -102,13 +102,17 @@ export function createNameplateTexture(
   return tex
 }
 
-export function createPowerButtonTexture(THREE: ThreeModule, active = false) {
+export function createPowerButtonTexture(
+  THREE: ThreeModule,
+  mode: 'on' | 'active' | 'off' = 'on',
+) {
   const canvas = document.createElement('canvas')
   canvas.width = 128
   canvas.height = 128
   const ctx = canvas.getContext('2d')!
 
-  const accent = active ? '#f59e0b' : '#1ec9a8'
+  const accent =
+    mode === 'active' ? '#f59e0b' : mode === 'off' ? '#64748b' : '#1ec9a8'
 
   ctx.fillStyle = '#0b1220'
   ctx.fillRect(0, 0, 128, 128)

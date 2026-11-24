@@ -1,4 +1,5 @@
 import type { RefObject } from 'preact'
+import type { SceneBroadcastChannel } from './iframeChannel'
 
 export type ThreeModule = typeof import('three')
 export type CSS3DObjectConstructor =
@@ -17,6 +18,15 @@ export type FocusViewId = NavPresetId
 export interface TargetedDevice {
   title: string
   kind: TargetKind
+  poweredOn?: boolean
+  controllablePower?: boolean
+}
+
+export interface ScreenPowerSummary {
+  id: string
+  title: string
+  subtitle: string
+  poweredOn: boolean
 }
 
 export interface TabletSpec {
@@ -30,6 +40,8 @@ export interface TabletSpec {
   physicalScale: number
   bezelPad: number
   bottomClearance: number
+  initialPower?: boolean
+  canControlScreens?: boolean
   crop?: {
     x: number
     y: number
@@ -40,9 +52,18 @@ export interface TabletSpec {
 
 export interface TabletInstance {
   spec: TabletSpec
+  poweredOn: boolean
   cutoutMesh: InstanceType<ThreeModule['Mesh']>
+  camDot: InstanceType<ThreeModule['Mesh']>
   powerBtnGroup: InstanceType<ThreeModule['Group']>
   powerFaceMat: InstanceType<ThreeModule['MeshStandardMaterial']>
+  powerUserData: {
+    tabletTitle: string
+    tabletId: string
+    kind: 'power'
+    poweredOn: boolean
+    controllablePower: boolean
+  }
   powerBaseZ: number
   powerHover: number
   powerPressAnim: number
@@ -105,6 +126,7 @@ export interface SceneRuntimeState {
   currentTargetTitle: string | null
   currentTargetId: string | null
   currentTargetKind: TargetKind | null
+  currentTargetPoweredOn: boolean | null
   lastMouseX: number
   lastMouseY: number
   pressedKeys: Set<string>
@@ -137,8 +159,11 @@ export interface SceneCallbacks {
 }
 
 export interface SceneController {
+  channel: SceneBroadcastChannel
   navigateToView: (view: NavPresetId) => void
   returnToPrevious: () => void
   toggleDrawer: () => void
+  setTabletPower: (tabletId: string, poweredOn: boolean) => void
+  toggleTabletPower: (tabletId: string) => void
   dispose: () => void
 }

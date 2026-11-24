@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { mountBackgroundAudio } from '../scene3d/backgroundAudio'
+import {
+  type BackgroundAudioController,
+  mountBackgroundAudio,
+} from '../scene3d/backgroundAudio'
 import { mountSceneEngine } from '../scene3d/createSceneEngine'
 import { SceneHud } from '../scene3d/SceneHud'
 import type {
@@ -25,12 +28,14 @@ export function ThreeDRoute() {
   const aimMirrorDotRef = useRef<HTMLDivElement>(null)
 
   const controllerRef = useRef<SceneController | null>(null)
+  const bgAudioRef = useRef<BackgroundAudioController | null>(null)
 
   const [isLocked, setIsLocked] = useState(false)
   const [isTouchMode, setIsTouchMode] = useState(false)
   const [targetedTablet, setTargetedTablet] = useState<TargetedDevice | null>(null)
   const [activeView, setActiveView] = useState<FocusViewId | null>('total')
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [isAudioMuted, setIsAudioMuted] = useState(false)
 
   useEffect(() => {
     const stageEl = stageRef.current
@@ -67,10 +72,12 @@ export function ThreeDRoute() {
       },
     })
     const bgAudio = mountBackgroundAudio('/Irish_Coffee.mp3')
+    bgAudioRef.current = bgAudio
     controllerRef.current = controller
 
     return () => {
       bgAudio.dispose()
+      bgAudioRef.current = null
       controller.dispose()
       controllerRef.current = null
     }
@@ -91,6 +98,18 @@ export function ThreeDRoute() {
     activeView === 'left' || activeView === 'center' || activeView === 'right'
   const isDrawerFocusBlur = activeView === 'drawer'
 
+  useEffect(() => {
+    bgAudioRef.current?.setDucked(isScreenFocusBlur)
+  }, [isScreenFocusBlur])
+
+  const handleToggleAudioMute = () => {
+    setIsAudioMuted((prev) => {
+      const next = !prev
+      bgAudioRef.current?.setMuted(next)
+      return next
+    })
+  }
+
   return (
     <div class={`scene3d-page ${isTouchMode ? 'is-touch' : ''}`}>
       <div
@@ -110,10 +129,12 @@ export function ThreeDRoute() {
         <SceneHud
           isLocked={isLocked}
           isDrawerOpen={isDrawerOpen}
+          isAudioMuted={isAudioMuted}
           activeView={activeView}
           targetedTablet={targetedTablet}
           stickRefs={stickRefs}
           onSelectView={(view) => controllerRef.current?.navigateToView(view)}
+          onToggleAudioMute={handleToggleAudioMute}
         />
       </div>
     </div>

@@ -5,6 +5,7 @@ import {
   TABLE_TOP_Y,
   TILT_ANGLE,
 } from '../config'
+import { SCENE_WINDOW_NAME_PREFIX } from '../iframeChannel'
 import { createPowerButtonTexture } from '../textures'
 import type {
   CSS3DObjectConstructor,
@@ -41,7 +42,7 @@ export function buildTablets(
     roughness: 0.25,
     metalness: 0.85,
   })
-  const cutoutMat = touchCapable
+  const cutoutOnMat = touchCapable
     ? new THREE.MeshBasicMaterial({
         color: 0x0b1220,
         side: THREE.FrontSide,
@@ -53,7 +54,13 @@ export function buildTablets(
         blending: THREE.NoBlending,
         side: THREE.FrontSide,
       })
-  const camDotMat = new THREE.MeshStandardMaterial({
+  const screenOffMat = new THREE.MeshStandardMaterial({
+    color: '#070a10',
+    roughness: 0.16,
+    metalness: 0.35,
+    side: THREE.FrontSide,
+  })
+  const camDotOnMat = new THREE.MeshStandardMaterial({
     color: '#1ec9a8',
     emissive: '#0f9f86',
     emissiveIntensity: 0.6,
@@ -61,9 +68,19 @@ export function buildTablets(
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   })
+  const camDotOffMat = new THREE.MeshStandardMaterial({
+    color: '#1e293b',
+    emissive: '#000000',
+    emissiveIntensity: 0,
+    roughness: 0.4,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  })
 
-  const powerIdleTex = createPowerButtonTexture(THREE, false)
-  const powerActiveTex = createPowerButtonTexture(THREE, true)
+  const powerIdleTex = createPowerButtonTexture(THREE, 'on')
+  const powerActiveTex = createPowerButtonTexture(THREE, 'active')
+  const powerOffTex = createPowerButtonTexture(THREE, 'off')
 
   const camDotGeo = new THREE.CircleGeometry(7, 16)
   const vesaArmGeo = new THREE.BoxGeometry(110, 70, 96)
@@ -77,10 +94,13 @@ export function buildTablets(
     bezelMat,
     standMat,
     powerRimMat,
-    cutoutMat,
-    camDotMat,
+    cutoutOnMat,
+    screenOffMat,
+    camDotOnMat,
+    camDotOffMat,
     powerIdleTex,
     powerActiveTex,
+    powerOffTex,
     camDotGeo,
     vesaArmGeo,
     vesaPlateGeo,
@@ -115,10 +135,13 @@ export function buildTablets(
     const neckH = Math.max(240, Math.round(centerY - standBaseY))
     const neckGeo = new THREE.BoxGeometry(110, neckH, 64)
 
+    const poweredOn = spec.initialPower !== false
+    const controllablePower = !spec.canControlScreens
+
     const powerFaceMat = new THREE.MeshStandardMaterial({
-      map: powerIdleTex,
-      emissive: '#0f9f86',
-      emissiveIntensity: 0.35,
+      map: poweredOn ? powerIdleTex : powerOffTex,
+      emissive: poweredOn ? '#0f9f86' : '#334155',
+      emissiveIntensity: poweredOn ? 0.35 : 0.12,
       roughness: 0.25,
       metalness: 0.15,
       polygonOffset: true,
@@ -194,7 +217,10 @@ export function buildTablets(
     tabletGroup.add(rightBezel)
 
     // Front webcam indicator dot
-    const camDot = new THREE.Mesh(camDotGeo, camDotMat)
+    const camDot = new THREE.Mesh(
+      camDotGeo,
+      poweredOn ? camDotOnMat : camDotOffMat,
+    )
     camDot.position.set(0, (screenH + spec.bezelPad) / 2, 9)
     tabletGroup.add(camDot)
 
@@ -204,9 +230,11 @@ export function buildTablets(
     const powerBaseZ = 11
 
     const powerUserData = {
-      tabletTitle: `${spec.title} neu laden`,
+      tabletTitle: spec.title,
       tabletId: spec.id,
       kind: 'power' as const,
+      poweredOn,
+      controllablePower,
     }
 
     const powerBoss = new THREE.Mesh(powerBossGeo, bezelMat)
@@ -234,13 +262,18 @@ export function buildTablets(
 
     powerTargets.push(powerBody, powerFace)
 
-    // Transparent NoBlending cutout plane for CSS3D iframe visibility + occlusion
-    const cutoutMesh = new THREE.Mesh(cutoutGeo, cutoutMat)
+    // Transparent NoBlending cutout plane (when ON) or dark screen surface (when OFF)
+    const cutoutMesh = new THREE.Mesh(
+      cutoutGeo,
+      poweredOn ? cutoutOnMat : screenOffMat,
+    )
     cutoutMesh.position.set(0, 0, 2)
     cutoutMesh.userData = {
       tabletTitle: spec.title,
       tabletId: spec.id,
       kind: 'screen',
+      poweredOn,
+      controllablePower,
     }
     tabletGroup.add(cutoutMesh)
 
@@ -252,12 +285,22 @@ export function buildTablets(
     wrapperEl.className = 'tablet-screen-frame'
     wrapperEl.style.width = `${visibleCssW}px`
     wrapperEl.style.height = `${visibleCssH}px`
+    if (!poweredOn) {
+      wrapperEl.style.display = 'none'
+      wrapperEl.style.visibility = 'hidden'
+      wrapperEl.style.pointerEvents = 'none'
+    }
 
     const iframeEl = document.createElement('iframe')
     iframeEl.className = 'tablet-screen-iframe'
+    iframeEl.name = `${SCENE_WINDOW_NAME_PREFIX}${spec.id}`
     iframeEl.style.width = `${spec.cssW}px`
     iframeEl.style.height = `${spec.cssH}px`
-    iframeEl.src = spec.url
+    if (poweredOn) {
+      iframeEl.src = spec.url
+    } else {
+      iframeEl.style.pointerEvents = 'none'
+    }
     iframeEl.title = `${spec.title} (${spec.subtitle})`
     iframeEl.loading = 'eager'
     iframeEl.allow = 'clipboard-read; clipboard-write'
@@ -282,9 +325,12 @@ export function buildTablets(
 
     tabletInstances.push({
       spec,
+      poweredOn,
       cutoutMesh,
+      camDot,
       powerBtnGroup,
       powerFaceMat,
+      powerUserData,
       powerBaseZ,
       powerHover: 0,
       powerPressAnim: 0,
@@ -303,7 +349,12 @@ export function buildTablets(
     tabletInstances,
     cutoutTargets,
     powerTargets,
+    cutoutOnMat,
+    screenOffMat,
+    camDotOnMat,
+    camDotOffMat,
     powerIdleTex,
     powerActiveTex,
+    powerOffTex,
   }
 }

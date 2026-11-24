@@ -254,7 +254,7 @@ export function attachInputController({
     state.dragTurning = shielded
     const mode = shielded || state.pointerLocked ? 'none' : 'auto'
     for (const t of tabletInstances) {
-      if (t.wrapperEl.style.visibility !== 'hidden') {
+      if (t.poweredOn && t.wrapperEl.style.visibility !== 'hidden') {
         t.wrapperEl.style.pointerEvents = mode
         t.iframeEl.style.pointerEvents = mode
       }
@@ -281,6 +281,7 @@ export function attachInputController({
       state.currentTargetTitle = null
       state.currentTargetId = null
       state.currentTargetKind = null
+      state.currentTargetPoweredOn = null
     }
   }
 

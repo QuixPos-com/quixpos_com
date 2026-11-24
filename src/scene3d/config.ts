@@ -65,6 +65,8 @@ export const TABLETS: TabletSpec[] = [
     physicalScale: 1.2418,
     bezelPad: 42,
     bottomClearance: 160,
+    initialPower: true,
+    canControlScreens: true,
   },
   {
     id: 'pos-center',
@@ -77,6 +79,7 @@ export const TABLETS: TabletSpec[] = [
     physicalScale: 1,
     bezelPad: 36,
     bottomClearance: 727,
+    initialPower: false,
   },
   {
     id: 'pos-vertical',
@@ -89,6 +92,7 @@ export const TABLETS: TabletSpec[] = [
     physicalScale: 1,
     bezelPad: 28,
     bottomClearance: 127,
+    initialPower: false,
   },
   {
     id: 'sumup-far-right',
@@ -101,6 +105,7 @@ export const TABLETS: TabletSpec[] = [
     physicalScale: 0.85,
     bezelPad: 24,
     bottomClearance: 380,
+    initialPower: false,
     crop: {
       x: 304,
       y: 158,
