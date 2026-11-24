@@ -14,7 +14,6 @@ import {
 } from '../config'
 import { markFocusSharp } from '../focusBlurPass'
 import {
-  createExampleBoxLabelTexture,
   createShelfLedWashTexture,
   createWoodTexture,
 } from '../textures'
@@ -487,7 +486,7 @@ export function buildWallsAndShelves(
     return a.bayIndex - b.bayIndex
   })
 
-  // 3. Dynamic Inventory Boxes Container (seeded with one example box until API fills shelves)
+  // 3. Dynamic Inventory Boxes Container (populated via iframe API)
   const boxesContainer = new THREE.Group()
   roomGroup.add(boxesContainer)
 
@@ -495,7 +494,6 @@ export function buildWallsAndShelves(
   let activeBoxSurfaceMeshes: Array<InstanceType<ThreeModule['Mesh']>> = []
   let activeProducts: NormalizedProduct[] = []
   let activeSummary: ShelfProductSummary[] = []
-  let hasApiProducts = false
   let renderGeneration = 0
 
   const imageCache = new Map<string, CachedProductImage>()
@@ -516,77 +514,6 @@ export function buildWallsAndShelves(
     }
     activeBoxDisposables = []
     activeBoxSurfaceMeshes = []
-  }
-
-  const spawnExampleBox = () => {
-    disposeDynamicBoxes()
-    const exampleSlot =
-      shelfSlots.find((s) => s.id === 'back-bay2-lvl2') ?? shelfSlots[0]
-
-    const boxW = 1120
-    const boxH = 960
-    const boxD = 960
-
-    const cardboardMat = new THREE.MeshStandardMaterial({
-      color: '#c49a6c',
-      roughness: 0.86,
-      metalness: 0.02,
-    })
-    const boxLabelTex = createExampleBoxLabelTexture(THREE)
-    const boxLabelMat = new THREE.MeshStandardMaterial({
-      map: boxLabelTex,
-      roughness: 0.55,
-      metalness: 0.02,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
-    })
-
-    const boxGeo = new THREE.BoxGeometry(boxW, boxH, boxD)
-    const topTapeGeo = new THREE.BoxGeometry(boxW + 4, 8, 170)
-    const frontTapeGeo = new THREE.BoxGeometry(170, 150, 8)
-    const labelGeo = new THREE.PlaneGeometry(680, 680)
-
-    activeBoxDisposables.push(
-      cardboardMat,
-      boxLabelTex,
-      boxLabelMat,
-      boxGeo,
-      topTapeGeo,
-      frontTapeGeo,
-      labelGeo,
-    )
-
-    const exampleBoxGroup = new THREE.Group()
-    exampleBoxGroup.position.set(
-      exampleSlot.centerX - 320,
-      exampleSlot.surfaceY,
-      exampleSlot.centerZ + 40,
-    )
-    exampleBoxGroup.rotation.y = -0.07
-
-    const boxMesh = new THREE.Mesh(boxGeo, cardboardMat)
-    boxMesh.position.set(0, boxH / 2, 0)
-    boxMesh.castShadow = true
-    boxMesh.receiveShadow = true
-    exampleBoxGroup.add(boxMesh)
-    activeBoxSurfaceMeshes.push(boxMesh)
-
-    const topTape = new THREE.Mesh(topTapeGeo, tapeMat)
-    topTape.position.set(0, boxH + 2, 0)
-    exampleBoxGroup.add(topTape)
-
-    const frontTape = new THREE.Mesh(frontTapeGeo, tapeMat)
-    frontTape.position.set(0, boxH - 75, boxD / 2 + 2)
-    exampleBoxGroup.add(frontTape)
-
-    const frontLabel = new THREE.Mesh(labelGeo, boxLabelMat)
-    frontLabel.position.set(0, boxH * 0.46, boxD / 2 + 2)
-    exampleBoxGroup.add(frontLabel)
-
-    markFocusSharp(exampleBoxGroup)
-    boxesContainer.add(exampleBoxGroup)
-    activeSummary = []
   }
 
   const requestProductImage = (
@@ -631,7 +558,7 @@ export function buildWallsAndShelves(
       const cbs = entry.callbacks.splice(0, entry.callbacks.length)
       if (generation === renderGeneration) {
         for (const cb of cbs) cb()
-      } else if (hasApiProducts) {
+      } else if (activeProducts.some((p) => p.imageUrl === url)) {
         // Still rebuild with current generation if this product URL is active
         renderProducts()
       }
@@ -708,8 +635,9 @@ export function buildWallsAndShelves(
     const currentGen = renderGeneration
     disposeDynamicBoxes()
 
-    if (!hasApiProducts) {
-      spawnExampleBox()
+    if (activeProducts.length === 0) {
+      activeSummary = []
+      onBoxesChanged?.([])
       return
     }
 
@@ -736,7 +664,7 @@ export function buildWallsAndShelves(
       let aspect = p.aspectRatio
       if (p.imageUrl) {
         const cached = requestProductImage(p.imageUrl, currentGen, () => {
-          if (currentGen === renderGeneration && hasApiProducts) {
+          if (currentGen === renderGeneration && activeProducts.length > 0) {
             renderProducts()
           }
         })
@@ -943,7 +871,6 @@ export function buildWallsAndShelves(
   }
 
   const setProducts = (products: ShelfProductInput[]): ShelfProductSummary[] => {
-    hasApiProducts = true
     activeProducts = products.map((p, idx) => normalizeProduct(p, idx))
     renderProducts()
     return activeSummary
@@ -954,7 +881,6 @@ export function buildWallsAndShelves(
   ): ShelfProductSummary[] => {
     const idStr = String(raw.id).trim()
     if (!idStr) return activeSummary
-    hasApiProducts = true
     const idx = activeProducts.findIndex((p) => p.id === idStr)
     if (idx >= 0) {
       const prev = activeProducts[idx]
@@ -981,12 +907,9 @@ export function buildWallsAndShelves(
   }
 
   const clearProducts = () => {
-    hasApiProducts = true
     activeProducts = []
     renderProducts()
   }
-
-  spawnExampleBox()
 
   markFocusSharp(roomGroup)
   webglScene.add(roomGroup)

@@ -668,67 +668,6 @@ export function createEuroCoinTexture(
   return tex
 }
 
-export function createExampleBoxLabelTexture(THREE: ThreeModule) {
-  const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 256
-  const ctx = canvas.getContext('2d')!
-
-  // Clean white inventory product card label
-  ctx.fillStyle = '#f8fafc'
-  ctx.fillRect(0, 0, 256, 256)
-
-  ctx.strokeStyle = '#cbd5e1'
-  ctx.lineWidth = 4
-  ctx.strokeRect(6, 6, 244, 244)
-
-  // Product picture frame preview (where DB product images will render)
-  const picGrad = ctx.createLinearGradient(20, 20, 236, 152)
-  picGrad.addColorStop(0, '#dbeafe')
-  picGrad.addColorStop(1, '#dcfce7')
-  ctx.fillStyle = picGrad
-  ctx.fillRect(20, 20, 216, 132)
-
-  ctx.strokeStyle = '#94a3b8'
-  ctx.lineWidth = 2
-  ctx.strokeRect(20, 20, 216, 132)
-
-  // Stylized product silhouette (coffee bag / retail item)
-  ctx.fillStyle = '#0f766e'
-  ctx.beginPath()
-  ctx.roundRect(96, 42, 64, 88, 10)
-  ctx.fill()
-  ctx.fillStyle = '#fef3c7'
-  ctx.fillRect(108, 66, 40, 28)
-
-  // Item title & SKU metadata
-  ctx.fillStyle = '#0f172a'
-  ctx.font = 'bold 20px system-ui, -apple-system, sans-serif'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  ctx.fillText('Beispiel-Artikel', 20, 166, 216)
-
-  ctx.fillStyle = '#475569'
-  ctx.font = '600 14px monospace'
-  ctx.fillText('SKU-1042  •  250g', 20, 194, 216)
-
-  // Mini barcode stripes
-  const widths = [3, 2, 5, 2, 3, 4, 2, 5, 3, 2, 4, 2, 5, 3, 2, 4, 3, 2, 5, 2, 4, 3]
-  let bx = 20
-  ctx.fillStyle = '#1e293b'
-  for (let i = 0; i < widths.length && bx < 236; i++) {
-    if (i % 2 === 0) {
-      ctx.fillRect(bx, 218, widths[i], 22)
-    }
-    bx += widths[i] + 3
-  }
-
-  const tex = new THREE.CanvasTexture(canvas)
-  tex.colorSpace = THREE.SRGBColorSpace
-  tex.anisotropy = 4
-  return tex
-}
-
 export function createShelfLedWashTexture(THREE: ThreeModule) {
   const canvas = document.createElement('canvas')
   canvas.width = 128
