@@ -35,6 +35,7 @@ interface PrinterSlotConfig {
   maxWorldH: number
   tiltX: number
   feedSpeed: number
+  extraFeed: number
 }
 
 interface PrintedSheet {
@@ -101,6 +102,7 @@ const SLOT_CONFIGS: Record<PrinterKind, PrinterSlotConfig> = {
     maxWorldH: 540,
     tiltX: -1.24,
     feedSpeed: 460,
+    extraFeed: 28,
   },
   epson: {
     kind: 'epson',
@@ -112,6 +114,7 @@ const SLOT_CONFIGS: Record<PrinterKind, PrinterSlotConfig> = {
     maxWorldH: 700,
     tiltX: -1.18,
     feedSpeed: 520,
+    extraFeed: -12,
   },
 }
 
@@ -243,7 +246,7 @@ export function createPrintManager(
       slotY: cfg.slotY,
       slotZ: cfg.slotZ,
       emerged: initialEmerged,
-      targetEmerged: Math.max(36, paperH - 12),
+      targetEmerged: Math.max(36, paperH + cfg.extraFeed),
       feedSpeed: cfg.feedSpeed,
       vx: 0,
       vy: 0,
