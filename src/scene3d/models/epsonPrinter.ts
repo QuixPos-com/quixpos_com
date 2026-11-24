@@ -104,5 +104,6 @@ export function buildEpsonPrinter(
 
   return {
     printerNetLedMat,
+    epsonSurfaceMeshes: [printerBody, printerCap],
   }
 }

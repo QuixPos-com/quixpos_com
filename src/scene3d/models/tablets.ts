@@ -118,6 +118,7 @@ export function buildTablets(
   const tabletInstances: TabletInstance[] = []
   const cutoutTargets: Array<InstanceType<ThreeModule['Mesh']>> = []
   const powerTargets: Array<InstanceType<ThreeModule['Mesh']>> = []
+  const tabletSurfaceMeshes: Array<InstanceType<ThreeModule['Mesh']>> = []
 
   for (const spec of TABLETS) {
     const visibleCssW = spec.crop ? spec.crop.w : spec.cssW
@@ -388,6 +389,17 @@ export function buildTablets(
       tabletH,
       centerY,
     })
+    tabletSurfaceMeshes.push(
+      foot,
+      neck,
+      vesaArm,
+      backShell,
+      vesaPlate,
+      topBezel,
+      bottomBezel,
+      leftBezel,
+      rightBezel,
+    )
     cutoutTargets.push(cutoutMesh)
   }
 
@@ -395,6 +407,7 @@ export function buildTablets(
     tabletInstances,
     cutoutTargets,
     powerTargets,
+    tabletSurfaceMeshes,
     cutoutOnMat,
     screenOffMat,
     camDotOnMat,

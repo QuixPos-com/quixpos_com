@@ -8,7 +8,9 @@ import { DEFAULT_ZEBRA_REEL_ID, getZebraReelById } from '../scene3d/config'
 import { mountSceneEngine } from '../scene3d/createSceneEngine'
 import { SceneHud } from '../scene3d/SceneHud'
 import type {
+  BarcodeScanEvent,
   FocusViewId,
+  HeldItemMode,
   SceneController,
   TargetedDevice,
   ZebraMediaInfo,
@@ -31,6 +33,10 @@ export function ThreeDRoute() {
   const aimMirrorRef = useRef<HTMLDivElement>(null)
   const aimMirrorDotRef = useRef<HTMLDivElement>(null)
 
+  const laserReticleRef = useRef<HTMLDivElement>(null)
+  const scannerPreviewCanvasRef = useRef<HTMLCanvasElement>(null)
+  const audioMutedRef = useRef(false)
+
   const controllerRef = useRef<SceneController | null>(null)
   const bgAudioRef = useRef<BackgroundAudioController | null>(null)
 
@@ -40,6 +46,8 @@ export function ThreeDRoute() {
   const [activeView, setActiveView] = useState<FocusViewId | null>('total')
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isAudioMuted, setIsAudioMuted] = useState(false)
+  const [heldMode, setHeldMode] = useState<HeldItemMode>('none')
+  const [lastScan, setLastScan] = useState<BarcodeScanEvent | null>(null)
   const [zebraMedia, setZebraMedia] = useState<ZebraMediaInfo>(() =>
     getZebraReelById(DEFAULT_ZEBRA_REEL_ID),
   )
@@ -57,6 +65,10 @@ export function ThreeDRoute() {
       navigator.maxTouchPoints > 0
     setIsTouchMode(touchCapable)
 
+    const storedAudio = readStoredAudioSettings()
+    audioMutedRef.current = storedAudio.muted
+    setIsAudioMuted(storedAudio.muted)
+
     const controller = mountSceneEngine({
       stageEl,
       cssLayerEl,
@@ -72,6 +84,9 @@ export function ThreeDRoute() {
         aimMirrorRef,
         aimMirrorDotRef,
       },
+      laserReticleRef,
+      scannerPreviewCanvasRef,
+      isAudioMuted: () => audioMutedRef.current,
       callbacks: {
         onLockChange: setIsLocked,
         onTargetChange: setTargetedTablet,
@@ -79,10 +94,16 @@ export function ThreeDRoute() {
         onDrawerChange: setIsDrawerOpen,
         onZebraReelChange: setZebraMedia,
         onZebraReelPickerOpen: () => setIsReelPickerOpen(true),
+        onHeldModeChange: (mode) => {
+          setHeldMode(mode)
+          if (mode !== 'scanner') {
+            setLastScan(null)
+          }
+        },
+        onBarcodeScan: setLastScan,
       },
     })
-    const storedAudio = readStoredAudioSettings()
-    setIsAudioMuted(storedAudio.muted)
+
     const bgAudio = mountBackgroundAudio('/Irish_Coffee.mp3', {
       initialMuted: storedAudio.muted,
     })
@@ -109,8 +130,9 @@ export function ThreeDRoute() {
   }
 
   const isScreenFocusBlur =
-    activeView === 'left' || activeView === 'center' || activeView === 'right'
-  const isDrawerFocusBlur = activeView === 'drawer'
+    (activeView === 'left' || activeView === 'center' || activeView === 'right') &&
+    heldMode === 'none'
+  const isDrawerFocusBlur = activeView === 'drawer' && heldMode === 'none'
 
   useEffect(() => {
     bgAudioRef.current?.setDucked(isScreenFocusBlur)
@@ -119,6 +141,7 @@ export function ThreeDRoute() {
   const handleToggleAudioMute = () => {
     setIsAudioMuted((prev) => {
       const next = !prev
+      audioMutedRef.current = next
       bgAudioRef.current?.setMuted(next)
       return next
     })
@@ -148,13 +171,19 @@ export function ThreeDRoute() {
           isAudioMuted={isAudioMuted}
           activeView={activeView}
           targetedTablet={targetedTablet}
+          heldMode={heldMode}
+          lastScan={lastScan}
           zebraMedia={zebraMedia}
           isReelPickerOpen={isReelPickerOpen}
           stickRefs={stickRefs}
+          laserReticleRef={laserReticleRef}
+          scannerPreviewCanvasRef={scannerPreviewCanvasRef}
           onSelectView={(view) => controllerRef.current?.navigateToView(view)}
           onToggleAudioMute={handleToggleAudioMute}
           onSelectZebraReel={handleSelectZebraReel}
           onCloseReelPicker={() => setIsReelPickerOpen(false)}
+          onRotateHeldLabel={() => controllerRef.current?.rotateHeldLabel()}
+          onDropHeldItem={() => controllerRef.current?.dropHeldItem()}
         />
       </div>
     </div>

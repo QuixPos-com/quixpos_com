@@ -9,7 +9,33 @@ export interface Disposable {
   dispose: () => void
 }
 
-export type TargetKind = 'label' | 'screen' | 'drawer' | 'power' | 'zebra-latch'
+export type TargetKind =
+  | 'label'
+  | 'screen'
+  | 'drawer'
+  | 'power'
+  | 'zebra-latch'
+  | 'zebra-label'
+  | 'scanner'
+  | 'scanner-dock'
+
+export type HeldItemMode = 'none' | 'label' | 'scanner'
+
+export interface BarcodeScanEvent {
+  code: string
+  format: string
+  tabletId: 'pos-center'
+  deliveredToTablet: boolean
+  timestamp: number
+}
+
+export interface LaserReticleState {
+  visible: boolean
+  xPx: number
+  yPx: number
+  spotSizePx: number
+  flashSuccess: boolean
+}
 
 export type ZebraReelId = '25x13' | '57x32' | '101x51' | '101x152'
 
@@ -179,6 +205,8 @@ export interface SceneCallbacks {
   onDrawerChange: (isOpen: boolean) => void
   onZebraReelChange?: (media: ZebraMediaInfo) => void
   onZebraReelPickerOpen?: () => void
+  onHeldModeChange?: (mode: HeldItemMode) => void
+  onBarcodeScan?: (scan: BarcodeScanEvent) => void
 }
 
 export interface SceneController {
@@ -192,5 +220,8 @@ export interface SceneController {
   getZebraMedia: () => ZebraMediaInfo
   printZpl: (zpl: string) => void
   printEscPos: (payload: string | Uint8Array | number[]) => void
+  rotateHeldLabel: () => void
+  dropHeldItem: () => void
+  onBarcodeScan: (callback: (scan: BarcodeScanEvent) => void) => () => void
   dispose: () => void
 }

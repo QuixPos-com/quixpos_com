@@ -21,6 +21,9 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         manualChunks: (id) => {
+          if (id.includes('zxing-wasm')) {
+            return 'zxing'
+          }
           if (id.includes('node_modules')) {
             return 'vendor'
           }

@@ -275,7 +275,66 @@ window.parent.postMessage(
 
 ---
 
-## 5. All Built-in Host Commands & Events
+## 5. Handheld 3D Barcode / QR Scanner (`'scanner:scan'` -> `'pos-center'`)
+
+Visitors in `/3d` can click printed Zebra labels to peel & stick them onto the desk or other items, then click the **Inateck BCST-70 3D barcode scanner** on the right side of the desk to pick it up into their hand.
+
+While held in hand, the 3D scene takes live optical screenshots of the small spot around the scanner's laser crosshair and decodes 1D barcodes (`Code128`, `EAN13`, `EAN8`, `UPCA`, `Code39`, `ITF`, etc.) and 2D codes (`QRCode`, `DataMatrix`, `PDF417`, `Aztec`) via WebAssembly (`zxing-wasm`).
+
+Whenever a barcode or QR code is scanned, the 3D host sends **`'scanner:scan'`** directly to the **12" center POS tablet (`tabletId: 'pos-center'`, `pos.quixpos.com`)**:
+
+### Wire Message (`postMessage` to `'pos-center'`)
+
+```json
+{
+  "channel": "quixpos-scene3d",
+  "name": "scanner:scan",
+  "sender": "host",
+  "data": {
+    "code": "4012345678901",
+    "text": "4012345678901",
+    "format": "Code128",
+    "tabletId": "pos-center",
+    "timestamp": 1764012345678
+  }
+}
+```
+
+### Option A — Using `iframeClient.ts` (`onBarcodeScan`)
+
+```ts
+import { createSceneChannelClient } from './iframeClient'
+
+const scene = createSceneChannelClient()
+
+// `code` is the scanned barcode / QR string
+const unsub = scene.onBarcodeScan((code, payload) => {
+  console.log('Scanned:', code, payload.format)
+  handleScannedBarcodeInPos(code)
+})
+```
+
+### Option B — Zero-Dependency `window.addEventListener('message', ...)`
+
+```ts
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent) return
+  const msg = event.data
+  if (
+    msg &&
+    msg.channel === 'quixpos-scene3d' &&
+    msg.name === 'scanner:scan' &&
+    typeof msg.data?.code === 'string' &&
+    msg.data.code.length > 0
+  ) {
+    handleScannedBarcodeInPos(msg.data.code)
+  }
+})
+```
+
+---
+
+## 6. All Built-in Host Commands & Events
 
 ### Built-in Host Commands (Iframe -> 3D Scene)
 
@@ -300,6 +359,7 @@ window.parent.postMessage(
 | Message `name` | `data` object | When it fires |
 | --- | --- | --- |
 | `'scene:presence'` | `{ version, tabletId, title, canControlScreens, printers, activeView, drawerOpen, pointerLocked, screens, peers }` | On iframe `load` and in response to `'scene:ping'`. |
+| `'scanner:scan'` | `{ code: string, text: string, format: string, tabletId: 'pos-center', timestamp: number }` | *(Sent to `'pos-center'`)* Whenever the 3D handheld barcode scanner decodes a 1D barcode or 2D QR code under the laser crosshair. |
 | `'printer:printed'` | `{ printer: 'zebra' \| 'epson', protocol: 'zpl' \| 'escpos', jobId?, droppedPrevious, requestedBy }` | Whenever a ZPL or ESC/POS print job begins feeding out of a printer. |
 | `'screens:changed'` | `{ tabletId?, poweredOn?, enabled?, screens }` | Whenever any of the 3 controllable screens changes power or enabled state. |
 | `'screen:powerBlocked'` | `{ tabletId, reason: 'login_required' }` | When a visitor clicks the 3D power button on an off screen not yet enabled by `dash-left` (`<- Login first` shown). |

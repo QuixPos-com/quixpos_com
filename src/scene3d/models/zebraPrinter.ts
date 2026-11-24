@@ -170,5 +170,6 @@ export function buildZebraPrinter(
     zebraTargets,
     zebraLatchMat,
     setZebraReelVisual,
+    zebraSurfaceMeshes: [zebraPlinth, zebraShell, zebraWindow],
   }
 }

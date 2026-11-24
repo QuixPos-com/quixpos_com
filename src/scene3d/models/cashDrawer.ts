@@ -228,5 +228,14 @@ export function buildCashDrawer(
     openBtnTex,
     closeBtnTex,
     drawerTargets,
+    drawerSurfaceMeshes: [
+      dBottom,
+      dTop,
+      dLeft,
+      dRight,
+      dBack,
+      trayFront,
+      trayFloor,
+    ],
   }
 }

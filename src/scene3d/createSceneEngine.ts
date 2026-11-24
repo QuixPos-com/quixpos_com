@@ -1,3 +1,4 @@
+import type { RefObject } from 'preact'
 import {
   getCursorProximity,
   resolveTableCollision,
@@ -35,8 +36,15 @@ import { buildStationLoupes } from './models/stationLoupes'
 import { buildTablets } from './models/tablets'
 import { buildZebraPrinter } from './models/zebraPrinter'
 import { createPrintManager } from './printers/printManager'
+import {
+  decodeSpotPixels,
+  playScannerBeep,
+  warmScannerDecoder,
+} from './scanner/barcodeSpotDecoder'
 import type {
+  BarcodeScanEvent,
   Disposable,
+  HeldItemMode,
   NavPresetId,
   SceneCallbacks,
   SceneController,
@@ -54,8 +62,17 @@ export interface MountSceneOptions {
   canvasEl: HTMLCanvasElement
   touchCapable: boolean
   stickRefs: TouchStickRefs
+  laserReticleRef?: RefObject<HTMLDivElement | null>
+  scannerPreviewCanvasRef?: RefObject<HTMLCanvasElement | null>
+  isAudioMuted?: () => boolean
   callbacks: SceneCallbacks
 }
+
+const SCAN_SPOT_CSS_W = 256
+const SCAN_SPOT_CSS_H = 160
+const SCAN_RT_W = 448
+const SCAN_RT_H = 280
+const SCAN_INTERVAL_MS = 95
 
 export function mountSceneEngine({
   stageEl,
@@ -63,6 +80,9 @@ export function mountSceneEngine({
   canvasEl,
   touchCapable,
   stickRefs,
+  laserReticleRef,
+  scannerPreviewCanvasRef,
+  isAudioMuted,
   callbacks,
 }: MountSceneOptions): SceneController {
   let disposed = false
@@ -81,6 +101,10 @@ export function mountSceneEngine({
   let printEscPosImpl:
     | ((payload: string | Uint8Array | number[]) => void)
     | null = null
+  let rotateHeldLabelImpl: (() => void) | null = null
+  let dropHeldItemImpl: (() => void) | null = null
+
+  const scanListeners = new Set<(scan: BarcodeScanEvent) => void>()
 
   const channel = createSceneBroadcastChannel()
   if (typeof window !== 'undefined') {
@@ -109,6 +133,13 @@ export function mountSceneEngine({
       callbacks.onDrawerChange(isOpen)
       channel.send('drawer:changed', { open: isOpen })
     },
+    onHeldModeChange: callbacks.onHeldModeChange,
+    onBarcodeScan: (scan) => {
+      callbacks.onBarcodeScan?.(scan)
+      for (const cb of Array.from(scanListeners)) {
+        cb(scan)
+      }
+    },
   }
 
   Promise.all([
@@ -135,6 +166,17 @@ export function mountSceneEngine({
 
     const cssRenderer = new CSS3DRenderer({ element: cssLayerEl })
     cssRenderer.setSize(stageEl.clientWidth, stageEl.clientHeight)
+
+    // Dedicated offscreen render target for live optical spot screenshots around the laser crosshair
+    const scanRT = new THREE.WebGLRenderTarget(SCAN_RT_W, SCAN_RT_H, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat,
+      depthBuffer: true,
+    })
+    scanRT.texture.colorSpace = THREE.SRGBColorSpace
+    disposables.push(scanRT)
+    const scanPixelBuf = new Uint8Array(SCAN_RT_W * SCAN_RT_H * 4)
 
     // 2. Scenes & Camera
     const webglScene = new THREE.Scene()
@@ -165,13 +207,14 @@ export function mountSceneEngine({
     disposables.push(focusBlurPass)
 
     // 3. Environment & POS Hardware Models
-    buildLightingAndFloor(THREE, webglScene, disposables)
-    buildTable(THREE, webglScene, disposables)
+    const floorMesh = buildLightingAndFloor(THREE, webglScene, disposables)
+    const { tableMeshes } = buildTable(THREE, webglScene, disposables)
 
     const {
       tabletInstances,
       cutoutTargets,
       powerTargets,
+      tabletSurfaceMeshes,
       cutoutOnMat,
       screenOffMat,
       camDotOnMat,
@@ -195,6 +238,7 @@ export function mountSceneEngine({
       openBtnTex,
       closeBtnTex,
       drawerTargets,
+      drawerSurfaceMeshes,
     } = buildCashDrawer(THREE, webglScene, disposables)
 
     const { loupeInstances, plateTargets } = buildStationLoupes(
@@ -204,25 +248,50 @@ export function mountSceneEngine({
       disposables,
     )
 
-    const { printerNetLedMat } = buildEpsonPrinter(
+    const { printerNetLedMat, epsonSurfaceMeshes } = buildEpsonPrinter(
       THREE,
       webglScene,
       disposables,
     )
-    const { zebraTargets, zebraLatchMat, setZebraReelVisual } =
-      buildZebraPrinter(THREE, webglScene, disposables)
+    const {
+      zebraTargets,
+      zebraLatchMat,
+      setZebraReelVisual,
+      zebraSurfaceMeshes,
+    } = buildZebraPrinter(THREE, webglScene, disposables)
     setZebraReelVisual(activeZebraMedia.widthMm)
-    buildBarcodeScanner(THREE, webglScene, disposables)
+
+    const {
+      scannerGroup,
+      laserVisualsGroup,
+      scannerTargets,
+      scannerDockTargets,
+      updateScannerPose,
+    } = buildBarcodeScanner(THREE, webglScene, disposables)
 
     const printManager = createPrintManager(
       THREE,
       webglScene,
       printerNetLedMat,
+      {
+        maxAnisotropy: webglRenderer.capabilities.getMaxAnisotropy(),
+        drawerTrayGroup,
+      },
     )
     printManager.setZebraMedia(activeZebraMedia)
     disposables.push(printManager)
 
-    const raycastTargets = [
+    // Solid 3D surfaces where Zebra labels can be placed (tabletop, legs, printers, drawer, monitor stands/bezels, floor)
+    const placeableBaseSurfaces: Array<InstanceType<typeof THREE.Object3D>> = [
+      ...tableMeshes,
+      ...drawerSurfaceMeshes,
+      ...zebraSurfaceMeshes,
+      ...epsonSurfaceMeshes,
+      ...tabletSurfaceMeshes,
+      floorMesh,
+    ]
+
+    const staticRaycastTargets = [
       ...powerTargets,
       ...zebraTargets,
       ...plateTargets,
@@ -262,6 +331,18 @@ export function mountSceneEngine({
       mouseAimVisualY: 0,
     }
 
+    let heldMode: HeldItemMode = 'none'
+    let scannerTriggerAnim = 0
+    let scanSuccessFlash = 0
+    let scannerHover = 0
+    let scannerDockHover = 0
+    let lastScanAttemptMs = 0
+    let scanDecodeBusy = false
+    let latchedScanCode: string | null = null
+    let emptyScanFrames = 0
+    let lastScanEmitMs = 0
+    let manualTriggerArmed = false
+
     let drawerOpen = false
     let drawerZCurrent = 0
     let drawerZTarget = 0
@@ -272,6 +353,74 @@ export function mountSceneEngine({
     let keyStickVisualY = 0
     let mouseStickVisualX = 0
     let mouseStickVisualY = 0
+
+    let refreshInputShield: (() => void) | null = null
+
+    const setHeldMode = (nextMode: HeldItemMode) => {
+      if (heldMode === nextMode) return
+      heldMode = nextMode
+      if (nextMode !== 'scanner') {
+        laserReticleRef?.current?.classList.remove('is-visible', 'is-hit')
+      }
+      refreshInputShield?.()
+      sceneCallbacks.onHeldModeChange?.(nextMode)
+    }
+
+    const pickUpZebraLabel = (
+      target: InstanceType<typeof THREE.Object3D> | string,
+    ): boolean => {
+      if (heldMode !== 'none') return false
+      if (printManager.pickUpLabel(target)) {
+        setHeldMode('label')
+        return true
+      }
+      return false
+    }
+
+    const commitHeldLabelPlacement = (): boolean => {
+      if (heldMode !== 'label') return false
+      if (printManager.placeHeldLabel()) {
+        setHeldMode('none')
+        return true
+      }
+      return false
+    }
+
+    const pickUpScanner = () => {
+      if (heldMode === 'label') {
+        printManager.cancelHeldLabel()
+      }
+      warmScannerDecoder()
+      latchedScanCode = null
+      emptyScanFrames = 0
+      manualTriggerArmed = false
+      scannerTriggerAnim = 0.65
+      setHeldMode('scanner')
+    }
+
+    const putDownScanner = () => {
+      if (heldMode !== 'scanner') return
+      manualTriggerArmed = false
+      latchedScanCode = null
+      setHeldMode('none')
+    }
+
+    const triggerScannerPulse = () => {
+      if (heldMode !== 'scanner') return
+      scannerTriggerAnim = 1
+      manualTriggerArmed = true
+      latchedScanCode = null
+      lastScanAttemptMs = 0
+    }
+
+    const cancelHeldItem = () => {
+      if (heldMode === 'label') {
+        printManager.cancelHeldLabel()
+        setHeldMode('none')
+      } else if (heldMode === 'scanner') {
+        putDownScanner()
+      }
+    }
 
     const setCashDrawerOpen = (nextOpen: boolean) => {
       if (drawerOpen === nextOpen) return
@@ -496,6 +645,7 @@ export function mountSceneEngine({
       navigateToFocusView,
       returnToPreviousPose,
       clearActiveFocusForFreeMove,
+      refreshCursorAndShield,
       cleanup: cleanupInput,
     } = attachInputController({
       stageEl,
@@ -509,6 +659,18 @@ export function mountSceneEngine({
       drawerTargets,
       powerTargets,
       zebraTargets,
+      scannerTargets,
+      scannerDockTargets,
+      getZebraLabelTargets: () => printManager.getZebraLabelTargets(),
+      getHeldMode: () => heldMode,
+      canPlaceHeldLabel: () => printManager.canPlaceHeldLabel(),
+      pickUpZebraLabel,
+      placeHeldLabel: commitHeldLabelPlacement,
+      rotateHeldLabel: () => printManager.rotateHeldLabel(),
+      cancelHeldItem,
+      pickUpScanner,
+      putDownScanner,
+      triggerScannerPulse,
       stickRefs,
       callbacks: sceneCallbacks,
       toggleCashDrawer,
@@ -518,6 +680,7 @@ export function mountSceneEngine({
         callbacks.onZebraReelPickerOpen?.()
       },
     })
+    refreshInputShield = refreshCursorAndShield
 
     const validFocusViews = new Set<NavPresetId>([
       'total',
@@ -1002,6 +1165,14 @@ export function mountSceneEngine({
       }
     }
 
+    rotateHeldLabelImpl = () => {
+      printManager.rotateHeldLabel()
+    }
+
+    dropHeldItemImpl = () => {
+      cancelHeldItem()
+    }
+
     const onResize = () => {
       const w = stageEl.clientWidth
       const h = Math.max(1, stageEl.clientHeight)
@@ -1037,6 +1208,7 @@ export function mountSceneEngine({
 
     // 5. Animation Loop
     const screenCenter = new THREE.Vector2(0, 0)
+    const aimNdc = new THREE.Vector2(0, 0)
     const tmpNormal = new THREE.Vector3()
     const tmpToCam = new THREE.Vector3()
     const tmpWorldPos = new THREE.Vector3()
@@ -1045,6 +1217,8 @@ export function mountSceneEngine({
     const forwardVec = new THREE.Vector3()
     const rightVec = new THREE.Vector3()
     const moveVec = new THREE.Vector3()
+    const tmpScannerAimPoint = new THREE.Vector3()
+    const tmpScannerHitNormal = new THREE.Vector3()
 
     let lastTime = performance.now()
     let smoothedDt = 1 / 60
@@ -1071,7 +1245,7 @@ export function mountSceneEngine({
         )
         const plateProx = l.plateMesh
           ? getCursorProximity(l.plateMesh, 130, state, stageEl, camera, tmpProjVec) *
-            0.75
+          0.75
           : 0
         const targetHover = !isAlreadyFocused ? Math.max(loupeProx, plateProx) : 0
 
@@ -1112,6 +1286,33 @@ export function mountSceneEngine({
       zebraLatchMat.emissiveIntensity +=
         (0.08 + zebraLatchProx * 0.65 - zebraLatchMat.emissiveIntensity) *
         hoverSmooth
+
+      // Barcode scanner & tabletop dock proximity hover
+      const scannerProxTarget =
+        heldMode === 'none'
+          ? getCursorProximity(scannerGroup, 135, state, stageEl, camera, tmpProjVec)
+          : 0
+      scannerHover += (scannerProxTarget - scannerHover) * hoverSmooth
+
+      const dockProxTarget =
+        heldMode === 'scanner' && scannerDockTargets[0]
+          ? getCursorProximity(
+            scannerDockTargets[0],
+            125,
+            state,
+            stageEl,
+            camera,
+            tmpProjVec,
+          )
+          : 0
+      scannerDockHover += (dockProxTarget - scannerDockHover) * hoverSmooth
+
+      if (scannerTriggerAnim > 0) {
+        scannerTriggerAnim = Math.max(0, scannerTriggerAnim - dt * 5.2)
+      }
+      if (scanSuccessFlash > 0) {
+        scanSuccessFlash = Math.max(0, scanSuccessFlash - dt * 2.8)
+      }
 
       const btnTargetHover = getCursorProximity(
         cashBtnMesh,
@@ -1387,6 +1588,211 @@ export function mountSceneEngine({
         }
       }
 
+      camera.updateMatrixWorld(true)
+
+      // Compute active aim coordinates in stage pixels (cursor in desktop unlocked mode, center in FPS/touch)
+      const stageW = Math.max(1, stageEl.clientWidth)
+      const stageH = Math.max(1, stageEl.clientHeight)
+      let aimStageX = stageW * 0.5
+      let aimStageY = stageH * 0.5
+      if (
+        !state.pointerLocked &&
+        !touchCapable &&
+        state.lastMouseX >= 0 &&
+        state.lastMouseY >= 0
+      ) {
+        const stageRect = stageEl.getBoundingClientRect()
+        aimStageX = Math.max(
+          0,
+          Math.min(stageW, state.lastMouseX - stageRect.left),
+        )
+        aimStageY = Math.max(
+          0,
+          Math.min(stageH, state.lastMouseY - stageRect.top),
+        )
+      }
+      aimNdc.set((aimStageX / stageW) * 2 - 1, -(aimStageY / stageH) * 2 + 1)
+
+      // Update held Zebra label surface preview
+      if (heldMode === 'label') {
+        raycaster.setFromCamera(aimNdc, camera)
+        const surfaces = [
+          ...placeableBaseSurfaces,
+          ...printManager.getPlacedLabelSurfaces(),
+        ]
+        const canPlace = printManager.updateHeldLabelPreview(
+          raycaster,
+          camera,
+          state.yaw,
+          surfaces,
+          dt,
+        )
+        if (!state.pointerLocked && !state.dragTurning) {
+          stageEl.style.cursor = canPlace ? 'copy' : 'grabbing'
+        }
+      }
+
+      // Update handheld barcode scanner pose, 3D laser beam & live optical spot WASM decoding
+      let scannerAimWorld: InstanceType<typeof THREE.Vector3> | null = null
+      let scannerHitNormal: InstanceType<typeof THREE.Vector3> | null = null
+
+      if (heldMode === 'scanner') {
+        if (laserReticleRef?.current) {
+          const reticleEl = laserReticleRef.current
+          reticleEl.style.transform = `translate3d(${aimStageX.toFixed(1)}px, ${aimStageY.toFixed(1)}px, 0) translate(-50%, -50%)`
+          reticleEl.classList.add('is-visible')
+          reticleEl.classList.toggle('is-hit', scanSuccessFlash > 0.05)
+        }
+
+        raycaster.setFromCamera(aimNdc, camera)
+        const laserTargets = [
+          ...printManager.getAllSheetMeshes(),
+          ...placeableBaseSurfaces,
+          ...cutoutTargets,
+        ]
+        const laserHits = raycaster.intersectObjects(laserTargets, false)
+        if (laserHits.length > 0 && laserHits[0].distance <= 45000) {
+          const lh = laserHits[0]
+          scannerAimWorld = tmpScannerAimPoint.copy(lh.point)
+          if (lh.face) {
+            tmpScannerHitNormal
+              .copy(lh.face.normal)
+              .transformDirection(lh.object.matrixWorld)
+              .normalize()
+            tmpToCam.copy(camera.position).sub(lh.point)
+            if (tmpScannerHitNormal.dot(tmpToCam) < 0) {
+              tmpScannerHitNormal.negate()
+            }
+            scannerHitNormal = tmpScannerHitNormal
+          }
+        } else {
+          scannerAimWorld = raycaster.ray.at(9000, tmpScannerAimPoint)
+        }
+      }
+
+      const moveSpeedNorm = Math.min(
+        1,
+        Math.hypot(state.velX, state.velZ) / WALK_SPEED,
+      )
+      updateScannerPose({
+        held: heldMode === 'scanner',
+        dt,
+        camera,
+        aspect: camera.aspect,
+        aimWorldPoint: scannerAimWorld,
+        hitNormal: scannerHitNormal,
+        hoverAmount: scannerHover,
+        dockHoverAmount: scannerDockHover,
+        triggerAnim: scannerTriggerAnim,
+        successFlash: scanSuccessFlash,
+        moveSpeedNorm,
+        timeSec: now * 0.001,
+      })
+
+      // Live screenshot of the small spot around the laser crosshair -> zxing-wasm decoder
+      if (
+        heldMode === 'scanner' &&
+        !scanDecodeBusy &&
+        now - lastScanAttemptMs >= SCAN_INTERVAL_MS
+      ) {
+        lastScanAttemptMs = now
+        scanDecodeBusy = true
+
+        const prevShadowAuto = webglRenderer.shadowMap.autoUpdate
+        const prevScannerVis = scannerGroup.visible
+        const prevLaserVis = laserVisualsGroup.visible
+        const prevAutoClear = webglRenderer.autoClear
+
+        webglRenderer.shadowMap.autoUpdate = false
+        webglRenderer.autoClear = true
+        scannerGroup.visible = false
+        laserVisualsGroup.visible = false
+
+        camera.layers.set(0)
+        camera.setViewOffset(
+          stageW,
+          stageH,
+          aimStageX - SCAN_SPOT_CSS_W * 0.5,
+          aimStageY - SCAN_SPOT_CSS_H * 0.5,
+          SCAN_SPOT_CSS_W,
+          SCAN_SPOT_CSS_H,
+        )
+        webglRenderer.setRenderTarget(scanRT)
+        webglRenderer.render(webglScene, camera)
+        webglRenderer.readRenderTargetPixels(
+          scanRT,
+          0,
+          0,
+          SCAN_RT_W,
+          SCAN_RT_H,
+          scanPixelBuf,
+        )
+
+        camera.clearViewOffset()
+        webglRenderer.setRenderTarget(null)
+        scannerGroup.visible = prevScannerVis
+        laserVisualsGroup.visible = prevLaserVis
+        webglRenderer.shadowMap.autoUpdate = prevShadowAuto
+        webglRenderer.autoClear = prevAutoClear
+
+        const previewCtx =
+          scannerPreviewCanvasRef?.current?.getContext('2d') ?? null
+
+        decodeSpotPixels(scanPixelBuf, SCAN_RT_W, SCAN_RT_H, previewCtx)
+          .then((decoded) => {
+            scanDecodeBusy = false
+            if (disposed || heldMode !== 'scanner') return
+
+            if (!decoded) {
+              emptyScanFrames++
+              if (emptyScanFrames >= 4) {
+                latchedScanCode = null
+              }
+              return
+            }
+
+            emptyScanFrames = 0
+            const nowMs = performance.now()
+            const canEmit =
+              decoded.code !== latchedScanCode &&
+              (nowMs - lastScanEmitMs >= 320 || manualTriggerArmed)
+
+            if (!canEmit) return
+
+            latchedScanCode = decoded.code
+            lastScanEmitMs = nowMs
+            manualTriggerArmed = false
+            scanSuccessFlash = 1
+            playScannerBeep(Boolean(isAudioMuted?.()))
+
+            const posCenterTablet = tabletInstances.find(
+              (t) => t.spec.id === 'pos-center',
+            )
+            const deliveredToTablet = Boolean(posCenterTablet?.poweredOn)
+            const timestamp = Date.now()
+
+            // Emit scanned string to the 12" wide center POS tablet ('pos-center')
+            channel.sendTo('pos-center', 'scanner:scan', {
+              code: decoded.code,
+              text: decoded.code,
+              format: decoded.format,
+              tabletId: 'pos-center',
+              timestamp,
+            })
+
+            sceneCallbacks.onBarcodeScan?.({
+              code: decoded.code,
+              format: decoded.format,
+              tabletId: 'pos-center',
+              deliveredToTablet,
+              timestamp,
+            })
+          })
+          .catch(() => {
+            scanDecodeBusy = false
+          })
+      }
+
       // Front-face check & pointer-events routing for the real iframes
       for (const t of tabletInstances) {
         t.cutoutMesh.getWorldPosition(tmpWorldPos)
@@ -1406,7 +1812,10 @@ export function mountSceneEngine({
           t.iframeEl.style.pointerEvents = 'none'
         } else {
           t.wrapperEl.style.visibility = 'visible'
-          const interactive = !state.pointerLocked && !state.dragTurning ? 'auto' : 'none'
+          const interactive =
+            !state.pointerLocked && !state.dragTurning && heldMode === 'none'
+              ? 'auto'
+              : 'none'
           t.wrapperEl.style.pointerEvents = interactive
           t.iframeEl.style.pointerEvents = interactive
         }
@@ -1415,7 +1824,25 @@ export function mountSceneEngine({
       // Raycast from crosshair when in Pointer Lock mode
       if (state.pointerLocked) {
         raycaster.setFromCamera(screenCenter, camera)
-        const hits = raycaster.intersectObjects(raycastTargets, false)
+        const activeRaycastTargets =
+          heldMode === 'label'
+            ? []
+            : heldMode === 'scanner'
+              ? [
+                ...scannerDockTargets,
+                ...powerTargets,
+                ...plateTargets,
+                ...drawerTargets,
+              ]
+              : [
+                ...printManager.getZebraLabelTargets(),
+                ...scannerTargets,
+                ...staticRaycastTargets,
+              ]
+        const hits =
+          activeRaycastTargets.length > 0
+            ? raycaster.intersectObjects(activeRaycastTargets, false)
+            : []
         const hasHit = hits.length > 0 && hits[0].distance <= 24000
         const hitData = hasHit ? hits[0].object.userData : null
         const nextTitle = hitData ? (hitData.tabletTitle as string) : null
@@ -1451,21 +1878,22 @@ export function mountSceneEngine({
           callbacks.onTargetChange(
             nextTitle && nextKind
               ? {
-                  title: nextTitle,
-                  kind: nextKind,
-                  poweredOn: nextPoweredOn ?? undefined,
-                  controllablePower: nextControllable,
-                  loginRequiredPrompt: nextLoginPrompt,
-                }
+                title: nextTitle,
+                kind: nextKind,
+                poweredOn: nextPoweredOn ?? undefined,
+                controllablePower: nextControllable,
+                loginRequiredPrompt: nextLoginPrompt,
+              }
               : null,
           )
         }
       }
 
       const targetBlur =
-        state.activeView === 'left' ||
-        state.activeView === 'center' ||
-        state.activeView === 'right'
+            (state.activeView === 'left' ||
+              state.activeView === 'center' ||
+              state.activeView === 'right') &&
+          heldMode === 'none'
           ? 1
           : 0
       focusBlurAmount +=
@@ -1495,9 +1923,18 @@ export function mountSceneEngine({
     printZpl: (zpl: string) => printZplImpl?.(zpl),
     printEscPos: (payload: string | Uint8Array | number[]) =>
       printEscPosImpl?.(payload),
+    rotateHeldLabel: () => rotateHeldLabelImpl?.(),
+    dropHeldItem: () => dropHeldItemImpl?.(),
+    onBarcodeScan: (callback) => {
+      scanListeners.add(callback)
+      return () => {
+        scanListeners.delete(callback)
+      }
+    },
     dispose: () => {
       disposed = true
       if (animId) cancelAnimationFrame(animId)
+      scanListeners.clear()
       channel.dispose()
       if (
         typeof window !== 'undefined' &&

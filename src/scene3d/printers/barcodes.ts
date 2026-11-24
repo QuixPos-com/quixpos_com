@@ -69,13 +69,19 @@ export function drawBarcode1D(
   const totalModules = widths.reduce((sum, w) => sum + w, 0)
   let modW = Math.max(1, Math.round(opts.moduleWidth ?? 2))
   if (opts.maxWidth && totalModules * modW > opts.maxWidth) {
-    modW = Math.max(1, opts.maxWidth / totalModules)
+    modW = Math.max(1, Math.floor(opts.maxWidth / totalModules))
   }
 
   const barWidth = totalModules * modW
   let startX = opts.x
   if (opts.align === 'center') startX -= barWidth / 2
   else if (opts.align === 'right') startX -= barWidth
+  else {
+    const minQuietLeft = Math.round(modW * 6)
+    if (startX < minQuietLeft && (!opts.maxWidth || barWidth + minQuietLeft <= opts.maxWidth + startX)) {
+      startX = minQuietLeft
+    }
+  }
 
   const hri = opts.hriPosition ?? 'below'
   const fontSize = Math.max(14, Math.min(22, Math.round(modW * 8.5)))
@@ -86,7 +92,19 @@ export function drawBarcode1D(
     hri === 'below' || hri === 'both' ? fontSize + textGap : 0
 
   ctx.save()
-  ctx.fillStyle = opts.color ?? '#000000'
+  const barColor = opts.color ?? '#000000'
+  const barY = opts.y + topTextOffset
+  if (barColor !== '#ffffff') {
+    const quietPad = Math.max(8, Math.round(modW * 8))
+    ctx.fillStyle = '#fcfcfb'
+    ctx.fillRect(
+      Math.max(0, Math.floor(startX - quietPad)),
+      Math.max(0, Math.floor(barY - 4)),
+      Math.ceil(barWidth + quietPad * 2),
+      Math.ceil(opts.height + 8),
+    )
+  }
+  ctx.fillStyle = barColor
 
   if (hri === 'above' || hri === 'both') {
     ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`
@@ -96,13 +114,14 @@ export function drawBarcode1D(
   }
 
   let curX = startX
-  const barY = opts.y + topTextOffset
   for (let i = 0; i < widths.length; i++) {
-    const w = widths[i] * modW
+    const nextX = curX + widths[i] * modW
     if (i % 2 === 0) {
-      ctx.fillRect(Math.round(curX), Math.round(barY), Math.max(1, Math.round(w)), opts.height)
+      const x0 = Math.round(curX)
+      const x1 = Math.max(x0 + 1, Math.round(nextX))
+      ctx.fillRect(x0, Math.round(barY), x1 - x0, opts.height)
     }
-    curX += w
+    curX = nextX
   }
 
   if (hri === 'below' || hri === 'both') {
@@ -154,18 +173,18 @@ const QR_VERSIONS_L: QrVersionSpec[] = [
 
 const GF_EXP = new Uint8Array(512)
 const GF_LOG = new Uint8Array(256)
-;(() => {
-  let x = 1
-  for (let i = 0; i < 255; i++) {
-    GF_EXP[i] = x
-    GF_LOG[x] = i
-    x <<= 1
-    if (x & 0x100) x ^= 0x11d
-  }
-  for (let i = 255; i < 512; i++) {
-    GF_EXP[i] = GF_EXP[i - 255]
-  }
-})()
+  ; (() => {
+    let x = 1
+    for (let i = 0; i < 255; i++) {
+      GF_EXP[i] = x
+      GF_LOG[x] = i
+      x <<= 1
+      if (x & 0x100) x ^= 0x11d
+    }
+    for (let i = 255; i < 512; i++) {
+      GF_EXP[i] = GF_EXP[i - 255]
+    }
+  })()
 
 function gfMul(a: number, b: number): number {
   if (a === 0 || b === 0) return 0
@@ -428,7 +447,18 @@ export function drawQrCode(
   else if (opts.align === 'right') startX -= sizePx
 
   ctx.save()
-  ctx.fillStyle = opts.color ?? '#000000'
+  const qrColor = opts.color ?? '#000000'
+  if (qrColor !== '#ffffff') {
+    const quietPad = mod * 3
+    ctx.fillStyle = '#fcfcfb'
+    ctx.fillRect(
+      Math.max(0, Math.floor(startX - quietPad)),
+      Math.max(0, Math.floor(opts.y - quietPad)),
+      sizePx + quietPad * 2,
+      sizePx + quietPad * 2,
+    )
+  }
+  ctx.fillStyle = qrColor
   for (let r = 0; r < count; r++) {
     for (let c = 0; c < count; c++) {
       if (matrix[r][c]) {

@@ -76,6 +76,8 @@ export function buildTable(
   topMesh.receiveShadow = true
   tableGroup.add(topMesh)
 
+  const tableMeshes: Array<InstanceType<ThreeModule['Mesh']>> = [topMesh]
+
   // Table steel legs & apron frame
   const metalMat = new THREE.MeshStandardMaterial({
     color: '#1f2937',
@@ -99,6 +101,7 @@ export function buildTable(
     leg.castShadow = true
     leg.receiveShadow = true
     tableGroup.add(leg)
+    tableMeshes.push(leg)
   }
 
   // Subtle under-table crossbar frame (front beam leaves opening for under-table cash drawer)
@@ -114,6 +117,7 @@ export function buildTable(
   beamBack.position.set(0, TABLE_TOP_Y - TABLE_THICKNESS - 55, -legOffsetZ)
   beamBack.castShadow = true
   tableGroup.add(beamBack)
+  tableMeshes.push(beamBack)
 
   const beamFrontLeft = new THREE.Mesh(beamSideLeftGeo, metalMat)
   beamFrontLeft.position.set(
@@ -123,6 +127,7 @@ export function buildTable(
   )
   beamFrontLeft.castShadow = true
   tableGroup.add(beamFrontLeft)
+  tableMeshes.push(beamFrontLeft)
 
   const beamFrontRight = new THREE.Mesh(beamSideRightGeo, metalMat)
   beamFrontRight.position.set(
@@ -132,13 +137,19 @@ export function buildTable(
   )
   beamFrontRight.castShadow = true
   tableGroup.add(beamFrontRight)
+  tableMeshes.push(beamFrontRight)
 
   for (const bx of [-legOffsetX, legOffsetX]) {
     const beam = new THREE.Mesh(beamZGeo, metalMat)
     beam.position.set(bx, TABLE_TOP_Y - TABLE_THICKNESS - 55, 0)
     beam.castShadow = true
     tableGroup.add(beam)
+    tableMeshes.push(beam)
   }
 
   webglScene.add(tableGroup)
+  return {
+    tableGroup,
+    tableMeshes,
+  }
 }

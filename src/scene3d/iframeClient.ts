@@ -68,6 +68,25 @@ export interface PrinterPrintedPayload {
   heightPx: number
 }
 
+export interface BarcodeScanPayload {
+  [key: string]: unknown
+  /** Decoded 1D barcode or 2D QR code string */
+  code: string
+  /** Alias for `code` */
+  text: string
+  /** Detected symbology, e.g. 'Code128', 'EAN13', 'QRCode' */
+  format: string
+  /** Target tablet ID ('pos-center') */
+  tabletId: 'pos-center'
+  /** Unix timestamp in ms (`Date.now()`) */
+  timestamp: number
+}
+
+export type BarcodeScanCallback = (
+  code: string,
+  payload: BarcodeScanPayload,
+) => void
+
 export interface ScreensChangedPayload {
   [key: string]: unknown
   tabletId?: string
@@ -668,6 +687,25 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     })
   }
 
+  /**
+   * Register a callback for hardware barcode / QR scans collected by the 3D handheld
+   * barcode scanner (delivered to the 12" center POS tablet `'pos-center'`).
+   * Invokes `callback(code, payload)` with the scanned string as the first argument.
+   * Returns an unsubscribe function.
+   */
+  const onBarcodeScan = (callback: BarcodeScanCallback): (() => void) => {
+    return on<BarcodeScanPayload>('scanner:scan', (data) => {
+      const code =
+        typeof data.code === 'string'
+          ? data.code
+          : typeof data.text === 'string'
+            ? data.text
+            : ''
+      if (!code) return
+      callback(code, data)
+    })
+  }
+
   const dispose = () => {
     if (disposed) return
     disposed = true
@@ -721,6 +759,7 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     onPairingPin,
     waitForPairingPin,
     ackPairingPin,
+    onBarcodeScan,
     dispose,
   }
 }
