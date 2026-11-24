@@ -2,6 +2,7 @@ import type {
   FocusViewId,
   ScreenPowerSummary,
   TabletInstance,
+  ZebraMediaInfo,
 } from './types'
 
 export const SCENE_CHANNEL_ID = 'quixpos-scene3d'
@@ -23,6 +24,7 @@ export interface ScenePresenceState {
   drawerOpen: boolean
   pointerLocked: boolean
   screens: Record<string, ScreenPowerSummary>
+  zebraMedia: ZebraMediaInfo
 }
 
 export interface ScenePresencePayload extends ScenePresenceState {
@@ -151,6 +153,15 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
           drawerOpen: false,
           pointerLocked: false,
           screens: {},
+          zebraMedia: {
+            id: '101x51',
+            label: '101 × 51 mm',
+            dpi: 203,
+            widthMm: 101,
+            heightMm: 51,
+            widthPx: 807,
+            heightPx: 408,
+          },
         }
 
     const payload: ScenePresencePayload = {
@@ -163,6 +174,7 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
       drawerOpen: state.drawerOpen,
       pointerLocked: state.pointerLocked,
       screens: state.screens,
+      zebraMedia: state.zebraMedia,
       peers: tablets.map((t) => t.spec.id),
     }
 
@@ -219,7 +231,12 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
     // Built-in presence handshake probe & host-only pull queries
     if (name === 'scene:ping') {
       sendPresenceToTablet(senderTablet)
-    } else if (name !== 'pos:pairing:get' && name !== 'screens:get') {
+    } else if (
+      name !== 'pos:pairing:get' &&
+      name !== 'screens:get' &&
+      name !== 'printer:info' &&
+      name !== 'printer:media:get'
+    ) {
       // Relay broadcast message to all other loaded iframes on the channel
       for (const peer of tablets) {
         if (peer.spec.id !== senderId) {

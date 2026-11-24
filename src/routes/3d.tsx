@@ -4,12 +4,15 @@ import {
   mountBackgroundAudio,
   readStoredAudioSettings,
 } from '../scene3d/backgroundAudio'
+import { DEFAULT_ZEBRA_REEL_ID, getZebraReelById } from '../scene3d/config'
 import { mountSceneEngine } from '../scene3d/createSceneEngine'
 import { SceneHud } from '../scene3d/SceneHud'
 import type {
   FocusViewId,
   SceneController,
   TargetedDevice,
+  ZebraMediaInfo,
+  ZebraReelId,
 } from '../scene3d/types'
 import '../threeD.css'
 
@@ -37,6 +40,10 @@ export function ThreeDRoute() {
   const [activeView, setActiveView] = useState<FocusViewId | null>('total')
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isAudioMuted, setIsAudioMuted] = useState(false)
+  const [zebraMedia, setZebraMedia] = useState<ZebraMediaInfo>(() =>
+    getZebraReelById(DEFAULT_ZEBRA_REEL_ID),
+  )
+  const [isReelPickerOpen, setIsReelPickerOpen] = useState(false)
 
   useEffect(() => {
     const stageEl = stageRef.current
@@ -70,6 +77,8 @@ export function ThreeDRoute() {
         onTargetChange: setTargetedTablet,
         onActiveViewChange: setActiveView,
         onDrawerChange: setIsDrawerOpen,
+        onZebraReelChange: setZebraMedia,
+        onZebraReelPickerOpen: () => setIsReelPickerOpen(true),
       },
     })
     const storedAudio = readStoredAudioSettings()
@@ -115,6 +124,11 @@ export function ThreeDRoute() {
     })
   }
 
+  const handleSelectZebraReel = (reelId: ZebraReelId) => {
+    controllerRef.current?.setZebraReel(reelId)
+    setIsReelPickerOpen(false)
+  }
+
   return (
     <div class={`scene3d-page ${isTouchMode ? 'is-touch' : ''}`}>
       <div
@@ -137,9 +151,13 @@ export function ThreeDRoute() {
           isAudioMuted={isAudioMuted}
           activeView={activeView}
           targetedTablet={targetedTablet}
+          zebraMedia={zebraMedia}
+          isReelPickerOpen={isReelPickerOpen}
           stickRefs={stickRefs}
           onSelectView={(view) => controllerRef.current?.navigateToView(view)}
           onToggleAudioMute={handleToggleAudioMute}
+          onSelectZebraReel={handleSelectZebraReel}
+          onCloseReelPicker={() => setIsReelPickerOpen(false)}
         />
       </div>
     </div>

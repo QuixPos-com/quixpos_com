@@ -4,9 +4,11 @@ import {
   stepCameraTween,
 } from './cameraPhysics'
 import {
+  DEFAULT_ZEBRA_REEL_ID,
   DRAWER_D,
   DRAWER_OPEN_OFFSET,
   EYE_HEIGHT,
+  getZebraReelById,
   SPAWN_PITCH,
   SPAWN_POS,
   SPAWN_YAW,
@@ -38,6 +40,8 @@ import type {
   ScreenPowerSummary,
   TargetKind,
   TouchStickRefs,
+  ZebraMediaInfo,
+  ZebraReelId,
 } from './types'
 
 export interface MountSceneOptions {
@@ -67,6 +71,8 @@ export function mountSceneEngine({
   let setTabletPowerImpl: ((tabletId: string, poweredOn: boolean) => void) | null =
     null
   let toggleTabletPowerImpl: ((tabletId: string) => void) | null = null
+  let setZebraReelImpl: ((reelId: ZebraReelId) => void) | null = null
+  let activeZebraMedia: ZebraMediaInfo = getZebraReelById(DEFAULT_ZEBRA_REEL_ID)
   let printZplImpl: ((zpl: string) => void) | null = null
   let printEscPosImpl:
     | ((payload: string | Uint8Array | number[]) => void)
@@ -188,7 +194,9 @@ export function mountSceneEngine({
       webglScene,
       disposables,
     )
-    buildZebraPrinter(THREE, webglScene, disposables)
+    const { zebraTargets, zebraLatchMat, setZebraReelVisual } =
+      buildZebraPrinter(THREE, webglScene, disposables)
+    setZebraReelVisual(activeZebraMedia.widthMm)
     buildBarcodeScanner(THREE, webglScene, disposables)
 
     const printManager = createPrintManager(
@@ -196,10 +204,12 @@ export function mountSceneEngine({
       webglScene,
       printerNetLedMat,
     )
+    printManager.setZebraMedia(activeZebraMedia)
     disposables.push(printManager)
 
     const raycastTargets = [
       ...powerTargets,
+      ...zebraTargets,
       ...plateTargets,
       ...cutoutTargets,
       ...drawerTargets,
@@ -226,6 +236,7 @@ export function mountSceneEngine({
       lastMouseX: -9999,
       lastMouseY: -9999,
       pressedKeys: new Set<string>(),
+      wheelMoveY: 0,
       touchMoveX: 0,
       touchMoveY: 0,
       touchAimX: 0,
@@ -472,14 +483,19 @@ export function mountSceneEngine({
       raycaster,
       state,
       tabletInstances,
+      cutoutTargets,
       plateTargets,
       drawerTargets,
       powerTargets,
+      zebraTargets,
       stickRefs,
       callbacks: sceneCallbacks,
       toggleCashDrawer,
       ensureCashDrawerOpen,
       reloadTablet: handleBezelPowerButton,
+      openZebraReelPicker: () => {
+        callbacks.onZebraReelPickerOpen?.()
+      },
     })
 
     const validFocusViews = new Set<NavPresetId>([
@@ -626,6 +642,7 @@ export function mountSceneEngine({
         drawerOpen,
         pointerLocked: state.pointerLocked,
         screens: getControllableScreensMap(),
+        zebraMedia: activeZebraMedia,
       }),
       (loadedTabletId) => {
         deliverPendingPairingToTablet(loadedTabletId)
@@ -809,6 +826,36 @@ export function mountSceneEngine({
       reloadTablet(targetId)
     })
 
+    const applyZebraReel = (reelId: ZebraReelId, broadcast = true) => {
+      const next = getZebraReelById(reelId)
+      activeZebraMedia = next
+      printManager.setZebraMedia(next)
+      setZebraReelVisual(next.widthMm)
+      callbacks.onZebraReelChange?.(next)
+      if (broadcast) {
+        channel.send('printer:mediaChanged', {
+          printer: 'zebra',
+          ...next,
+        })
+      }
+    }
+
+    const replyZebraMedia = (
+      reply: (name: string, data?: Record<string, unknown>) => void,
+    ) => {
+      reply('printer:media', {
+        printer: 'zebra',
+        ...activeZebraMedia,
+      })
+    }
+
+    channel.on('printer:info', (_data, meta) => {
+      replyZebraMedia(meta.reply)
+    })
+    channel.on('printer:media:get', (_data, meta) => {
+      replyZebraMedia(meta.reply)
+    })
+
     const handleZplChannelJob = (
       data: Record<string, unknown>,
       sender: string,
@@ -838,6 +885,9 @@ export function mountSceneEngine({
         jobId,
         droppedPrevious: outcome.droppedPrevious,
         requestedBy: sender,
+        dpi: outcome.dpi,
+        widthPx: outcome.widthPx,
+        heightPx: outcome.heightPx,
       })
     }
 
@@ -873,6 +923,9 @@ export function mountSceneEngine({
         jobId,
         droppedPrevious: outcome.droppedPrevious,
         requestedBy: sender,
+        dpi: outcome.dpi,
+        widthPx: outcome.widthPx,
+        heightPx: outcome.heightPx,
       })
     }
 
@@ -910,6 +963,10 @@ export function mountSceneEngine({
       if (target && !target.spec.canControlScreens) {
         setSingleTabletPower(tabletId, !target.poweredOn, true)
       }
+    }
+
+    setZebraReelImpl = (reelId: ZebraReelId) => {
+      applyZebraReel(reelId, true)
     }
 
     printZplImpl = (zpl: string) => {
@@ -1010,6 +1067,28 @@ export function mountSceneEngine({
           )
         }
       }
+
+      // Subtle orange glow on the Zebra side latches when hovered or targeted
+      let zebraLatchProx = 0
+      if (state.pointerLocked && state.currentTargetKind === 'zebra-latch') {
+        zebraLatchProx = 1
+      } else {
+        for (const zMesh of zebraTargets) {
+          const p = getCursorProximity(
+            zMesh,
+            95,
+            state,
+            stageEl,
+            camera,
+            tmpProjVec,
+          )
+          if (p > zebraLatchProx) zebraLatchProx = p
+        }
+      }
+      zebraLatchMat.emissive.set('#f59e0b')
+      zebraLatchMat.emissiveIntensity +=
+        (0.08 + zebraLatchProx * 0.65 - zebraLatchMat.emissiveIntensity) *
+        hoverSmooth
 
       const btnTargetHover = getCursorProximity(
         cashBtnMesh,
@@ -1160,7 +1239,7 @@ export function mountSceneEngine({
         }
       }
 
-      // Keyboard WASD + left-stick walking
+      // Keyboard WASD + wheel + left-stick walking
       let keyForward = 0
       let keyRight = 0
       if (state.pressedKeys.has('KeyW') || state.pressedKeys.has('ArrowUp')) {
@@ -1176,10 +1255,13 @@ export function mountSceneEngine({
         keyRight -= 1
       }
 
-      // Animate left stick knob on desktop keypresses or viewpoint flight when stick isn't manually dragged
+      const manualForward = keyForward + state.wheelMoveY
+      const hasManualMove = Math.abs(manualForward) > 0.01 || keyRight !== 0
+
+      // Animate left stick knob on desktop keypresses/wheel or viewpoint flight when stick isn't manually dragged
       if (!state.moveStickEngaged) {
-        let targetKx = keyRight !== 0 || keyForward !== 0 ? keyRight : tweenStickMoveX
-        let targetKy = keyRight !== 0 || keyForward !== 0 ? -keyForward : tweenStickMoveY
+        let targetKx = hasManualMove ? keyRight : tweenStickMoveX
+        let targetKy = hasManualMove ? -manualForward : tweenStickMoveY
         const kLen = Math.hypot(targetKx, targetKy)
         if (kLen > 1) {
           targetKx /= kLen
@@ -1229,9 +1311,16 @@ export function mountSceneEngine({
         state.mouseAimVisualY = 0
       }
 
-      const moveForward = keyForward + state.touchMoveY
+      const moveForward = manualForward + state.touchMoveY
       const moveRight = keyRight + state.touchMoveX
       const hasMoveInput = Math.abs(moveForward) > 0.005 || Math.abs(moveRight) > 0.005
+
+      if (state.wheelMoveY !== 0) {
+        state.wheelMoveY *= Math.exp(-10 * dt)
+        if (Math.abs(state.wheelMoveY) < 0.01) {
+          state.wheelMoveY = 0
+        }
+      }
 
       if (hasMoveInput) {
         clearActiveFocusForFreeMove()
@@ -1366,6 +1455,8 @@ export function mountSceneEngine({
     setTabletPower: (tabletId: string, poweredOn: boolean) =>
       setTabletPowerImpl?.(tabletId, poweredOn),
     toggleTabletPower: (tabletId: string) => toggleTabletPowerImpl?.(tabletId),
+    setZebraReel: (reelId: ZebraReelId) => setZebraReelImpl?.(reelId),
+    getZebraMedia: () => activeZebraMedia,
     printZpl: (zpl: string) => printZplImpl?.(zpl),
     printEscPos: (payload: string | Uint8Array | number[]) =>
       printEscPosImpl?.(payload),

@@ -1,4 +1,4 @@
-import type { TabletSpec } from './types'
+import type { TabletSpec, ZebraMediaInfo, ZebraReelId } from './types'
 
 // Scale: 1 world unit = 0.25 mm (4000 units = 1 meter).
 // 27" 16:9 widescreen (1920x1080 CSS px @ scale 1.2418 -> 2384x1341 units, 596x335mm, 27.0" diag)
@@ -48,6 +48,59 @@ export const ZEBRA_X = -844
 export const ZEBRA_Z = 780
 export const ZEBRA_W = 540
 export const ZEBRA_D = 700
+export const ZEBRA_DPI = 203
+
+const mmToDots = (mm: number, dpi = ZEBRA_DPI) =>
+  Math.round((mm * dpi) / 25.4)
+
+export const ZEBRA_REELS: readonly ZebraMediaInfo[] = [
+  {
+    id: '25x13',
+    label: '25 × 13 mm',
+    dpi: ZEBRA_DPI,
+    widthMm: 25,
+    heightMm: 13,
+    widthPx: mmToDots(25),
+    heightPx: mmToDots(13),
+  },
+  {
+    id: '57x32',
+    label: '57 × 32 mm',
+    dpi: ZEBRA_DPI,
+    widthMm: 57,
+    heightMm: 32,
+    widthPx: mmToDots(57),
+    heightPx: mmToDots(32),
+  },
+  {
+    id: '101x51',
+    label: '101 × 51 mm',
+    dpi: ZEBRA_DPI,
+    widthMm: 101,
+    heightMm: 51,
+    widthPx: mmToDots(101),
+    heightPx: mmToDots(51),
+  },
+  {
+    id: '101x152',
+    label: '101 × 152 mm',
+    dpi: ZEBRA_DPI,
+    widthMm: 101,
+    heightMm: 152,
+    widthPx: mmToDots(101),
+    heightPx: mmToDots(152),
+  },
+]
+
+export const DEFAULT_ZEBRA_REEL_ID: ZebraReelId = '101x51'
+
+export function getZebraReelById(id: string): ZebraMediaInfo {
+  return (
+    ZEBRA_REELS.find((r) => r.id === id) ??
+    ZEBRA_REELS.find((r) => r.id === DEFAULT_ZEBRA_REEL_ID) ??
+    ZEBRA_REELS[0]
+  )
+}
 
 // Inateck BCST-70 barcode scanner
 export const SCANNER_X = 2580

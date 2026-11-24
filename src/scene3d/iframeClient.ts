@@ -29,12 +29,26 @@ export interface ScreenPowerSummary {
   enabled: boolean
 }
 
+export type ZebraReelId = '25x13' | '57x32' | '101x51' | '101x152'
+
+export interface ZebraMediaInfo {
+  [key: string]: unknown
+  id: ZebraReelId
+  label: string
+  dpi: number
+  widthMm: number
+  heightMm: number
+  widthPx: number
+  heightPx: number
+}
+
 export interface ScenePresenceInfo {
   version: number
   tabletId: string
   title: string
   canControlScreens: boolean
   printers: Array<'zebra' | 'epson'>
+  zebraMedia?: ZebraMediaInfo
   activeView: 'total' | 'left' | 'center' | 'right' | 'drawer' | null
   drawerOpen: boolean
   pointerLocked: boolean
@@ -49,6 +63,9 @@ export interface PrinterPrintedPayload {
   jobId?: string
   droppedPrevious: boolean
   requestedBy: string
+  dpi: number
+  widthPx: number
+  heightPx: number
 }
 
 export interface ScreensChangedPayload {
@@ -149,10 +166,12 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
   const presenceListeners = new Set<(info: ScenePresenceInfo) => void>()
   const pairingListeners = new Set<PosPairingCallback>()
   const pairingListenerLastKey = new WeakMap<PosPairingCallback, string>()
+  const zebraMediaListeners = new Set<(media: ZebraMediaInfo) => void>()
 
   let disposed = false
   let hostOrigin: string | null = null
   let presenceInfo: ScenePresenceInfo | null = null
+  let latestZebraMedia: ZebraMediaInfo | null = null
   let latestPairingPayload: PosPairingPayload | null = null
   let latestPairingEntry: PosPairingEntry | null = null
 
@@ -264,8 +283,24 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
 
     if (name === 'scene:presence') {
       presenceInfo = data as unknown as ScenePresenceInfo
+      if (isPlainObject(presenceInfo.zebraMedia)) {
+        latestZebraMedia = presenceInfo.zebraMedia as ZebraMediaInfo
+        for (const cb of Array.from(zebraMediaListeners)) {
+          cb(latestZebraMedia)
+        }
+      }
       for (const cb of Array.from(presenceListeners)) {
         cb(presenceInfo)
+      }
+    } else if (name === 'printer:mediaChanged' || name === 'printer:media') {
+      if (typeof data.dpi === 'number' && typeof data.heightPx === 'number') {
+        latestZebraMedia = data as unknown as ZebraMediaInfo
+        if (presenceInfo) {
+          presenceInfo = { ...presenceInfo, zebraMedia: latestZebraMedia }
+        }
+        for (const cb of Array.from(zebraMediaListeners)) {
+          cb(latestZebraMedia)
+        }
       }
     } else if (
       (name === 'screens:changed' || name === 'screens:state') &&
@@ -531,6 +566,32 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     })
   }
 
+  /** Synchronous getter for the loaded Zebra ZD420 label reel (`dpi`, `heightPx`, `widthPx`, mm) */
+  const getZebraMedia = (): ZebraMediaInfo | null => latestZebraMedia
+
+  /** Request the current Zebra ZD420 reel size & DPI from the 3D host */
+  const requestZebraMedia = () => {
+    send('printer:media:get', {})
+  }
+
+  /**
+   * Subscribe to Zebra ZD420 reel/media info (`dpi`, `heightPx`, `widthPx`, `widthMm`, `heightMm`).
+   * Fires immediately if already known, otherwise queries the 3D host, and fires on every reel change.
+   */
+  const onZebraMediaChanged = (
+    callback: (media: ZebraMediaInfo) => void,
+  ): (() => void) => {
+    zebraMediaListeners.add(callback)
+    if (latestZebraMedia) {
+      callback(latestZebraMedia)
+    } else {
+      requestZebraMedia()
+    }
+    return () => {
+      zebraMediaListeners.delete(callback)
+    }
+  }
+
   // ── POS / Customer Terminal Pairing PIN Helpers ──────────────────────────
 
   /** Pull any waiting pairing PIN for this tablet from the 3D host */
@@ -616,6 +677,8 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     listeners.clear()
     presenceListeners.clear()
     pairingListeners.clear()
+    zebraMediaListeners.clear()
+    latestZebraMedia = null
     latestPairingEntry = null
     latestPairingPayload = null
   }
@@ -650,6 +713,9 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     printZpl,
     printEscPos,
     onPrinted,
+    getZebraMedia,
+    requestZebraMedia,
+    onZebraMediaChanged,
     requestPairingPin,
     getPairingPin,
     onPairingPin,

@@ -221,10 +221,18 @@ function decodeZplGfAscii(
   return result
 }
 
+export interface ZplRenderOptions {
+  defaultWidthDots?: number
+  defaultHeightDots?: number
+}
+
 /**
  * Emulates ZPL II label commands onto an HTMLCanvasElement (203 dpi thermal label).
  */
-export function renderZplToCanvas(zplSource: string): ZplRenderResult {
+export function renderZplToCanvas(
+  zplSource: string,
+  options: ZplRenderOptions = {},
+): ZplRenderResult {
   const allCmds = tokenizeZpl(zplSource)
 
   // If multiple ^XA...^XZ labels exist in one job, render the last complete one
@@ -238,7 +246,7 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
     cmds = allCmds.slice(lastXa + 1, endXz > lastXa ? endXz : undefined)
   }
 
-  let printWidth = 812 // Standard 4" @ 203 dpi
+  let printWidth = options.defaultWidthDots ?? 812 // Standard 4" @ 203 dpi
   let explicitLength = 0
   let maxEstimatedY = 420
   let curYCheck = 0
@@ -248,10 +256,10 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
     const cleanArgs = c.args.trim()
     if (c.code === 'PW') {
       const [w] = parseNums(cleanArgs)
-      if (w && w >= 160 && w <= 2400) printWidth = Math.round(w)
+      if (w && w >= 80 && w <= 2400) printWidth = Math.round(w)
     } else if (c.code === 'LL') {
       const [l] = parseNums(cleanArgs)
-      if (l && l >= 120 && l <= 3600) explicitLength = Math.round(l)
+      if (l && l >= 60 && l <= 3600) explicitLength = Math.round(l)
     } else if (c.code === 'LH') {
       const [, hy] = parseNums(cleanArgs)
       homeYCheck = hy ?? 0
@@ -271,9 +279,12 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
     }
   }
 
-  const labelHeight = explicitLength > 0
-    ? explicitLength
-    : Math.min(1800, Math.max(460, maxEstimatedY + 40))
+  const labelHeight =
+    explicitLength > 0
+      ? explicitLength
+      : options.defaultHeightDots && options.defaultHeightDots > 0
+        ? options.defaultHeightDots
+        : Math.min(1800, Math.max(460, maxEstimatedY + 40))
 
   const canvas = document.createElement('canvas')
   canvas.width = printWidth

@@ -9,7 +9,20 @@ export interface Disposable {
   dispose: () => void
 }
 
-export type TargetKind = 'label' | 'screen' | 'drawer' | 'power'
+export type TargetKind = 'label' | 'screen' | 'drawer' | 'power' | 'zebra-latch'
+
+export type ZebraReelId = '25x13' | '57x32' | '101x51' | '101x152'
+
+export interface ZebraMediaInfo {
+  [key: string]: unknown
+  id: ZebraReelId
+  label: string
+  dpi: number
+  widthMm: number
+  heightMm: number
+  widthPx: number
+  heightPx: number
+}
 
 export type NavPresetId = 'total' | 'left' | 'center' | 'right' | 'drawer'
 
@@ -163,6 +176,8 @@ export interface SceneCallbacks {
   onTargetChange: (target: TargetedDevice | null) => void
   onActiveViewChange: (view: FocusViewId | null) => void
   onDrawerChange: (isOpen: boolean) => void
+  onZebraReelChange?: (media: ZebraMediaInfo) => void
+  onZebraReelPickerOpen?: () => void
 }
 
 export interface SceneController {
@@ -172,6 +187,8 @@ export interface SceneController {
   toggleDrawer: () => void
   setTabletPower: (tabletId: string, poweredOn: boolean) => void
   toggleTabletPower: (tabletId: string) => void
+  setZebraReel: (reelId: ZebraReelId) => void
+  getZebraMedia: () => ZebraMediaInfo
   printZpl: (zpl: string) => void
   printEscPos: (payload: string | Uint8Array | number[]) => void
   dispose: () => void

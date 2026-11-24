@@ -124,11 +124,18 @@ export function buildZebraPrinter(
   zebraGroup.add(zebraWindow)
 
   // Yellow-orange clamshell release latches + side seam + rear hinge caps
+  const zebraTargets: Array<InstanceType<ThreeModule['Mesh']>> = []
   for (const lx of [-(ZEBRA_W / 2 + 2), ZEBRA_W / 2 + 2]) {
     const latch = new THREE.Mesh(zebraLatchGeo, zebraLatchMat)
     latch.position.set(lx, 185, 130)
     latch.castShadow = true
+    latch.userData = {
+      tabletTitle: 'Zebra ZD420',
+      tabletId: 'zebra-latch',
+      kind: 'zebra-latch' as const,
+    }
     zebraGroup.add(latch)
+    zebraTargets.push(latch)
 
     const hinge = new THREE.Mesh(zebraHingeGeo, zebraPlinthMat)
     hinge.rotation.z = Math.PI / 2
@@ -150,4 +157,15 @@ export function buildZebraPrinter(
   const zebraSlot = new THREE.Mesh(zebraSlotGeo, zebraSlotMat)
   zebraSlot.position.set(0, 196, 338)
   zebraGroup.add(zebraSlot)
+
+  const setZebraReelVisual = (widthMm: number) => {
+    const widthRatio = Math.max(0.24, Math.min(1, widthMm / 101))
+    zebraRoll.scale.set(1, widthRatio, 1)
+  }
+
+  return {
+    zebraTargets,
+    zebraLatchMat,
+    setZebraReelVisual,
+  }
 }

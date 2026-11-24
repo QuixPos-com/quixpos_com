@@ -1,9 +1,13 @@
+import { useEffect } from 'preact/hooks'
 import { Link } from '../components/Router'
+import { ZEBRA_REELS } from './config'
 import type {
   FocusViewId,
   NavPresetId,
   TargetedDevice,
   TouchStickRefs,
+  ZebraMediaInfo,
+  ZebraReelId,
 } from './types'
 
 export interface SceneHudProps {
@@ -12,9 +16,13 @@ export interface SceneHudProps {
   isAudioMuted: boolean
   activeView: FocusViewId | null
   targetedTablet: TargetedDevice | null
+  zebraMedia: ZebraMediaInfo
+  isReelPickerOpen: boolean
   stickRefs: TouchStickRefs
   onSelectView: (view: NavPresetId) => void
   onToggleAudioMute: () => void
+  onSelectZebraReel: (reelId: ZebraReelId) => void
+  onCloseReelPicker: () => void
 }
 
 const NAV_ITEMS: Array<{
@@ -34,10 +42,25 @@ export function SceneHud({
   isAudioMuted,
   activeView,
   targetedTablet,
+  zebraMedia,
+  isReelPickerOpen,
   stickRefs,
   onSelectView,
   onToggleAudioMute,
+  onSelectZebraReel,
+  onCloseReelPicker,
 }: SceneHudProps) {
+  useEffect(() => {
+    if (!isReelPickerOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onCloseReelPicker()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [isReelPickerOpen, onCloseReelPicker])
   return (
     <>
       <div
@@ -127,15 +150,67 @@ export function SceneHud({
                     ? 'Klicken oder E drücken zum Ausschalten'
                     : 'Klicken oder E drücken zum Einschalten'
                   : 'Klicken oder E drücken zum Neu laden'
-                : targetedTablet.kind === 'drawer'
-                  ? isDrawerOpen
-                    ? 'Klicken oder E drücken zum Schließen'
-                    : 'Klicken oder E drücken zum Öffnen'
-                  : targetedTablet.kind === 'label'
-                    ? 'Klicken oder E drücken zum Fokussieren'
-                    : targetedTablet.poweredOn === false
-                      ? 'Ausgeschaltet'
-                      : 'Klicken oder E drücken zum Bedienen'}
+                : targetedTablet.kind === 'zebra-latch'
+                  ? 'Klicken oder E drücken für Rollenwechsel'
+                  : targetedTablet.kind === 'drawer'
+                    ? isDrawerOpen
+                      ? 'Klicken oder E drücken zum Schließen'
+                      : 'Klicken oder E drücken zum Öffnen'
+                    : targetedTablet.kind === 'label'
+                      ? 'Klicken oder E drücken zum Fokussieren'
+                      : targetedTablet.poweredOn === false
+                        ? 'Ausgeschaltet'
+                        : 'Klicken oder E drücken zum Bedienen'}
+          </div>
+        </div>
+      )}
+
+      {isReelPickerOpen && (
+        <div
+          class="scene3d-reel-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Zebra ZD420 Rollenwechsel"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onCloseReelPicker()
+          }}
+        >
+          <div class="scene3d-reel-card">
+            <div class="scene3d-reel-header">
+              <div>
+                <div class="scene3d-reel-title">Zebra ZD420 · Etikettenrolle</div>
+                <div class="scene3d-reel-sub">
+                  Aktiv: {zebraMedia.label} ({zebraMedia.widthPx} ×{' '}
+                  {zebraMedia.heightPx} px · {zebraMedia.dpi} DPI)
+                </div>
+              </div>
+              <button
+                type="button"
+                class="scene3d-reel-close"
+                onClick={onCloseReelPicker}
+                aria-label="Schließen"
+              >
+                ✕
+              </button>
+            </div>
+            <div class="scene3d-reel-grid">
+              {ZEBRA_REELS.map((reel) => {
+                const active = reel.id === zebraMedia.id
+                return (
+                  <button
+                    key={reel.id}
+                    type="button"
+                    class={`scene3d-reel-option ${active ? 'is-active' : ''}`}
+                    onClick={() => onSelectZebraReel(reel.id)}
+                  >
+                    <span class="scene3d-reel-size">{reel.label}</span>
+                    <span class="scene3d-reel-meta">
+                      {reel.widthPx} × {reel.heightPx} px · {reel.dpi} DPI
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -175,9 +250,54 @@ export function SceneHud({
         <div class="scene3d-stick-crosshair" aria-hidden="true" />
         <div class="scene3d-stick-deadzone" aria-hidden="true" />
         <div ref={stickRefs.moveKnobRef} class="scene3d-stick-knob">
-          <span class="scene3d-knob-wasd" aria-hidden="true">
-            <span>W</span>
-            <span>ASD</span>
+          <span class="scene3d-knob-move-combo" aria-hidden="true">
+            <span class="scene3d-knob-wasd">
+              <span>W</span>
+              <span>ASD</span>
+            </span>
+            <span class="scene3d-knob-slash">/</span>
+            <svg
+              class="scene3d-knob-wheel"
+              viewBox="0 0 18 26"
+              width="11"
+              height="17"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 3.5 L9 1 L12 3.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <rect
+                x="2.5"
+                y="5"
+                width="13"
+                height="16"
+                rx="6.5"
+                fill="rgba(255, 255, 255, 0.22)"
+                stroke="currentColor"
+                stroke-width="1.8"
+              />
+              <rect
+                x="7.4"
+                y="7.5"
+                width="3.2"
+                height="5.5"
+                rx="1.6"
+                fill="currentColor"
+              />
+              <path
+                d="M6 22.5 L9 25 L12 22.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
           </span>
         </div>
       </div>

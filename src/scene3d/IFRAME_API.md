@@ -206,6 +206,23 @@ window.parent.postMessage(
 )
 ```
 
+**Zebra ZD420 Reel Sizes & Media Reporting (203 DPI):**
+
+Pressing either orange clamshell latch on the sides of the 3D Zebra ZD420 opens the reel switcher with 4 presets:
+
+| Reel `id` | Physical Size | `widthPx` × `heightPx` | `dpi` |
+| --- | --- | --- | --- |
+| `'25x13'` | 25 × 13 mm | `200 × 104` | `203` |
+| `'57x32'` | 57 × 32 mm | `456 × 256` | `203` |
+| `'101x51'` *(default)* | 101 × 51 mm | `807 × 408` | `203` |
+| `'101x152'` | 101 × 152 mm | `807 × 1215` | `203` |
+
+The loaded reel's `dpi`, `heightPx`, `widthPx`, `widthMm`, and `heightMm` are reported via:
+- `scene:presence` (`data.zebraMedia`)
+- `'printer:mediaChanged'` broadcast whenever the reel is swapped
+- `'printer:media:get'` (or `'printer:info'`) → direct reply `'printer:media'`
+- `'printer:printed'` (`dpi`, `widthPx`, `heightPx`)
+
 **Supported ZPL II commands:**
 - Label setup: `^XA` ... `^XZ`, `^PW<width>`, `^LL<length>`, `^LH<x>,<y>`, `^CF<font>,<h>,<w>`, `^CI`
 - Positioning & text: `^FO<x>,<y>`, `^FT<x>,<y>`, `^A0N,<h>,<w>` (orientations `N`, `R`, `I`, `B`), `^FB<width>,<maxLines>,<lineSpacing>,<align>` (including `\&` line breaks), `^FD...^FS`, `^FH` hex escapes (`_C3_A4` UTF-8 / Latin-1), `^FR` white-on-black reverse print

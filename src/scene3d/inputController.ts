@@ -27,11 +27,13 @@ export interface InputControllerParams {
   plateTargets: Array<InstanceType<ThreeModule['Mesh']>>
   drawerTargets: Array<InstanceType<ThreeModule['Mesh']>>
   powerTargets: Array<InstanceType<ThreeModule['Mesh']>>
+  zebraTargets: Array<InstanceType<ThreeModule['Mesh']>>
   stickRefs: TouchStickRefs
   callbacks: SceneCallbacks
   toggleCashDrawer: () => void
   ensureCashDrawerOpen: () => void
   reloadTablet: (tabletId: string) => void
+  openZebraReelPicker: () => void
 }
 
 const MAX_POSE_HISTORY = 20
@@ -46,11 +48,13 @@ export function attachInputController({
   plateTargets,
   drawerTargets,
   powerTargets,
+  zebraTargets,
   stickRefs,
   callbacks,
   toggleCashDrawer,
   ensureCashDrawerOpen,
   reloadTablet,
+  openZebraReelPicker,
 }: InputControllerParams) {
   let disposed = false
   let dragLooking = false
@@ -250,6 +254,11 @@ export function attachInputController({
     return raycaster.intersectObjects(drawerTargets, false).length > 0
   }
 
+  const hitZebraLatchAtClient = (clientX: number, clientY: number) => {
+    if (!setNdcFromClient(clientX, clientY)) return false
+    return raycaster.intersectObjects(zebraTargets, false).length > 0
+  }
+
   const setIframeDragShield = (shielded: boolean) => {
     state.dragTurning = shielded
     const mode = shielded || state.pointerLocked ? 'none' : 'auto'
@@ -429,6 +438,9 @@ export function attachInputController({
       if (document.pointerLockElement === stageEl) {
         if (state.currentTargetKind === 'power' && state.currentTargetId) {
           reloadTablet(state.currentTargetId)
+        } else if (state.currentTargetKind === 'zebra-latch') {
+          document.exitPointerLock()
+          openZebraReelPicker()
         } else if (state.currentTargetKind === 'drawer') {
           toggleCashDrawer()
         } else if (state.currentTargetId && state.currentTargetKind === 'label') {
@@ -566,17 +578,18 @@ export function attachInputController({
       lastDragY = e.clientY
     } else {
       const hitPower = hitPowerAtClient(e.clientX, e.clientY)
-      const hitPlate = !hitPower ? hitPlateAtClient(e.clientX, e.clientY) : null
-      const hitDrawer = !hitPower && !hitPlate && hitDrawerAtClient(e.clientX, e.clientY)
+      const hitZebra = !hitPower && hitZebraLatchAtClient(e.clientX, e.clientY)
+      const hitPlate = !hitPower && !hitZebra ? hitPlateAtClient(e.clientX, e.clientY) : null
+      const hitDrawer = !hitPower && !hitZebra && !hitPlate && hitDrawerAtClient(e.clientX, e.clientY)
       stageEl.style.cursor =
-        hitPower || hitDrawer || hitPlate || isFocusedWithBlur() ? 'pointer' : ''
+        hitPower || hitZebra || hitDrawer || hitPlate || isFocusedWithBlur() ? 'pointer' : ''
     }
   }
 
   const onStageMouseDown = (e: MouseEvent) => {
     if (Date.now() - lastTouchTime < 700) return
     const target = e.target as HTMLElement | null
-    if (target && target.closest('.scene3d-hud-top, .scene3d-hud-bottom')) {
+    if (target && target.closest('.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal')) {
       return
     }
 
@@ -617,6 +630,9 @@ export function attachInputController({
       if (!holdPointerLocked && e.button === 0 && state.currentTargetId) {
         if (state.currentTargetKind === 'power') {
           reloadTablet(state.currentTargetId)
+        } else if (state.currentTargetKind === 'zebra-latch') {
+          document.exitPointerLock()
+          openZebraReelPicker()
         } else if (state.currentTargetKind === 'drawer') {
           toggleCashDrawer()
         } else if (state.currentTargetKind === 'label') {
@@ -639,6 +655,7 @@ export function attachInputController({
 
       const hitInteractive =
         Boolean(hitPowerAtClient(e.clientX, e.clientY)) ||
+        hitZebraLatchAtClient(e.clientX, e.clientY) ||
         Boolean(hitPlateAtClient(e.clientX, e.clientY)) ||
         hitDrawerAtClient(e.clientX, e.clientY)
       if (!hitInteractive) {
@@ -681,6 +698,10 @@ export function attachInputController({
         reloadTablet(powerId)
         return
       }
+      if (hitZebraLatchAtClient(e.clientX, e.clientY)) {
+        openZebraReelPicker()
+        return
+      }
       const plateId = hitPlateAtClient(e.clientX, e.clientY)
       if (plateId) {
         navigateToFocusView(plateId)
@@ -700,7 +721,7 @@ export function attachInputController({
   const onStageTouchStart = (e: TouchEvent) => {
     lastTouchTime = Date.now()
     const target = e.target as HTMLElement | null
-    if (target && target.closest('.scene3d-hud-top, .scene3d-hud-bottom')) {
+    if (target && target.closest('.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal')) {
       return
     }
 
@@ -790,6 +811,8 @@ export function attachInputController({
           const powerId = hitPowerAtClient(touch.clientX, touch.clientY)
           if (powerId) {
             reloadTablet(powerId)
+          } else if (hitZebraLatchAtClient(touch.clientX, touch.clientY)) {
+            openZebraReelPicker()
           } else {
             const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
             if (plateId) {

@@ -1,13 +1,16 @@
 import {
+  DEFAULT_ZEBRA_REEL_ID,
+  getZebraReelById,
   PRINTER_SIZE,
   PRINTER_X,
   PRINTER_Z,
   TABLE_D,
   TABLE_TOP_Y,
+  ZEBRA_DPI,
   ZEBRA_X,
   ZEBRA_Z,
 } from '../config'
-import type { Disposable, ThreeModule } from '../types'
+import type { Disposable, ThreeModule, ZebraMediaInfo } from '../types'
 import {
   escPosBytesToBase64,
   formatEscPosReadable,
@@ -70,9 +73,14 @@ export interface PrintJobOutcome {
   printer: PrinterKind
   droppedPrevious: boolean
   kickDrawer: boolean
+  dpi: number
+  widthPx: number
+  heightPx: number
 }
 
 export interface PrintManager extends Disposable {
+  setZebraMedia: (media: ZebraMediaInfo) => void
+  getZebraMedia: () => ZebraMediaInfo
   printZpl: (zpl: string, logMeta?: PrintLogMeta) => PrintJobOutcome
   printEscPos: (
     input: {
@@ -126,6 +134,7 @@ export function createPrintManager(
   let disposed = false
   let floorStackCounter = 0
   let ledBlinkPhase = 0
+  let activeZebraMedia: ZebraMediaInfo = getZebraReelById(DEFAULT_ZEBRA_REEL_ID)
 
   const clipPlanes: Record<
     PrinterKind,
@@ -190,11 +199,16 @@ export function createPrintManager(
 
     const cfg = SLOT_CONFIGS[printer]
     const aspect = canvas.height / Math.max(1, canvas.width)
-    const paperW = cfg.paperWorldW
-    const paperH = Math.min(
+    let paperW = cfg.paperWorldW
+    let paperH = Math.min(
       cfg.maxWorldH,
       Math.max(cfg.minWorldH, Math.round(paperW * aspect)),
     )
+    if (printer === 'zebra') {
+      // Physical 1:1 scale (4 world units = 1 mm), capped to the Zebra exit slot width
+      paperW = Math.min(412, Math.max(96, Math.round(activeZebraMedia.widthMm * 4)))
+      paperH = Math.min(640, Math.max(48, Math.round(paperW * aspect)))
+    }
 
     const tex = new THREE.CanvasTexture(canvas)
     tex.colorSpace = THREE.SRGBColorSpace
@@ -260,11 +274,20 @@ export function createPrintManager(
     return droppedPrevious
   }
 
+  const setZebraMedia = (media: ZebraMediaInfo) => {
+    activeZebraMedia = media
+  }
+
+  const getZebraMedia = () => activeZebraMedia
+
   const printZpl = (
     zpl: string,
     logMeta?: PrintLogMeta,
   ): PrintJobOutcome => {
-    const rendered = renderZplToCanvas(zpl)
+    const rendered = renderZplToCanvas(zpl, {
+      defaultWidthDots: activeZebraMedia.widthPx,
+      defaultHeightDots: activeZebraMedia.heightPx,
+    })
     const droppedPrevious = spawnSheetFromCanvas('zebra', rendered.canvas)
 
     const metaSummary = {
@@ -276,6 +299,8 @@ export function createPrintManager(
       jobId: logMeta?.jobId,
       timestamp: new Date().toISOString(),
       charLength: zpl.length,
+      dpi: activeZebraMedia.dpi,
+      reel: activeZebraMedia.id,
       renderedSizeDots: {
         width: rendered.widthDots,
         height: rendered.heightDots,
@@ -304,6 +329,9 @@ export function createPrintManager(
       printer: 'zebra',
       droppedPrevious,
       kickDrawer: false,
+      dpi: activeZebraMedia.dpi,
+      widthPx: rendered.widthDots,
+      heightPx: rendered.heightDots,
     }
   }
 
@@ -364,6 +392,9 @@ export function createPrintManager(
       printer: 'epson',
       droppedPrevious,
       kickDrawer: rendered.kickDrawer,
+      dpi: ZEBRA_DPI,
+      widthPx: rendered.widthDots,
+      heightPx: rendered.heightDots,
     }
   }
 
@@ -479,6 +510,8 @@ export function createPrintManager(
   }
 
   return {
+    setZebraMedia,
+    getZebraMedia,
     printZpl,
     printEscPos,
     update,
