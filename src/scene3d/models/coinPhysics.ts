@@ -5,7 +5,7 @@ const GRAVITY = 28000 // units/s^2 — crisp metallic weight
 const SUB_DT = 1 / 240
 const MAX_SUBSTEPS = 12
 const MAX_SPEED = 6800
-const MAX_TILT = 0.92 // ~52.7 deg
+const MAX_TILT = 0.82 // ~47 deg total radial tilt clamp
 
 // Friction thresholds (mu * GRAVITY)
 const TRAY_FRICTION_MU = 0.085 // slick ABS/polypropylene coin scoop
@@ -371,7 +371,7 @@ export class CoinCupSimulation {
         if (e > maxEnergy) maxEnergy = e
       }
 
-      if (!hasMotion && maxEnergy < 14) {
+      if (!hasMotion && maxEnergy < 24) {
         this.cupCalmTime[cupIdx] += clampedDt
         if (this.cupCalmTime[cupIdx] > 0.3) {
           for (let i = 0; i < coins.length; i++) {
@@ -614,10 +614,14 @@ export class CoinCupSimulation {
             a.vz -= nz * pressure
             d.vx += nx * pressure
             d.vz += nz * pressure
-            // Gentle upward buoyancy when squeezed tightly
-            const lift = Math.min(260, pen * 14) * h
-            a.vy += lift
-            d.vy += lift
+            // Gentle upward buoyancy only while wave is actively surging
+            const pairEnergy =
+              Math.abs(a.vx) + Math.abs(a.vz) + Math.abs(d.vx) + Math.abs(d.vz)
+            if (pairEnergy > 60) {
+              const lift = Math.min(260, pen * 14) * h
+              a.vy += lift
+              d.vy += lift
+            }
           }
         }
       }
@@ -628,13 +632,18 @@ export class CoinCupSimulation {
       const c = coins[i]
       const supportY = this.supportYScratch[i]
       const touchingSupport = c.y <= supportY + 0.9
+      const wasResting = c.y <= supportY + 0.35 && Math.abs(c.vy) < 45
 
       // Inertial force from drawer acceleration (-drawerAccZ)
       const inertialAccZ = -drawerAccZ
       c.vz += inertialAccZ * h
 
-      // Gravity
-      c.vy -= GRAVITY * h
+      // Gravity (skip micro-bounce accumulation if already resting calmly on support)
+      if (!wasResting || c.vy > 0) {
+        c.vy -= GRAVITY * h
+      } else {
+        c.vy = 0
+      }
 
       // Surface friction & fluid drag when resting on tray floor or lower coin
       if (touchingSupport) {
@@ -665,7 +674,7 @@ export class CoinCupSimulation {
       const targetTX = clamp(this.targetTiltXScratch[i], -MAX_TILT, MAX_TILT)
       const targetTZ = clamp(this.targetTiltZScratch[i], -MAX_TILT, MAX_TILT)
       const tiltSpring = touchingSupport ? 195 : 22
-      const tiltDamp = touchingSupport ? 11.5 : 3.2
+      const tiltDamp = touchingSupport ? 14 : 3.2
       c.vTiltX += ((targetTX - c.tiltX) * tiltSpring - c.vTiltX * tiltDamp) * h
       c.vTiltZ += ((targetTZ - c.tiltZ) * tiltSpring - c.vTiltZ * tiltDamp) * h
 
@@ -678,28 +687,35 @@ export class CoinCupSimulation {
       c.x += c.vx * h
       c.y += c.vy * h
       c.z += c.vz * h
-      c.tiltX = clamp(c.tiltX + c.vTiltX * h, -MAX_TILT, MAX_TILT)
-      c.tiltZ = clamp(c.tiltZ + c.vTiltZ * h, -MAX_TILT, MAX_TILT)
+      c.tiltX += c.vTiltX * h
+      c.tiltZ += c.vTiltZ * h
+      const tiltLen = Math.hypot(c.tiltX, c.tiltZ)
+      if (tiltLen > MAX_TILT) {
+        const s = MAX_TILT / tiltLen
+        c.tiltX *= s
+        c.tiltZ *= s
+      }
       c.yaw += c.vYaw * h
 
       // Floor / support collision + metallic rocking rattle
       const minFloorY =
         b.floorY + floorOffsetForTilt(c.radius, c.thickness, c.tiltX, c.tiltZ)
       const activeFloor = Math.max(minFloorY, supportY)
+      const bounceThreshold = Math.max(220, GRAVITY * h * 2.0)
       if (c.y < activeFloor) {
         c.y = activeFloor
         if (c.vy < 0) {
           const impactVy = -c.vy
-          if (impactVy > 95) {
+          if (!wasResting && impactVy > bounceThreshold) {
             c.vy = impactVy * 0.24
             // Rocking metallic chatter when a tilted coin slaps the floor
             const tiltMag = Math.hypot(c.tiltX, c.tiltZ)
-            if (tiltMag > 0.04) {
-              c.vTiltX += -c.tiltX * 9.5 + deterministicNoise(c.seed * 7 + c.z) * 1.8
-              c.vTiltZ += -c.tiltZ * 9.5 + deterministicNoise(c.seed * 11 + c.x) * 1.8
+            if (tiltMag > 0.06) {
+              c.vTiltX += -c.tiltX * 7.5 + deterministicNoise(c.seed * 7 + c.z) * 1.4
+              c.vTiltZ += -c.tiltZ * 7.5 + deterministicNoise(c.seed * 11 + c.x) * 1.4
             } else {
-              c.vTiltX += deterministicNoise(c.seed * 31 + c.z) * impactVy * 0.0025
-              c.vTiltZ += deterministicNoise(c.seed * 37 + c.x) * impactVy * 0.0025
+              c.vTiltX += deterministicNoise(c.seed * 31 + c.z) * impactVy * 0.0022
+              c.vTiltZ += deterministicNoise(c.seed * 37 + c.x) * impactVy * 0.0022
             }
           } else {
             c.vy = 0
