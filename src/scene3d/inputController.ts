@@ -96,6 +96,7 @@ export function attachInputController({
 }: InputControllerParams) {
   let disposed = false
   let dragLooking = false
+  let externalLooking = false
   let dragMoving = false
   let holdPointerLockMode: 'look' | 'move' | null = null
   let abortedHoldPointerLock = false
@@ -691,6 +692,47 @@ export function attachInputController({
     state.mouseAimVisualY = vy
   }
 
+  const beginExternalLook = () => {
+    if (getHeldMode() !== 'none') return
+    externalLooking = true
+    setIframeDragShield(true)
+  }
+
+  const applyExternalLookDelta = (dx: number, dy: number) => {
+    if (!externalLooking) {
+      beginExternalLook()
+    }
+    if (!externalLooking || Math.hypot(dx, dy) > 150) return
+    clearActiveFocusForFreeMove()
+    if (state.cameraTween) {
+      state.targetYaw = state.yaw
+      state.targetPitch = state.pitch
+      state.cameraTween = null
+    }
+    const fovScale = camera.fov / DEFAULT_ZOOM_FOV
+    const sensitivity = 0.0022 * fovScale * 1.25
+    const prevYaw = state.targetYaw
+    const prevPitch = state.targetPitch
+    state.targetYaw -= dx * sensitivity
+    state.targetPitch -= dy * sensitivity
+    const maxPitch = Math.PI * 0.46
+    state.targetPitch = Math.max(
+      -maxPitch,
+      Math.min(maxPitch, state.targetPitch),
+    )
+    const dYaw = state.targetYaw - prevYaw
+    const dPitch = state.targetPitch - prevPitch
+    if (dYaw !== 0 || dPitch !== 0) {
+      pushMouseAimVisual(-dYaw * 640, -dPitch * 640)
+    }
+  }
+
+  const endExternalLook = () => {
+    if (!externalLooking) return
+    externalLooking = false
+    setIframeDragShield(false)
+  }
+
   const onMouseMove = (e: MouseEvent) => {
     if (Date.now() - lastTouchTime < 700) return
     state.lastMouseX = e.clientX
@@ -1060,6 +1102,7 @@ export function attachInputController({
 
     if (e.button === 2) {
       dragLooking = false
+      externalLooking = false
       mouseDownOnStage = false
       return
     }
@@ -1360,6 +1403,9 @@ export function attachInputController({
     returnToPreviousPose,
     clearActiveFocusForFreeMove,
     refreshCursorAndShield,
+    beginExternalLook,
+    applyExternalLookDelta,
+    endExternalLook,
     cleanup,
   }
 }

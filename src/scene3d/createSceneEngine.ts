@@ -342,6 +342,8 @@ export function mountSceneEngine({
 
     let keyStickVisualX = 0
     let keyStickVisualY = 0
+    let smoothKeyForward = 0
+    let smoothKeyRight = 0
     let mouseStickVisualX = 0
     let mouseStickVisualY = 0
 
@@ -663,6 +665,9 @@ export function mountSceneEngine({
       returnToPreviousPose,
       clearActiveFocusForFreeMove,
       refreshCursorAndShield,
+      beginExternalLook,
+      applyExternalLookDelta,
+      endExternalLook,
       cleanup: cleanupInput,
     } = attachInputController({
       stageEl,
@@ -884,6 +889,26 @@ export function mountSceneEngine({
       }
       return []
     }
+
+    channel.on('input:middleClick', () => {
+      toggleScanner()
+    })
+
+    channel.on('input:lookStart', () => {
+      beginExternalLook()
+    })
+
+    channel.on('input:lookMove', (data) => {
+      const dx = typeof data.dx === 'number' ? data.dx : 0
+      const dy = typeof data.dy === 'number' ? data.dy : 0
+      if (dx !== 0 || dy !== 0) {
+        applyExternalLookDelta(dx, dy)
+      }
+    })
+
+    channel.on('input:lookEnd', () => {
+      endExternalLook()
+    })
 
     channel.on('screen:on', (data, meta) => {
       if (!isAuthorizedScreenController(meta.sender)) return
@@ -1579,28 +1604,48 @@ export function mountSceneEngine({
         }
       }
 
-      // Keyboard WASD + wheel + left-stick walking
-      let keyForward = 0
-      let keyRight = 0
+      // Keyboard WASD + arrow + left-stick walking (two-stage damped S-curve for buttery start/stop)
+      let rawKeyForward = 0
+      let rawKeyRight = 0
       if (state.pressedKeys.has('KeyW') || state.pressedKeys.has('ArrowUp')) {
-        keyForward += 1
+        rawKeyForward += 1
       }
       if (state.pressedKeys.has('KeyS') || state.pressedKeys.has('ArrowDown')) {
-        keyForward -= 1
+        rawKeyForward -= 1
       }
       if (state.pressedKeys.has('KeyD') || state.pressedKeys.has('ArrowRight')) {
-        keyRight += 1
+        rawKeyRight += 1
       }
       if (state.pressedKeys.has('KeyA') || state.pressedKeys.has('ArrowLeft')) {
-        keyRight -= 1
+        rawKeyRight -= 1
+      }
+      if (rawKeyForward !== 0 && rawKeyRight !== 0) {
+        const invDiag = Math.SQRT1_2
+        rawKeyForward *= invDiag
+        rawKeyRight *= invDiag
       }
 
-      const manualForward = keyForward + state.mouseMoveY
-      const manualRight = keyRight + state.mouseMoveX
-      const hasManualMove =
-        Math.abs(manualForward) > 0.01 || Math.abs(manualRight) > 0.01
+      const keyForwardRate =
+        Math.abs(rawKeyForward) > Math.abs(smoothKeyForward) ? 8.5 : 7.0
+      const keyRightRate =
+        Math.abs(rawKeyRight) > Math.abs(smoothKeyRight) ? 8.5 : 7.0
+      smoothKeyForward +=
+        (rawKeyForward - smoothKeyForward) * (1 - Math.exp(-keyForwardRate * dt))
+      smoothKeyRight +=
+        (rawKeyRight - smoothKeyRight) * (1 - Math.exp(-keyRightRate * dt))
+      if (rawKeyForward === 0 && Math.abs(smoothKeyForward) < 0.002) {
+        smoothKeyForward = 0
+      }
+      if (rawKeyRight === 0 && Math.abs(smoothKeyRight) < 0.002) {
+        smoothKeyRight = 0
+      }
 
-      // Animate left stick knob on desktop keypresses/right-drag or viewpoint flight when stick isn't manually dragged
+      const manualForward = smoothKeyForward + state.mouseMoveY
+      const manualRight = smoothKeyRight + state.mouseMoveX
+      const hasManualMove =
+        Math.abs(manualForward) > 0.004 || Math.abs(manualRight) > 0.004
+
+      // Animate left stick knob on desktop keypresses/drag or viewpoint flight when stick isn't manually dragged
       if (!state.moveStickEngaged) {
         let targetKx = hasManualMove ? manualRight : tweenStickMoveX
         let targetKy = hasManualMove ? -manualForward : tweenStickMoveY
@@ -1609,7 +1654,7 @@ export function mountSceneEngine({
           targetKx /= kLen
           targetKy /= kLen
         }
-        const stickLerp = 1 - Math.exp(-20 * dt)
+        const stickLerp = 1 - Math.exp(-14 * dt)
         keyStickVisualX += (targetKx * STICK_MAX_R - keyStickVisualX) * stickLerp
         keyStickVisualY += (targetKy * STICK_MAX_R - keyStickVisualY) * stickLerp
         if (Math.hypot(keyStickVisualX, keyStickVisualY) < 0.15 && kLen < 0.02) {
@@ -1684,11 +1729,14 @@ export function mountSceneEngine({
       }
 
       if (!state.cameraTween) {
-        const velLerp = 1 - Math.exp(-16 * dt)
+        const isAccelerating =
+          Math.hypot(targetVelX, targetVelZ) > Math.hypot(state.velX, state.velZ)
+        const velRate = isAccelerating ? 7.5 : 6.2
+        const velLerp = 1 - Math.exp(-velRate * dt)
         state.velX += (targetVelX - state.velX) * velLerp
         state.velZ += (targetVelZ - state.velZ) * velLerp
 
-        if (Math.hypot(state.velX, state.velZ) > 2) {
+        if (Math.hypot(state.velX, state.velZ) > 0.5) {
           const nextX = camera.position.x + state.velX * dt
           const nextZ = camera.position.z + state.velZ * dt
           const [resolvedX, resolvedZ] = resolveTableCollision(nextX, nextZ)

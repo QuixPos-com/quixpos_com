@@ -145,6 +145,12 @@ export interface SceneClientOptions {
   allowedOrigins?: string[]
   /** Automatically send 'scene:ping' on creation when embedded in an iframe (default: true) */
   autoPing?: boolean
+  /**
+   * Forward right-click drag (Umsehen / look around) and middle-click (Scanner toggle)
+   * to the 3D scene host while keeping left-click and scroll wheel native to this iframe
+   * (default: true).
+   */
+  forwardSceneControls?: boolean
 }
 
 function isPlainObject(value: unknown): value is SceneMessageData {
@@ -384,6 +390,79 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
 
   if (typeof window !== 'undefined' && window.parent !== window) {
     window.addEventListener('message', onWindowMessage)
+  }
+
+  // Forward right-click drag (Umsehen) & middle-click (Scanner) to the 3D host while
+  // leaving left-click and mouse wheel 100% native to the embedded screen.
+  let rightLooking = false
+  let lastLookScreenX = 0
+  let lastLookScreenY = 0
+  const shouldForwardControls =
+    options.forwardSceneControls !== false &&
+    typeof window !== 'undefined' &&
+    window.parent !== window &&
+    detectScenePresenceSync()
+
+  const onIframeMouseDown = (e: MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault()
+      send('input:middleClick', {})
+    } else if (e.button === 2) {
+      e.preventDefault()
+      rightLooking = true
+      lastLookScreenX = e.screenX
+      lastLookScreenY = e.screenY
+      send('input:lookStart', {})
+    }
+  }
+
+  const onIframeMouseMove = (e: MouseEvent) => {
+    if (!rightLooking) return
+    if ((e.buttons & 2) === 0) {
+      rightLooking = false
+      send('input:lookEnd', {})
+      return
+    }
+    const dx = e.screenX - lastLookScreenX
+    const dy = e.screenY - lastLookScreenY
+    lastLookScreenX = e.screenX
+    lastLookScreenY = e.screenY
+    if (dx !== 0 || dy !== 0) {
+      send('input:lookMove', { dx, dy })
+    }
+  }
+
+  const onIframeMouseUp = (e: MouseEvent) => {
+    if (e.button === 2 && rightLooking) {
+      rightLooking = false
+      send('input:lookEnd', {})
+    }
+  }
+
+  const onIframeAuxClick = (e: MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault()
+    }
+  }
+
+  const onIframeContextMenu = (e: MouseEvent) => {
+    e.preventDefault()
+  }
+
+  const onIframeBlur = () => {
+    if (rightLooking) {
+      rightLooking = false
+      send('input:lookEnd', {})
+    }
+  }
+
+  if (shouldForwardControls) {
+    window.addEventListener('mousedown', onIframeMouseDown, true)
+    window.addEventListener('mousemove', onIframeMouseMove, true)
+    window.addEventListener('mouseup', onIframeMouseUp, true)
+    window.addEventListener('auxclick', onIframeAuxClick, true)
+    window.addEventListener('contextmenu', onIframeContextMenu, true)
+    window.addEventListener('blur', onIframeBlur)
   }
 
   /**
@@ -749,6 +828,14 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     disposed = true
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', onWindowMessage)
+      if (shouldForwardControls) {
+        window.removeEventListener('mousedown', onIframeMouseDown, true)
+        window.removeEventListener('mousemove', onIframeMouseMove, true)
+        window.removeEventListener('mouseup', onIframeMouseUp, true)
+        window.removeEventListener('auxclick', onIframeAuxClick, true)
+        window.removeEventListener('contextmenu', onIframeContextMenu, true)
+        window.removeEventListener('blur', onIframeBlur)
+      }
     }
     listeners.clear()
     presenceListeners.clear()

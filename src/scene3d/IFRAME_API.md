@@ -354,6 +354,8 @@ window.addEventListener('message', (event) => {
 | `'camera:focus'` | `{ view: 'total' \| 'left' \| 'center' \| 'right' \| 'drawer' }` | Smoothly flies the 3D camera to the specified station preset. |
 | `'camera:return'` | `{}` | Returns the 3D camera to its previous pose. |
 | `'tablet:reload'` | `{ tabletId?: string }` | Reloads a powered-on tablet screen (defaults to caller's own `tabletId`). |
+| `'input:middleClick'` | `{}` | *(Host-only, auto-sent by `iframeClient.ts`)* Toggles the 3D barcode scanner on middle-click over an iframe. |
+| `'input:lookStart'` / `'input:lookMove'` / `'input:lookEnd'` | `{}` / `{ dx: number, dy: number }` / `{}` | *(Host-only, auto-sent by `iframeClient.ts`)* Forwards right-click drag look-around (*Umsehen*) while keeping left-click and scroll wheel native to the iframe. |
 
 ### Built-in Host Events (3D Scene -> Powered-On Iframes)
 

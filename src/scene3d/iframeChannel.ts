@@ -235,7 +235,11 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
       name !== 'pos:pairing:get' &&
       name !== 'screens:get' &&
       name !== 'printer:info' &&
-      name !== 'printer:media:get'
+      name !== 'printer:media:get' &&
+      name !== 'input:middleClick' &&
+      name !== 'input:lookStart' &&
+      name !== 'input:lookMove' &&
+      name !== 'input:lookEnd'
     ) {
       // Relay broadcast message to all other loaded iframes on the channel
       for (const peer of tablets) {
