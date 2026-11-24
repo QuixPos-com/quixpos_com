@@ -70,7 +70,7 @@ async function startServer() {
         template = await vite.transformIndexHtml(url, template)
 
         const { render } = await vite.ssrLoadModule('/src/entry-server.tsx')
-        const { html, title, description } = render(url)
+        const { html, title, description, headTags } = render(url)
 
         let pageHtml = template.replace('<!--ssr-outlet-->', () => html)
         if (title) {
@@ -78,9 +78,12 @@ async function startServer() {
         }
         if (description) {
           pageHtml = pageHtml.replace(
-            /<meta\s+name=["']description["']\s+content=["'].*?["']\s*\/?>/i,
+            /<meta\s+name=["']description["']\s+content=["'][\s\S]*?["']\s*\/?>/i,
             `<meta name="description" content="${description}" />`,
           )
+        }
+        if (headTags) {
+          pageHtml = pageHtml.replace(/<\/title>/i, () => `</title>\n    ${headTags}`)
         }
 
         res.statusCode = 200

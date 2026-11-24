@@ -26,7 +26,7 @@ async function prerender() {
   console.log(`[prerender] Prerendering ${routes.length} routes...`)
 
   for (const route of routes) {
-    const { html, title, description } = render(route)
+    const { html, title, description, headTags } = render(route)
 
     let pageHtml = template.replace('<!--ssr-outlet-->', () => html)
 
@@ -35,9 +35,12 @@ async function prerender() {
     }
     if (description) {
       pageHtml = pageHtml.replace(
-        /<meta\s+name=["']description["']\s+content=["'].*?["']\s*\/?>/i,
+        /<meta\s+name=["']description["']\s+content=["'][\s\S]*?["']\s*\/?>/i,
         `<meta name="description" content="${description}" />`,
       )
+    }
+    if (headTags) {
+      pageHtml = pageHtml.replace(/<\/title>/i, () => `</title>\n    ${headTags}`)
     }
 
     let filePath
