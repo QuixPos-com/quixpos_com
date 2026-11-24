@@ -246,7 +246,6 @@ export function mountSceneEngine({
     const { loupeInstances, plateTargets } = buildStationLoupes(
       THREE,
       webglScene,
-      drawerTrayGroup,
       disposables,
     )
 
@@ -1316,12 +1315,14 @@ export function mountSceneEngine({
         const targetHover = !isAlreadyFocused ? Math.max(loupeProx, plateProx) : 0
 
         l.hover += (targetHover - l.hover) * hoverSmooth
-        l.loupeGroup.scale.setScalar(l.baseScale * (1 + 0.65 * l.hover))
+        l.loupeGroup.scale.setScalar(l.baseScale * (1 + 0.58 * l.hover))
         if (l.liftAxis === 'y') {
-          l.loupeGroup.position.y = l.baseY + 16 * l.hover
+          l.loupeGroup.position.y = l.baseY + 18 * l.hover
         } else {
-          l.loupeGroup.position.z = l.baseZ + 16 * l.hover
+          l.loupeGroup.position.z = l.baseZ + 18 * l.hover
         }
+        l.loupeGroup.rotation.x = -0.22 * l.hover
+        l.loupeGroup.rotation.z = 0.08 * l.hover
         if (l.plateMesh) {
           l.plateMesh.scale.set(
             1 + 0.08 * l.hover,

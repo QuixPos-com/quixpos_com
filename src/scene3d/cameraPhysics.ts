@@ -106,13 +106,13 @@ export function getViewCameraPose(
     const aspectScale = Math.min(1.6, Math.max(1, 1.55 / aspect))
     const dist = 1720 * aspectScale
     const yaw = -0.29
-    const pitch = -0.28
+    const pitch = -0.44
     const cosPitch = Math.cos(pitch)
     const lookX = -Math.sin(yaw) * cosPitch
     const lookY = Math.sin(pitch)
     const lookZ = -Math.cos(yaw) * cosPitch
     const anchorX = 180
-    const anchorY = 3810
+    const anchorY = 3750
     const anchorZ = TABLET_Z
     return {
       x: anchorX - lookX * dist,

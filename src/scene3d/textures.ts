@@ -86,17 +86,6 @@ export function createNameplateTexture(
   ctx.font = '500 20px system-ui, -apple-system, sans-serif'
   ctx.fillText(subtitle, 208, 88, 376)
 
-  // Subtle circular socket for the 3D loupe badge
-  ctx.save()
-  ctx.fillStyle = 'rgba(30, 201, 168, 0.08)'
-  ctx.strokeStyle = 'rgba(30, 201, 168, 0.35)'
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.arc(446, 64, 34, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.stroke()
-  ctx.restore()
-
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
   return tex
