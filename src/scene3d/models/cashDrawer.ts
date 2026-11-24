@@ -134,15 +134,40 @@ const COIN_CUPS: readonly CoinCupSpec[] = [
   },
 ]
 
-const INITIAL_DEMO_CASH_CENTS = 18888 // €188.88 (1 of every Euro note & coin)
+const INITIAL_DEMO_CASH_CENTS = 18888 // €188.88 default demo float
 const MAX_VISUAL_NOTES_PER_SLOT = 38
 const MAX_VISUAL_COINS_PER_CUP = 42
 const NOTE_THICKNESS = 4.2
 
+const COIN_FILL_PATTERN = [1, 2, 5, 10, 20, 50, 100, 200, 1, 2, 5, 10, 20] as const
+const COIN_FILL_CAP: Record<keyof EuroCashBreakdown['coins'], number> = {
+  '1': 36,
+  '2': 36,
+  '5': 36,
+  '10': 36,
+  '20': 36,
+  '50': 34,
+  '100': 34,
+  '200': 34,
+}
+const MAX_COIN_TARGET_CENTS =
+  36 * (1 + 2 + 5 + 10 + 20) + 34 * (50 + 100 + 200)
+
+const SMALL_NOTE_FILL_PATTERN = [500, 500, 1000, 1000, 2000] as const
+const NOTE_SOFT_CAP: Record<keyof EuroCashBreakdown['notes'], number> = {
+  '5': 32,
+  '10': 30,
+  '20': 26,
+  '50': 16,
+  '100': 0,
+}
+
 export function calculateEuroCashBreakdown(
   totalCentsInput: number,
 ): EuroCashBreakdown {
-  let remaining = Math.max(0, Math.round(totalCentsInput))
+  let remaining = Number.isFinite(totalCentsInput)
+    ? Math.max(0, Math.round(totalCentsInput))
+    : 0
   const totalCents = remaining
 
   const notes: EuroCashBreakdown['notes'] = {
@@ -163,18 +188,68 @@ export function calculateEuroCashBreakdown(
     '1': 0,
   }
 
+  // 1. Allocate plenty of coins first (smaller denominations weighted heavier),
+  //    up to a generous per-cup cap so all 8 cups stay visually rich.
+  const coinTargetCents =
+    totalCents <= 500
+      ? totalCents
+      : Math.min(
+          MAX_COIN_TARGET_CENTS,
+          Math.round(500 + (totalCents - 500) * 0.45),
+        )
+
+  let coinBudget = Math.min(remaining, coinTargetCents)
+  while (coinBudget > 0) {
+    let progressed = false
+    for (const denom of COIN_FILL_PATTERN) {
+      if (denom > coinBudget) continue
+      const key = String(denom) as keyof EuroCashBreakdown['coins']
+      if (coins[key] >= COIN_FILL_CAP[key]) continue
+      coins[key] += 1
+      coinBudget -= denom
+      remaining -= denom
+      progressed = true
+    }
+    if (!progressed) break
+  }
+
+  // 2. Split the bill portion across lower notes (€5, €10, €20) first,
+  //    mixing in €50 occasionally after a small-bill base is built, and keeping
+  //    €100 only for overflow beyond the soft caps.
+  let round = 0
+  while (remaining >= 500) {
+    let progressed = false
+    for (const denom of SMALL_NOTE_FILL_PATTERN) {
+      if (denom > remaining) continue
+      const key = String(denom / 100) as keyof EuroCashBreakdown['notes']
+      if (notes[key] >= NOTE_SOFT_CAP[key]) continue
+      notes[key] += 1
+      remaining -= denom
+      progressed = true
+    }
+    if (round >= 2 && round % 3 === 2 && remaining >= 5000 && notes['50'] < NOTE_SOFT_CAP['50']) {
+      notes['50'] += 1
+      remaining -= 5000
+      progressed = true
+    }
+    if (!progressed) break
+    round += 1
+  }
+
+  // 3. Overflow bills (only needed for large totals exceeding soft caps)
   for (const denom of [10000, 5000, 2000, 1000, 500] as const) {
     const count = Math.floor(remaining / denom)
     remaining -= count * denom
     const key = String(denom / 100) as keyof EuroCashBreakdown['notes']
-    notes[key] = count
+    notes[key] += count
   }
 
+  // 4. Finish any remaining sub-€5 cents exactly into coins
   for (const denom of [200, 100, 50, 20, 10, 5, 2, 1] as const) {
     const count = Math.floor(remaining / denom)
     remaining -= count * denom
     const key = String(denom) as keyof EuroCashBreakdown['coins']
-    coins[key] = count
+    coins[key] += count
   }
 
   return {
