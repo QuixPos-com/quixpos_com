@@ -12,7 +12,6 @@ import type {
   FocusViewId,
   HeldItemMode,
   SceneController,
-  TargetedDevice,
   ZebraMediaInfo,
   ZebraReelId,
 } from '../scene3d/types'
@@ -43,11 +42,8 @@ export function ThreeDRoute() {
   const controllerRef = useRef<SceneController | null>(null)
   const bgAudioRef = useRef<BackgroundAudioController | null>(null)
 
-  const [isLocked, setIsLocked] = useState(false)
   const [isTouchMode, setIsTouchMode] = useState(false)
-  const [targetedTablet, setTargetedTablet] = useState<TargetedDevice | null>(null)
   const [activeView, setActiveView] = useState<FocusViewId | null>('total')
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isAudioMuted, setIsAudioMuted] = useState(false)
   const [heldMode, setHeldMode] = useState<HeldItemMode>('none')
   const [lastScan, setLastScan] = useState<BarcodeScanEvent | null>(null)
@@ -93,10 +89,8 @@ export function ThreeDRoute() {
       scannerPreviewCanvasRef,
       isAudioMuted: () => audioMutedRef.current,
       callbacks: {
-        onLockChange: setIsLocked,
-        onTargetChange: setTargetedTablet,
         onActiveViewChange: setActiveView,
-        onDrawerChange: setIsDrawerOpen,
+        onDrawerChange: () => {},
         onZebraReelChange: setZebraMedia,
         onZebraReelPickerOpen: () => setIsReelPickerOpen(true),
         onHeldModeChange: (mode) => {
@@ -163,7 +157,7 @@ export function ThreeDRoute() {
     <div class={`scene3d-page ${isTouchMode ? 'is-touch' : ''}`}>
       <div
         ref={stageRef}
-        class={`scene3d-stage ${isLocked ? '' : 'is-cursor-mode'}`}
+        class="scene3d-stage is-cursor-mode"
       >
         <div ref={cssLayerRef} class="scene3d-css-layer" />
         <canvas ref={webglCanvasRef} class="scene3d-webgl-layer" />
@@ -173,11 +167,8 @@ export function ThreeDRoute() {
         />
 
         <SceneHud
-          isLocked={isLocked}
-          isDrawerOpen={isDrawerOpen}
           isAudioMuted={isAudioMuted}
           activeView={activeView}
-          targetedTablet={targetedTablet}
           heldMode={heldMode}
           lastScan={lastScan}
           zebraMedia={zebraMedia}

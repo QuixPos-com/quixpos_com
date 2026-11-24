@@ -51,7 +51,6 @@ import type {
   SceneController,
   SceneRuntimeState,
   ScreenPowerSummary,
-  TargetKind,
   TouchStickRefs,
   ZebraMediaInfo,
   ZebraReelId,
@@ -121,16 +120,7 @@ export function mountSceneEngine({
   }
 
   let lastBroadcastView: NavPresetId | null = 'total'
-  let lastBroadcastLocked = false
   const sceneCallbacks: SceneCallbacks = {
-    onLockChange: (locked) => {
-      callbacks.onLockChange(locked)
-      if (locked !== lastBroadcastLocked) {
-        lastBroadcastLocked = locked
-        channel.send('scene:lockChanged', { locked })
-      }
-    },
-    onTargetChange: callbacks.onTargetChange,
     onActiveViewChange: (view) => {
       callbacks.onActiveViewChange(view)
       if (view !== lastBroadcastView) {
@@ -303,15 +293,6 @@ export function mountSceneEngine({
       floorMesh,
     ]
 
-    const staticRaycastTargets = [
-      ...powerTargets,
-      ...fullscreenTargets,
-      ...zebraTargets,
-      ...plateTargets,
-      ...cutoutTargets,
-      ...drawerTargets,
-    ]
-
     // 4. Runtime State & Input Controller
     const state: SceneRuntimeState = {
       yaw: SPAWN_YAW,
@@ -326,11 +307,6 @@ export function mountSceneEngine({
       fullscreenTabletId: null,
       poseHistory: [],
       cameraTween: null,
-      currentTargetTitle: null,
-      currentTargetId: null,
-      currentTargetKind: null,
-      currentTargetPoweredOn: null,
-      currentTargetLoginPrompt: false,
       lastMouseX: -9999,
       lastMouseY: -9999,
       pressedKeys: new Set<string>(),
@@ -1294,7 +1270,6 @@ export function mountSceneEngine({
     })
 
     // 5. Animation Loop
-    const screenCenter = new THREE.Vector2(0, 0)
     const aimNdc = new THREE.Vector2(0, 0)
     const tmpNormal = new THREE.Vector3()
     const tmpToCam = new THREE.Vector3()
@@ -1366,23 +1341,19 @@ export function mountSceneEngine({
         }
       }
 
-      // Subtle orange glow on the Zebra side latches when hovered or targeted
+      // Subtle orange glow on the Zebra side latches when hovered
       let zebraLatchProx = 0
       if (!scannerActive) {
-        if (state.pointerLocked && state.currentTargetKind === 'zebra-latch') {
-          zebraLatchProx = 1
-        } else {
-          for (const zMesh of zebraTargets) {
-            const p = getCursorProximity(
-              zMesh,
-              95,
-              state,
-              stageEl,
-              camera,
-              tmpProjVec,
-            )
-            if (p > zebraLatchProx) zebraLatchProx = p
-          }
+        for (const zMesh of zebraTargets) {
+          const p = getCursorProximity(
+            zMesh,
+            95,
+            state,
+            stageEl,
+            camera,
+            tmpProjVec,
+          )
+          if (p > zebraLatchProx) zebraLatchProx = p
         }
       }
       zebraLatchMat.emissive.set('#f59e0b')
@@ -1981,69 +1952,6 @@ export function mountSceneEngine({
               : 'none'
           t.wrapperEl.style.pointerEvents = interactive
           t.iframeEl.style.pointerEvents = interactive
-        }
-      }
-
-      // Raycast from crosshair when in Pointer Lock mode
-      if (state.pointerLocked) {
-        raycaster.setFromCamera(screenCenter, camera)
-        const activeRaycastTargets =
-          heldMode === 'label'
-            ? []
-            : heldMode === 'scanner'
-              ? [...scannerDockTargets]
-              : [
-                ...printManager.getZebraLabelTargets(),
-                ...scannerTargets,
-                ...staticRaycastTargets,
-              ]
-        const hits =
-          activeRaycastTargets.length > 0
-            ? raycaster.intersectObjects(activeRaycastTargets, false)
-            : []
-        const hasHit = hits.length > 0 && hits[0].distance <= 24000
-        const hitData = hasHit ? hits[0].object.userData : null
-        const nextTitle = hitData ? (hitData.tabletTitle as string) : null
-        const nextId = hitData ? (hitData.tabletId as string) : null
-        const nextKind = hitData
-          ? ((hitData.kind as TargetKind) ?? 'screen')
-          : null
-        const nextPoweredOn =
-          hitData && typeof hitData.poweredOn === 'boolean'
-            ? (hitData.poweredOn as boolean)
-            : null
-        const nextControllable =
-          hitData && typeof hitData.controllablePower === 'boolean'
-            ? (hitData.controllablePower as boolean)
-            : false
-        const hitTablet = nextId
-          ? tabletInstances.find((t) => t.spec.id === nextId)
-          : undefined
-        const nextLoginPrompt = Boolean(
-          hitTablet && !hitTablet.poweredOn && hitTablet.loginPromptTimer > 0,
-        )
-        state.currentTargetId = nextId
-        if (
-          nextTitle !== state.currentTargetTitle ||
-          nextKind !== state.currentTargetKind ||
-          nextPoweredOn !== state.currentTargetPoweredOn ||
-          nextLoginPrompt !== state.currentTargetLoginPrompt
-        ) {
-          state.currentTargetTitle = nextTitle
-          state.currentTargetKind = nextKind
-          state.currentTargetPoweredOn = nextPoweredOn
-          state.currentTargetLoginPrompt = nextLoginPrompt
-          callbacks.onTargetChange(
-            nextTitle && nextKind
-              ? {
-                title: nextTitle,
-                kind: nextKind,
-                poweredOn: nextPoweredOn ?? undefined,
-                controllablePower: nextControllable,
-                loginRequiredPrompt: nextLoginPrompt,
-              }
-              : null,
-          )
         }
       }
 

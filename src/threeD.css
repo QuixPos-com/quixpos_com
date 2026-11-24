@@ -170,63 +170,6 @@
   max-width: calc(100vw - 320px);
 }
 
-.scene3d-target-badge {
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: rgba(15, 159, 134, 0.92);
-  color: #ffffff;
-  font-size: 0.84rem;
-  font-weight: 600;
-  box-shadow: 0 6px 18px rgba(15, 159, 134, 0.35);
-}
-
-/* Minecraft-style center crosshair */
-.scene3d-crosshair {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 20px;
-  height: 20px;
-  transform: translate(-50%, -50%);
-  z-index: 9;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.scene3d-crosshair.is-visible {
-  opacity: 1;
-}
-
-.scene3d-crosshair::before,
-.scene3d-crosshair::after {
-  content: '';
-  position: absolute;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 0 2px rgba(11, 18, 32, 0.85);
-}
-
-.scene3d-crosshair::before {
-  left: 50%;
-  top: 2px;
-  bottom: 2px;
-  width: 2px;
-  transform: translateX(-50%);
-}
-
-.scene3d-crosshair::after {
-  top: 50%;
-  left: 2px;
-  right: 2px;
-  height: 2px;
-  transform: translateY(-50%);
-}
-
-.scene3d-crosshair.is-targeting::before,
-.scene3d-crosshair.is-targeting::after {
-  background: #1ec9a8;
-}
-
 /* Dual-stick controls (desktop + mobile) */
 .scene3d-stick {
   position: absolute;

@@ -453,7 +453,7 @@ export function attachInputController({
   }
 
   const syncPointerMode = (locked: boolean) => {
-    if (locked && abortedHoldPointerLock) {
+    if (locked && (abortedHoldPointerLock || holdPointerLockMode === null)) {
       abortedHoldPointerLock = false
       holdPointerLockMode = null
       if (document.pointerLockElement === stageEl) {
@@ -484,16 +484,6 @@ export function attachInputController({
       clearActiveFocusForFreeMove()
     } else {
       refreshCursorAndShield()
-    }
-    const showFpsCrosshair = locked && holdPointerLockMode === null
-    callbacks.onLockChange(showFpsCrosshair)
-    if (!showFpsCrosshair) {
-      callbacks.onTargetChange(null)
-      state.currentTargetTitle = null
-      state.currentTargetId = null
-      state.currentTargetKind = null
-      state.currentTargetPoweredOn = null
-      state.currentTargetLoginPrompt = false
     }
   }
 
@@ -650,49 +640,6 @@ export function attachInputController({
         cancelHeldItem()
       } else if (isFocusedWithBlur()) {
         returnToPreviousPose()
-      }
-    } else if (code === 'KeyE' || code === 'Tab') {
-      e.preventDefault()
-      if (document.pointerLockElement === stageEl) {
-        if (held === 'label') {
-          if (canPlaceHeldLabel()) {
-            placeHeldLabel()
-          }
-          return
-        }
-        if (held === 'scanner') {
-          if (state.currentTargetKind === 'scanner-dock') {
-            putDownScanner()
-          } else {
-            triggerScannerPulse()
-          }
-          return
-        }
-        if (state.currentTargetKind === 'zebra-label' && state.currentTargetId) {
-          pickUpZebraLabel(state.currentTargetId)
-        } else if (state.currentTargetKind === 'scanner') {
-          pickUpScanner()
-        } else if (state.currentTargetKind === 'power' && state.currentTargetId) {
-          reloadTablet(state.currentTargetId)
-        } else if (
-          state.currentTargetKind === 'fullscreen' &&
-          state.currentTargetId
-        ) {
-          navigateToTabletFullscreen(state.currentTargetId)
-        } else if (state.currentTargetKind === 'zebra-latch') {
-          document.exitPointerLock()
-          openZebraReelPicker()
-        } else if (state.currentTargetKind === 'drawer') {
-          toggleCashDrawer()
-        } else if (state.currentTargetId && state.currentTargetKind === 'label') {
-          navigateToFocusView(state.currentTargetId as FocusViewId)
-        } else {
-          document.exitPointerLock()
-        }
-      } else {
-        abortedHoldPointerLock = false
-        holdPointerLockMode = null
-        tryEnterPointerLock()
       }
     }
   }
@@ -1042,41 +989,6 @@ export function attachInputController({
     }
 
     if (state.pointerLocked) {
-      if (holdPointerLockMode === null && e.button === 0) {
-        const held = getHeldMode()
-        if (held === 'label') {
-          placeHeldLabel()
-          return
-        }
-        if (held === 'scanner') {
-          if (state.currentTargetKind === 'scanner-dock') {
-            putDownScanner()
-          } else {
-            triggerScannerPulse()
-          }
-          return
-        }
-        if (state.currentTargetId) {
-          if (state.currentTargetKind === 'zebra-label') {
-            pickUpZebraLabel(state.currentTargetId)
-          } else if (state.currentTargetKind === 'scanner') {
-            pickUpScanner()
-          } else if (state.currentTargetKind === 'power') {
-            reloadTablet(state.currentTargetId)
-          } else if (state.currentTargetKind === 'fullscreen') {
-            navigateToTabletFullscreen(state.currentTargetId)
-          } else if (state.currentTargetKind === 'zebra-latch') {
-            document.exitPointerLock()
-            openZebraReelPicker()
-          } else if (state.currentTargetKind === 'drawer') {
-            toggleCashDrawer()
-          } else if (state.currentTargetKind === 'label') {
-            navigateToFocusView(state.currentTargetId as FocusViewId)
-          } else {
-            document.exitPointerLock()
-          }
-        }
-      }
       return
     }
 

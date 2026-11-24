@@ -7,18 +7,14 @@ import type {
   FocusViewId,
   HeldItemMode,
   NavPresetId,
-  TargetedDevice,
   TouchStickRefs,
   ZebraMediaInfo,
   ZebraReelId,
 } from './types'
 
 export interface SceneHudProps {
-  isLocked: boolean
-  isDrawerOpen: boolean
   isAudioMuted: boolean
   activeView: FocusViewId | null
-  targetedTablet: TargetedDevice | null
   heldMode: HeldItemMode
   lastScan: BarcodeScanEvent | null
   zebraMedia: ZebraMediaInfo
@@ -47,11 +43,8 @@ const NAV_ITEMS: Array<{
   ]
 
 export function SceneHud({
-  isLocked,
-  isDrawerOpen,
   isAudioMuted,
   activeView,
-  targetedTablet,
   heldMode,
   lastScan,
   zebraMedia,
@@ -81,12 +74,6 @@ export function SceneHud({
 
   return (
     <>
-      <div
-        class={`scene3d-crosshair ${isLocked && heldMode !== 'scanner' ? 'is-visible' : ''
-          } ${targetedTablet ? 'is-targeting' : ''}`}
-        aria-hidden="true"
-      />
-
       {/* Laser crosshair & optical spot frame when holding the barcode scanner */}
       <div
         ref={laserReticleRef}
@@ -169,41 +156,8 @@ export function SceneHud({
         </nav>
       </div>
 
-      {(heldMode !== 'none' || (isLocked && targetedTablet)) && (
+      {heldMode !== 'none' && (
         <div class="scene3d-hud-bottom">
-          {isLocked && targetedTablet && heldMode !== 'label' && (
-            <div class="scene3d-target-badge">
-              {targetedTablet.title} —{' '}
-              {targetedTablet.loginRequiredPrompt
-                ? '<- Login first'
-                : targetedTablet.kind === 'zebra-label'
-                  ? 'Klicken oder E drücken zum Aufnehmen'
-                  : targetedTablet.kind === 'scanner'
-                    ? 'Klicken oder E drücken zum Aufnehmen'
-                    : targetedTablet.kind === 'scanner-dock'
-                      ? 'Klicken oder E drücken zum Ablegen'
-                      : targetedTablet.kind === 'power'
-                        ? targetedTablet.controllablePower
-                          ? targetedTablet.poweredOn
-                            ? 'Klicken oder E drücken zum Ausschalten'
-                            : 'Klicken oder E drücken zum Einschalten'
-                          : 'Klicken oder E drücken zum Neu laden'
-                        : targetedTablet.kind === 'fullscreen'
-                          ? 'Klicken oder E drücken für Vollbild'
-                          : targetedTablet.kind === 'zebra-latch'
-                          ? 'Klicken oder E drücken für Rollenwechsel'
-                          : targetedTablet.kind === 'drawer'
-                            ? isDrawerOpen
-                              ? 'Klicken oder E drücken zum Schließen'
-                              : 'Klicken oder E drücken zum Öffnen'
-                            : targetedTablet.kind === 'label'
-                              ? 'Klicken oder E drücken zum Fokussieren'
-                              : targetedTablet.poweredOn === false
-                                ? 'Ausgeschaltet'
-                                : 'Klicken oder E drücken zum Bedienen'}
-            </div>
-          )}
-
           {heldMode === 'label' && (
             <div class="scene3d-held-bar">
               <span class="scene3d-held-status">

@@ -175,11 +175,6 @@ export interface SceneRuntimeState {
   fullscreenTabletId: string | null
   poseHistory: SavedPose[]
   cameraTween: CameraTween | null
-  currentTargetTitle: string | null
-  currentTargetId: string | null
-  currentTargetKind: TargetKind | null
-  currentTargetPoweredOn: boolean | null
-  currentTargetLoginPrompt: boolean
   lastMouseX: number
   lastMouseY: number
   pressedKeys: Set<string>
@@ -212,8 +207,6 @@ export interface TouchStickRefs {
 }
 
 export interface SceneCallbacks {
-  onLockChange: (locked: boolean) => void
-  onTargetChange: (target: TargetedDevice | null) => void
   onActiveViewChange: (view: FocusViewId | null) => void
   onDrawerChange: (isOpen: boolean) => void
   onZebraReelChange?: (media: ZebraMediaInfo) => void
