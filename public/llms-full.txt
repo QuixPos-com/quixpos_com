@@ -8,21 +8,32 @@ Source: https://quixpos.com/docs
 
 ## Installation & Downloads
 
-### [Systemübersicht](https://quixpos.com/docs/systemuebersicht)
+### [](https://quixpos.com/docs/)
 
-Überblick über alle Komponenten des QuixPOS-Systems – von der Datenbank bis zum Drucker.
+id: systemuebersicht
+title: Systemübersicht
+description: Überblick über alle Komponenten des QuixPOS-Systems – von der Datenbank bis zum Drucker.
+
 
 Übersicht
 
 QuixPOS kann seine Daten aus einem JTL Backend beziehen oder aus einer eigenen Artikel- und Auftragsverwaltung.
 
+
+
 Architektur auf einen Blick
+
+
+
+
 
 Komponenten im Detail
 
 🗄️ Microsoft SQL Server
 
 Das Fundament der Artikelverwaltung ist ein Microsoft SQL Server mit JTL-Wawi oder QuixPOS Datenbank.
+
+
 
 🔄 QuixPOS2JTL oder QuixSYNC – Dienst
 
@@ -39,6 +50,8 @@ Er stellt eine REST-API bereit, über die QuixPOS folgende Daten synchronisiert:
 | Bestandsbuchungen | Kasse → SQL | Abgeschlossene Kassiervorgänge |
 | Bons / Tagesabschlüsse | Kasse → Email (Sync–Dienst unabhängig) | Bon-Daten für das Kassenbuch |
 
+
+
 💳 SumUp – Kartenzahlung
 
 QuixPOS ist direkt mit der SumUp API integriert und unterstützt folgende gängigen SumUp-Terminals:
@@ -49,13 +62,19 @@ QuixPOS ist direkt mit der SumUp API integriert und unterstützt folgende gängi
 
 Der Zahlungsvorgang läuft direkt aus der Kassenoberfläche heraus ab. Die SumUp-Integration erfordert einen SumUp-Händler-Account und wird in den QuixPOS-Einstellungen mit dem API-Key verknüpft. QuixPOS Web funktionier nur mit SumUp Solo / CloudSDK.
 
+
+
 🔐 Technische Sicherheitseinrichtung
 
 In Deutschland ist jede Kasse gesetzlich verpflichtet eine Technische Sicherheitseinrichtung (TSE) zu verwenden. QuixPOS unterstützt TSE Module auf SD Karte oder USB Stick.
 
+
+
 🖨️ Epson Bon-Drucker
 
 QuixPOS unterstützt Epson ESC/POS-kompatible Thermo-Bondrucker (z. B. Epson TM-T30iii, TM-T88-Serie) über Netzwerk (LAN/WLAN)
+
+
 
 💬 Technischer Support & Community
 
@@ -67,9 +86,11 @@ Hier erreichst du direkt die Entwickler und kannst dich mit anderen QuixPOS-Nutz
 
 ---
 
-### [Downloads & Releases](https://quixpos.com/docs/downloads-releases)
+### [](https://quixpos.com/docs/)
 
-Offizielle Releases herunterladen: Android APK, Windows Installer und Web-App.
+id: downloads-releases
+title: Downloads & Releases
+description: Offizielle Releases herunterladen: Android APK, Windows Installer und Web-App.
 
 Downloads & GitHub Releases
 
@@ -94,6 +115,8 @@ Schau dir die Schritt-für-Schritt-Videoanleitung zur Einrichtung auf YouTube an
 [](https://youtu.be/leFwsiL4jsc)
 (Klicke auf das Bild, um das YouTube-Video zu öffnen)
 
+
+
 Systemanforderungen
 
 - Android Kasse: Android 11+ , 9" oder mehr empfohlen
@@ -101,6 +124,8 @@ Systemanforderungen
 - QuixPOS2JTL Sync Server: Windows 10 / 11 / Windows Server 2016+ oder Linux
 - Drucker: ESC/POS-kompatible Bon-Drucker
 - Kartenterminals: SumUp Air, Solo, Lite oder OPI-kompatible Terminals
+
+
 
 💬 Technischer Support
 
