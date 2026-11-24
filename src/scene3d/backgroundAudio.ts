@@ -1,7 +1,38 @@
+export interface BackgroundAudioOptions {
+  initialMuted?: boolean
+}
+
 export interface BackgroundAudioController {
+  isMuted: () => boolean
   setMuted: (muted: boolean) => void
   setDucked: (ducked: boolean) => void
   dispose: () => void
+}
+
+const AUDIO_SETTINGS_STORAGE_KEY = 'quixpos:scene3d:audio'
+
+export function readStoredAudioSettings(): { muted: boolean } {
+  if (typeof window === 'undefined') return { muted: false }
+  try {
+    const raw = window.localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY)
+    if (!raw) return { muted: false }
+    const parsed = JSON.parse(raw) as { muted?: unknown }
+    return { muted: parsed?.muted === true }
+  } catch {
+    return { muted: false }
+  }
+}
+
+function writeStoredAudioSettings(settings: { muted: boolean }) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(
+      AUDIO_SETTINGS_STORAGE_KEY,
+      JSON.stringify(settings),
+    )
+  } catch {
+    // Ignore storage quota / private mode errors
+  }
 }
 
 const NORMAL_GAIN = 0.14 // Soft room background level (~ -17 dB)
@@ -14,10 +45,11 @@ const MUTE_SMOOTH_TAU = 0.16 // ~0.5s soft mute/unmute transition
 
 export function mountBackgroundAudio(
   src = '/Irish_Coffee.mp3',
+  options: BackgroundAudioOptions = {},
 ): BackgroundAudioController {
   let disposed = false
   let started = false
-  let isMuted = false
+  let isMuted = options.initialMuted ?? readStoredAudioSettings().muted
   let isDucked = false
   let fallbackRafId = 0
 
@@ -114,7 +146,7 @@ export function mountBackgroundAudio(
   }
 
   function tryStart() {
-    if (disposed || started) return
+    if (disposed || started || isMuted) return
 
     ensureGraph()
     if (!ctx) {
@@ -161,11 +193,15 @@ export function mountBackgroundAudio(
   window.addEventListener('touchstart', tryStart, { passive: true })
   window.addEventListener('keydown', tryStart, { passive: true })
 
-  // Attempt immediate start (succeeds automatically when navigating from Startseite)
-  tryStart()
+  // Attempt immediate start when not muted
+  if (!isMuted) {
+    tryStart()
+  }
 
   return {
+    isMuted: () => isMuted,
     setMuted: (muted: boolean) => {
+      writeStoredAudioSettings({ muted })
       if (isMuted === muted) return
       isMuted = muted
       if (!muted && !started) {

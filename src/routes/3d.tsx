@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import {
   type BackgroundAudioController,
   mountBackgroundAudio,
+  readStoredAudioSettings,
 } from '../scene3d/backgroundAudio'
 import { mountSceneEngine } from '../scene3d/createSceneEngine'
 import { SceneHud } from '../scene3d/SceneHud'
@@ -71,7 +72,11 @@ export function ThreeDRoute() {
         onDrawerChange: setIsDrawerOpen,
       },
     })
-    const bgAudio = mountBackgroundAudio('/Irish_Coffee.mp3')
+    const storedAudio = readStoredAudioSettings()
+    setIsAudioMuted(storedAudio.muted)
+    const bgAudio = mountBackgroundAudio('/Irish_Coffee.mp3', {
+      initialMuted: storedAudio.muted,
+    })
     bgAudioRef.current = bgAudio
     controllerRef.current = controller
 
