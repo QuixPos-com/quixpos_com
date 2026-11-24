@@ -1,6 +1,7 @@
 import {
   ARENA_HALF,
   DRAWER_X,
+  EYE_HEIGHT,
   PLAYER_RADIUS,
   SPAWN_PITCH,
   SPAWN_POS,
@@ -45,7 +46,6 @@ function frameBoxPose(
   centerZ: number,
   boxW: number,
   boxH: number,
-  pitch: number,
   minDist: number,
   fillV = 0.72,
   fillH = 0.78,
@@ -56,15 +56,18 @@ function frameBoxPose(
   const aspect = Math.max(0.5, stageWidth / Math.max(1, stageHeight))
   const dVert = boxH / 2 / (fillV * halfV)
   const dHoriz = boxW / 2 / (fillH * aspect * halfV)
-  const dist = Math.max(dVert, dHoriz, minDist)
-  const cosPitch = Math.cos(pitch)
-  const lookX = -Math.sin(yaw) * cosPitch
-  const lookY = Math.sin(pitch)
-  const lookZ = -Math.cos(yaw) * cosPitch
+  const dy = EYE_HEIGHT - centerY
+  const minClearZ = TABLE_D / 2 + PLAYER_RADIUS + 10
+  const cosYaw = Math.max(0.25, Math.cos(yaw))
+  const minHorizForTable = Math.max(0, (minClearZ - centerZ) / cosYaw)
+  const minDistForTable = Math.hypot(minHorizForTable, dy)
+  const dist = Math.max(dVert, dHoriz, minDist, minDistForTable, Math.abs(dy) * 1.15)
+  const horizDist = Math.sqrt(Math.max(1, dist * dist - dy * dy))
+  const pitch = -Math.atan2(dy, horizDist)
   return {
-    x: centerX - lookX * dist,
-    y: centerY - lookY * dist,
-    z: centerZ - lookZ * dist,
+    x: centerX + Math.sin(yaw) * horizDist,
+    y: EYE_HEIGHT,
+    z: centerZ + Math.cos(yaw) * horizDist,
     yaw,
     pitch,
   }
@@ -99,7 +102,6 @@ export function getViewCameraPose(
       960,
       3140,
       1580,
-      -0.33,
       1500,
       0.74,
       0.82,
@@ -107,23 +109,23 @@ export function getViewCameraPose(
   }
 
   if (view === 'center') {
-    // Frame Kasse (POS) up close while angled slightly right so Kunde stays mostly in view
+    // Frame Kasse (POS) up close at eye level while angled slightly right so Kunde stays mostly in view
     const aspect = Math.max(0.5, stageWidth / Math.max(1, stageHeight))
     const aspectScale = Math.min(1.6, Math.max(1, 1.55 / aspect))
-    const dist = 1720 * aspectScale
-    const yaw = -0.29
-    const pitch = -0.44
-    const cosPitch = Math.cos(pitch)
-    const lookX = -Math.sin(yaw) * cosPitch
-    const lookY = Math.sin(pitch)
-    const lookZ = -Math.cos(yaw) * cosPitch
     const anchorX = 180
     const anchorY = 3750
     const anchorZ = TABLET_Z
+    const yaw = -0.29
+    const dy = EYE_HEIGHT - anchorY
+    const minClearZ = TABLE_D / 2 + PLAYER_RADIUS + 10
+    const minHoriz = Math.max(0, (minClearZ - anchorZ) / Math.cos(yaw))
+    const dist = Math.max(1760 * aspectScale, Math.hypot(minHoriz, dy))
+    const horizDist = Math.sqrt(Math.max(1, dist * dist - dy * dy))
+    const pitch = -Math.atan2(dy, horizDist)
     return {
-      x: anchorX - lookX * dist,
-      y: anchorY - lookY * dist,
-      z: anchorZ - lookZ * dist,
+      x: anchorX + Math.sin(yaw) * horizDist,
+      y: EYE_HEIGHT,
+      z: anchorZ + Math.cos(yaw) * horizDist,
       yaw,
       pitch,
     }
@@ -141,8 +143,7 @@ export function getViewCameraPose(
       950,
       1860,
       980,
-      -0.34,
-      1580,
+      1920,
       0.56,
       0.66,
       0.2,
@@ -161,7 +162,6 @@ export function getViewCameraPose(
       1920,
       1540,
       1120,
-      -0.92,
       2550,
       0.66,
       0.76,

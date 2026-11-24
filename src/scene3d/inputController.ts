@@ -946,7 +946,7 @@ export function attachInputController({
         mouseDragged = false
         mouseDownStartX = e.clientX
         mouseDownStartY = e.clientY
-        dragMoving = true
+        dragLooking = true
         lastDragX = e.clientX
         lastDragY = e.clientY
         setIframeDragShield(true)
@@ -1031,7 +1031,7 @@ export function attachInputController({
       mouseDragged = false
       mouseDownStartX = e.clientX
       mouseDownStartY = e.clientY
-      dragLooking = true
+      dragMoving = true
       lastDragX = e.clientX
       lastDragY = e.clientY
 
@@ -1066,8 +1066,8 @@ export function attachInputController({
 
     if (
       holdPointerLockMode !== null &&
-      ((holdPointerLockMode === 'look' && e.button === 0) ||
-        (holdPointerLockMode === 'move' && e.button === 2))
+      ((holdPointerLockMode === 'move' && e.button === 0) ||
+        (holdPointerLockMode === 'look' && e.button === 2))
     ) {
       holdPointerLockMode = null
       dragLooking = false
@@ -1082,7 +1082,7 @@ export function attachInputController({
     }
 
     if (e.button === 2) {
-      dragMoving = false
+      dragLooking = false
       mouseDownOnStage = false
       return
     }

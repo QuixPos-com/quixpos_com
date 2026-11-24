@@ -1693,7 +1693,14 @@ export function mountSceneEngine({
           const nextX = camera.position.x + state.velX * dt
           const nextZ = camera.position.z + state.velZ * dt
           const [resolvedX, resolvedZ] = resolveTableCollision(nextX, nextZ)
-          camera.position.set(resolvedX, EYE_HEIGHT, resolvedZ)
+          const nextY =
+            camera.position.y +
+            (EYE_HEIGHT - camera.position.y) * (1 - Math.exp(-10 * dt))
+          camera.position.set(
+            resolvedX,
+            Math.abs(EYE_HEIGHT - nextY) < 0.5 ? EYE_HEIGHT : nextY,
+            resolvedZ,
+          )
         } else {
           state.velX = 0
           state.velZ = 0

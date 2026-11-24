@@ -376,9 +376,9 @@ export function SceneHud({
               height="16"
               aria-hidden="true"
             >
-              {/* Click indicator arc above right mouse button */}
+              {/* Click indicator arc above left mouse button */}
               <path
-                d="M20.8 7.5 A5.5 5.5 0 0 0 15.2 2"
+                d="M3.2 7.5 A5.5 5.5 0 0 1 8.8 2"
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
@@ -395,9 +395,9 @@ export function SceneHud({
                 stroke="currentColor"
                 stroke-width="2"
               />
-              {/* Highlighted right mouse button */}
+              {/* Highlighted left mouse button */}
               <path
-                d="M12 3.5 V12.5 H20 V11.5 A8 8 0 0 0 12 3.5 Z"
+                d="M12 3.5 V12.5 H4 V11.5 A8 8 0 0 1 12 3.5 Z"
                 fill="currentColor"
               />
               {/* Button split lines */}
@@ -438,9 +438,9 @@ export function SceneHud({
             height="25"
             aria-hidden="true"
           >
-            {/* Click indicator arc above left mouse button */}
+            {/* Click indicator arc above right mouse button */}
             <path
-              d="M3.2 7.5 A5.5 5.5 0 0 1 8.8 2"
+              d="M20.8 7.5 A5.5 5.5 0 0 0 15.2 2"
               fill="none"
               stroke="currentColor"
               stroke-width="1.8"
@@ -457,9 +457,9 @@ export function SceneHud({
               stroke="currentColor"
               stroke-width="2"
             />
-            {/* Highlighted left mouse button */}
+            {/* Highlighted right mouse button */}
             <path
-              d="M12 3.5 V12.5 H4 V11.5 A8 8 0 0 1 12 3.5 Z"
+              d="M12 3.5 V12.5 H20 V11.5 A8 8 0 0 0 12 3.5 Z"
               fill="currentColor"
             />
             {/* Button split lines */}
