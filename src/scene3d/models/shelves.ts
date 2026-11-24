@@ -13,10 +13,7 @@ import {
   WALL_THICKNESS,
 } from '../config'
 import { markFocusSharp } from '../focusBlurPass'
-import {
-  createShelfLedWashTexture,
-  createWoodTexture,
-} from '../textures'
+import { createShelfLedWashTexture, createWoodTexture } from '../textures'
 import type {
   Disposable,
   ShelfProductInput,
@@ -48,10 +45,42 @@ interface NormalizedProduct {
 }
 
 interface CachedProductImage {
-  status: 'loading' | 'loaded' | 'error'
+  status: 'queued' | 'loading' | 'loaded' | 'error'
   aspectRatio: number
   texture: InstanceType<ThreeModule['CanvasTexture']> | null
   callbacks: Array<() => void>
+}
+
+interface ProductPlan {
+  product: NormalizedProduct
+  dims: ReturnType<typeof computeBoxDimensions>
+  slots: Array<{ slot: ShelfSlot; count: number }>
+  targetCount: number
+}
+
+interface ProductRenderState {
+  product: NormalizedProduct
+  group: InstanceType<ThreeModule['Group']>
+  meshes: Array<InstanceType<ThreeModule['Mesh']>>
+  disposables: Disposable[]
+  boxGeo: InstanceType<ThreeModule['BoxGeometry']>
+  topTapeGeo: InstanceType<ThreeModule['BoxGeometry']>
+  labelGeo: InstanceType<ThreeModule['PlaneGeometry']>
+  cardboardMat: InstanceType<ThreeModule['MeshStandardMaterial']>
+  frontLabelMat: InstanceType<ThreeModule['MeshStandardMaterial']>
+  dims: ReturnType<typeof computeBoxDimensions>
+  placedSlotIds: string[]
+  renderedBoxes: number
+}
+
+interface PendingBoxTask {
+  generation: number
+  plan: ProductPlan
+  slotId: string
+  worldX: number
+  worldY: number
+  worldZ: number
+  yaw: number
 }
 
 const WALL_ORDER: Record<ShelfWallId, number> = {
@@ -76,12 +105,20 @@ const BACK_BAY_ORDER: Record<number, number> = {
   3: 3,
 }
 
+const MAX_CONCURRENT_IMAGE_FETCHES = 3
+const BOX_SPAWN_INTERVAL_MS = 28
+const SUMMARY_EMIT_INTERVAL_MS = 450
+
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v))
 }
 
 function computeBoxDimensions(rawAspect: number) {
-  const aspect = clamp(Number.isFinite(rawAspect) && rawAspect > 0 ? rawAspect : 1, 0.35, 2.4)
+  const aspect = clamp(
+    Number.isFinite(rawAspect) && rawAspect > 0 ? rawAspect : 1,
+    0.35,
+    2.4,
+  )
   const baseSize = 860
   let boxW = clamp(baseSize * Math.sqrt(aspect), 460, 1460)
   let boxH = clamp(boxW / aspect, 440, 1280)
@@ -486,17 +523,28 @@ export function buildWallsAndShelves(
     return a.bayIndex - b.bayIndex
   })
 
-  // 3. Dynamic Inventory Boxes Container (populated via iframe API)
+  // 3. Dynamic Inventory Boxes Container (populated gradually via iframe API)
   const boxesContainer = new THREE.Group()
   roomGroup.add(boxesContainer)
 
-  let activeBoxDisposables: Disposable[] = []
-  let activeBoxSurfaceMeshes: Array<InstanceType<ThreeModule['Mesh']>> = []
   let activeProducts: NormalizedProduct[] = []
+  let activePlans: ProductPlan[] = []
   let activeSummary: ShelfProductSummary[] = []
   let renderGeneration = 0
+  let disposed = false
+
+  const productStates = new Map<string, ProductRenderState>()
+  let cachedBoxSurfaceMeshes: Array<InstanceType<ThreeModule['Mesh']>> = []
+  let surfacesDirty = false
+
+  const pendingBoxTasks: PendingBoxTask[] = []
+  let lastBoxSpawnMs = 0
+  let lastSummaryEmitMs = 0
+  let summaryDirty = false
 
   const imageCache = new Map<string, CachedProductImage>()
+  const imageFetchQueue: string[] = []
+  let activeImageFetches = 0
 
   const tapeMat = new THREE.MeshStandardMaterial({
     color: '#dec59d',
@@ -505,69 +553,131 @@ export function buildWallsAndShelves(
   })
   disposables.push(tapeMat)
 
-  const disposeDynamicBoxes = () => {
-    for (const child of [...boxesContainer.children]) {
-      boxesContainer.remove(child)
-    }
-    for (const d of activeBoxDisposables) {
+  const disposeProductState = (productId: string) => {
+    const st = productStates.get(productId)
+    if (!st) return
+    boxesContainer.remove(st.group)
+    for (const d of st.disposables) {
       d.dispose()
     }
-    activeBoxDisposables = []
-    activeBoxSurfaceMeshes = []
+    productStates.delete(productId)
+    surfacesDirty = true
+  }
+
+  const disposeAllProductStates = () => {
+    for (const id of [...productStates.keys()]) {
+      disposeProductState(id)
+    }
+    cachedBoxSurfaceMeshes = []
+    surfacesDirty = false
+  }
+
+  const rebuildBoxSurfaceCache = () => {
+    if (!surfacesDirty) return
+    const next: Array<InstanceType<ThreeModule['Mesh']>> = []
+    for (const st of productStates.values()) {
+      for (const m of st.meshes) next.push(m)
+    }
+    cachedBoxSurfaceMeshes = next
+    surfacesDirty = false
+  }
+
+  const buildSummaryFromPlans = (): ShelfProductSummary[] => {
+    return activePlans.map((plan) => {
+      const st = productStates.get(plan.product.id)
+      return {
+        id: plan.product.id,
+        sku: plan.product.sku,
+        name: plan.product.name,
+        stock: plan.product.stock,
+        renderedBoxes: st?.renderedBoxes ?? 0,
+        slotIds: st ? [...st.placedSlotIds] : [],
+        aspectRatio: Number(plan.dims.aspect.toFixed(3)),
+      }
+    })
+  }
+
+  const emitSummaryNow = () => {
+    activeSummary = buildSummaryFromPlans()
+    summaryDirty = false
+    onBoxesChanged?.(activeSummary)
+  }
+
+  const pumpImageQueue = () => {
+    if (disposed) return
+    while (
+      activeImageFetches < MAX_CONCURRENT_IMAGE_FETCHES &&
+      imageFetchQueue.length > 0
+    ) {
+      const url = imageFetchQueue.shift()!
+      const entry = imageCache.get(url)
+      if (!entry || entry.status !== 'queued') continue
+
+      if (typeof Image === 'undefined') {
+        entry.status = 'error'
+        const cbs = entry.callbacks.splice(0, entry.callbacks.length)
+        for (const cb of cbs) cb()
+        continue
+      }
+
+      entry.status = 'loading'
+      activeImageFetches++
+
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      const finishFetch = () => {
+        activeImageFetches = Math.max(0, activeImageFetches - 1)
+        const cbs = entry.callbacks.splice(0, entry.callbacks.length)
+        if (!disposed) {
+          for (const cb of cbs) cb()
+          pumpImageQueue()
+        }
+      }
+
+      img.onload = () => {
+        const natW = img.naturalWidth || 256
+        const natH = img.naturalHeight || 256
+        const aspect = clamp(natW / natH, 0.35, 2.4)
+        entry.aspectRatio = aspect
+        try {
+          entry.texture = createLoadedImageTexture(THREE, img, aspect)
+          entry.status = 'loaded'
+        } catch {
+          entry.status = 'error'
+        }
+        finishFetch()
+      }
+
+      img.onerror = () => {
+        entry.status = 'error'
+        finishFetch()
+      }
+
+      img.src = url
+    }
   }
 
   const requestProductImage = (
     url: string,
-    generation: number,
-    onLoaded: () => void,
+    onSettled: () => void,
   ): CachedProductImage => {
     const existing = imageCache.get(url)
     if (existing) {
-      if (existing.status === 'loading') {
-        existing.callbacks.push(onLoaded)
+      if (existing.status === 'queued' || existing.status === 'loading') {
+        existing.callbacks.push(onSettled)
       }
       return existing
     }
 
     const entry: CachedProductImage = {
-      status: 'loading',
+      status: 'queued',
       aspectRatio: 1,
       texture: null,
-      callbacks: [onLoaded],
+      callbacks: [onSettled],
     }
     imageCache.set(url, entry)
-
-    if (typeof Image === 'undefined') {
-      entry.status = 'error'
-      return entry
-    }
-
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      const natW = img.naturalWidth || 256
-      const natH = img.naturalHeight || 256
-      const aspect = clamp(natW / natH, 0.35, 2.4)
-      entry.aspectRatio = aspect
-      try {
-        entry.texture = createLoadedImageTexture(THREE, img, aspect)
-        entry.status = 'loaded'
-      } catch {
-        entry.status = 'error'
-      }
-      const cbs = entry.callbacks.splice(0, entry.callbacks.length)
-      if (generation === renderGeneration) {
-        for (const cb of cbs) cb()
-      } else if (activeProducts.some((p) => p.imageUrl === url)) {
-        // Still rebuild with current generation if this product URL is active
-        renderProducts()
-      }
-    }
-    img.onerror = () => {
-      entry.status = 'error'
-      entry.callbacks.length = 0
-    }
-    img.src = url
+    imageFetchQueue.push(url)
+    pumpImageQueue()
     return entry
   }
 
@@ -630,24 +740,185 @@ export function buildWallsAndShelves(
     }
   }
 
-  const renderProducts = () => {
+  const enqueueProductBoxes = (plan: ProductPlan, generation: number) => {
+    const { product, dims, slots } = plan
+    const { boxW, boxH, boxD } = dims
+    let idxInProduct = 0
+
+    for (const { slot, count } of slots) {
+      if (count <= 0) continue
+
+      const layout = computeSlotLayoutCapacity(slot, boxW, boxH, boxD)
+      const { cols, rows, stacks, gapX, gapZ, gapY } = layout
+      const cosY = Math.cos(slot.facingYaw)
+      const sinY = Math.sin(slot.facingYaw)
+
+      let placedInSlot = 0
+      for (let row = 0; row < rows && placedInSlot < count; row++) {
+        const zLocal =
+          rows === 1 ? 40 : (row === 0 ? 1 : -1) * ((boxD + gapZ) / 2)
+
+        for (let stack = 0; stack < stacks && placedInSlot < count; stack++) {
+          const remainingInLayer = Math.min(cols, count - placedInSlot)
+          const layerWidth =
+            remainingInLayer * boxW + (remainingInLayer - 1) * gapX
+
+          for (let col = 0; col < remainingInLayer; col++) {
+            const xLocal = -layerWidth / 2 + boxW / 2 + col * (boxW + gapX)
+            const yWorld = slot.surfaceY + stack * (boxH + gapY)
+
+            const seed =
+              ((idxInProduct + 1) * 73856093) ^
+              (product.id.charCodeAt(0) * 19349663)
+            const yawJitter = (((seed & 0xff) / 255) - 0.5) * 0.05
+
+            pendingBoxTasks.push({
+              generation,
+              plan,
+              slotId: slot.id,
+              worldX: slot.centerX + xLocal * cosY + zLocal * sinY,
+              worldY: yWorld,
+              worldZ: slot.centerZ - xLocal * sinY + zLocal * cosY,
+              yaw: slot.facingYaw + yawJitter,
+            })
+
+            placedInSlot++
+            idxInProduct++
+          }
+        }
+      }
+    }
+  }
+
+  const createProductStateForPlan = (plan: ProductPlan): ProductRenderState => {
+    const { product, dims } = plan
+    const { boxW, boxH, boxD } = dims
+    const group = new THREE.Group()
+    boxesContainer.add(group)
+
+    const cardboardMat = new THREE.MeshStandardMaterial({
+      color: product.boxColor,
+      roughness: 0.86,
+      metalness: 0.02,
+    })
+
+    const cachedImg = product.imageUrl
+      ? imageCache.get(product.imageUrl)
+      : undefined
+    let frontTex: InstanceType<ThreeModule['CanvasTexture']>
+    let ownsFrontTex = false
+    if (cachedImg?.status === 'loaded' && cachedImg.texture) {
+      frontTex = cachedImg.texture
+    } else {
+      frontTex = createProductFallbackTexture(
+        THREE,
+        product.name ?? product.id,
+        product.sku,
+      )
+      ownsFrontTex = true
+    }
+
+    const frontLabelMat = new THREE.MeshStandardMaterial({
+      map: frontTex,
+      roughness: 0.5,
+      metalness: 0.02,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    })
+
+    const boxGeo = new THREE.BoxGeometry(boxW, boxH, boxD)
+    const topTapeGeo = new THREE.BoxGeometry(
+      boxW + 4,
+      6,
+      Math.min(150, boxD * 0.28),
+    )
+    const labelGeo = new THREE.PlaneGeometry(boxW * 0.92, boxH * 0.92)
+
+    const stateDisposables: Disposable[] = [
+      cardboardMat,
+      frontLabelMat,
+      boxGeo,
+      topTapeGeo,
+      labelGeo,
+    ]
+    if (ownsFrontTex) {
+      stateDisposables.push(frontTex)
+    }
+
+    const st: ProductRenderState = {
+      product,
+      group,
+      meshes: [],
+      disposables: stateDisposables,
+      boxGeo,
+      topTapeGeo,
+      labelGeo,
+      cardboardMat,
+      frontLabelMat,
+      dims,
+      placedSlotIds: [],
+      renderedBoxes: 0,
+    }
+    productStates.set(product.id, st)
+    return st
+  }
+
+  const spawnOneBoxFromTask = (task: PendingBoxTask) => {
+    const { plan } = task
+    const { product, dims } = plan
+    const { boxH, boxD } = dims
+
+    let st = productStates.get(product.id)
+    if (!st) {
+      st = createProductStateForPlan(plan)
+    }
+
+    const boxGroup = new THREE.Group()
+    boxGroup.position.set(task.worldX, task.worldY, task.worldZ)
+    boxGroup.rotation.y = task.yaw
+
+    const mesh = new THREE.Mesh(st.boxGeo, st.cardboardMat)
+    mesh.position.set(0, boxH / 2, 0)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    boxGroup.add(mesh)
+
+    const topTape = new THREE.Mesh(st.topTapeGeo, tapeMat)
+    topTape.position.set(0, boxH + 2, 0)
+    boxGroup.add(topTape)
+
+    const frontLabel = new THREE.Mesh(st.labelGeo, st.frontLabelMat)
+    frontLabel.position.set(0, boxH / 2, boxD / 2 + 2)
+    boxGroup.add(frontLabel)
+
+    markFocusSharp(boxGroup)
+    st.group.add(boxGroup)
+    st.meshes.push(mesh)
+    st.renderedBoxes++
+    if (!st.placedSlotIds.includes(task.slotId)) {
+      st.placedSlotIds.push(task.slotId)
+    }
+
+    surfacesDirty = true
+    summaryDirty = true
+  }
+
+  const scheduleFullShelfSync = () => {
     renderGeneration++
     const currentGen = renderGeneration
-    disposeDynamicBoxes()
+    pendingBoxTasks.length = 0
+    imageFetchQueue.length = 0
+    disposeAllProductStates()
 
     if (activeProducts.length === 0) {
-      activeSummary = []
-      onBoxesChanged?.([])
+      activePlans = []
+      emitSummaryNow()
       return
     }
 
     const usedSlotIds = new Set<string>()
-    const productPlans: Array<{
-      product: NormalizedProduct
-      dims: ReturnType<typeof computeBoxDimensions>
-      slots: Array<{ slot: ShelfSlot; count: number }>
-      targetCount: number
-    }> = []
+    const plans: ProductPlan[] = []
 
     const findNextAvailableSlot = (wall?: ShelfWallId): ShelfSlot | undefined => {
       if (wall) {
@@ -659,24 +930,20 @@ export function buildWallsAndShelves(
       return orderedSlots.find((s) => !usedSlotIds.has(s.id))
     }
 
-    // Pass 1: Assign primary shelf slot to each in-stock product
+    // Pass 1: Allocate primary shelf slot per in-stock product (skipping products beyond shelf capacity)
     for (const p of activeProducts) {
-      let aspect = p.aspectRatio
-      if (p.imageUrl) {
-        const cached = requestProductImage(p.imageUrl, currentGen, () => {
-          if (currentGen === renderGeneration && activeProducts.length > 0) {
-            renderProducts()
-          }
-        })
-        if (cached.status === 'loaded') {
-          aspect = cached.aspectRatio
-          p.aspectRatio = aspect
-        }
+      const cachedAspect = p.imageUrl
+        ? imageCache.get(p.imageUrl)?.aspectRatio
+        : undefined
+      if (cachedAspect !== undefined) {
+        p.aspectRatio = cachedAspect
       }
 
-      const dims = computeBoxDimensions(aspect)
+      const dims = computeBoxDimensions(p.aspectRatio)
       const targetCount =
-        p.maxVisible !== undefined ? Math.min(p.stock, p.maxVisible) : Math.min(p.stock, 48)
+        p.maxVisible !== undefined
+          ? Math.min(p.stock, p.maxVisible)
+          : Math.min(p.stock, 48)
 
       const assignedSlots: Array<{ slot: ShelfSlot; count: number }> = []
       if (targetCount > 0) {
@@ -692,12 +959,14 @@ export function buildWallsAndShelves(
             dims.boxH,
             dims.boxD,
           )
-          const countInSlot = Math.min(targetCount, layout.capacity)
-          assignedSlots.push({ slot: chosenSlot, count: countInSlot })
+          assignedSlots.push({
+            slot: chosenSlot,
+            count: Math.min(targetCount, layout.capacity),
+          })
         }
       }
 
-      productPlans.push({
+      plans.push({
         product: p,
         dims,
         slots: assignedSlots,
@@ -709,7 +978,7 @@ export function buildWallsAndShelves(
     let allocatedMore = true
     while (allocatedMore) {
       allocatedMore = false
-      for (const plan of productPlans) {
+      for (const plan of plans) {
         const placedSoFar = plan.slots.reduce((acc, s) => acc + s.count, 0)
         const remaining = plan.targetCount - placedSoFar
         if (remaining <= 0 || plan.product.slotId) continue
@@ -722,157 +991,97 @@ export function buildWallsAndShelves(
           plan.dims.boxH,
           plan.dims.boxD,
         )
-        const countInSlot = Math.min(remaining, layout.capacity)
-        plan.slots.push({ slot: extraSlot, count: countInSlot })
+        plan.slots.push({
+          slot: extraSlot,
+          count: Math.min(remaining, layout.capacity),
+        })
         allocatedMore = true
       }
     }
 
-    // Pass 3: Build 3D package meshes matching each product image's aspect ratio & stock count
-    const summaries: ShelfProductSummary[] = []
+    activePlans = plans
 
-    for (const plan of productPlans) {
-      const { product, dims } = plan
-      const { boxW, boxH, boxD, aspect } = dims
+    // Pass 3: Enqueue images (max 3 concurrent) & box spawn tasks (drip-fed in update())
+    for (const plan of plans) {
+      if (plan.slots.length === 0) continue
 
-      let renderedBoxes = 0
-      const placedSlotIds: string[] = []
-
-      if (plan.slots.length > 0) {
-        const cardboardMat = new THREE.MeshStandardMaterial({
-          color: product.boxColor,
-          roughness: 0.86,
-          metalness: 0.02,
-        })
-
-        const cachedImg = product.imageUrl
-          ? imageCache.get(product.imageUrl)
-          : undefined
-        let frontTex: InstanceType<ThreeModule['CanvasTexture']>
-        let ownsFrontTex = false
-        if (cachedImg?.status === 'loaded' && cachedImg.texture) {
-          frontTex = cachedImg.texture
-        } else {
-          frontTex = createProductFallbackTexture(
-            THREE,
-            product.name ?? product.id,
-            product.sku,
-          )
-          ownsFrontTex = true
-        }
-
-        const frontLabelMat = new THREE.MeshStandardMaterial({
-          map: frontTex,
-          roughness: 0.5,
-          metalness: 0.02,
-          polygonOffset: true,
-          polygonOffsetFactor: -1,
-          polygonOffsetUnits: -1,
-        })
-
-        const boxGeo = new THREE.BoxGeometry(boxW, boxH, boxD)
-        const topTapeGeo = new THREE.BoxGeometry(
-          boxW + 4,
-          6,
-          Math.min(150, boxD * 0.28),
-        )
-        const labelGeo = new THREE.PlaneGeometry(boxW * 0.92, boxH * 0.92)
-
-        activeBoxDisposables.push(
-          cardboardMat,
-          frontLabelMat,
-          boxGeo,
-          topTapeGeo,
-          labelGeo,
-        )
-        if (ownsFrontTex) {
-          activeBoxDisposables.push(frontTex)
-        }
-
-        for (const { slot, count } of plan.slots) {
-          if (count <= 0) continue
-          placedSlotIds.push(slot.id)
-
-          const layout = computeSlotLayoutCapacity(slot, boxW, boxH, boxD)
-          const { cols, rows, stacks, gapX, gapZ, gapY } = layout
-          const cosY = Math.cos(slot.facingYaw)
-          const sinY = Math.sin(slot.facingYaw)
-
-          let placedInSlot = 0
-          // Fill front row first (row 0 -> back row 1), stacking up as stock grows
-          for (let row = 0; row < rows && placedInSlot < count; row++) {
-            const zLocal =
-              rows === 1
-                ? 40
-                : (row === 0 ? 1 : -1) * ((boxD + gapZ) / 2)
-
-            for (let stack = 0; stack < stacks && placedInSlot < count; stack++) {
-              const remainingInLayer = Math.min(cols, count - placedInSlot)
-              const layerWidth =
-                remainingInLayer * boxW + (remainingInLayer - 1) * gapX
-
-              for (let col = 0; col < remainingInLayer; col++) {
-                const xLocal = -layerWidth / 2 + boxW / 2 + col * (boxW + gapX)
-                const yWorld = slot.surfaceY + stack * (boxH + gapY)
-
-                // Tiny organic angle jitter so shelves feel physically stocked
-                const seed =
-                  ((placedInSlot + 1) * 73856093) ^
-                  (product.id.charCodeAt(0) * 19349663)
-                const yawJitter = (((seed & 0xff) / 255) - 0.5) * 0.05
-
-                const boxGroup = new THREE.Group()
-                boxGroup.position.set(
-                  slot.centerX + xLocal * cosY + zLocal * sinY,
-                  yWorld,
-                  slot.centerZ - xLocal * sinY + zLocal * cosY,
-                )
-                boxGroup.rotation.y = slot.facingYaw + yawJitter
-
-                const mesh = new THREE.Mesh(boxGeo, cardboardMat)
-                mesh.position.set(0, boxH / 2, 0)
-                mesh.castShadow = true
-                mesh.receiveShadow = true
-                boxGroup.add(mesh)
-                activeBoxSurfaceMeshes.push(mesh)
-
-                const topTape = new THREE.Mesh(topTapeGeo, tapeMat)
-                topTape.position.set(0, boxH + 2, 0)
-                boxGroup.add(topTape)
-
-                const frontLabel = new THREE.Mesh(labelGeo, frontLabelMat)
-                frontLabel.position.set(0, boxH / 2, boxD / 2 + 2)
-                boxGroup.add(frontLabel)
-
-                markFocusSharp(boxGroup)
-                boxesContainer.add(boxGroup)
-
-                placedInSlot++
-                renderedBoxes++
-              }
-            }
-          }
-        }
+      const { product } = plan
+      if (!product.imageUrl) {
+        enqueueProductBoxes(plan, currentGen)
+        continue
       }
 
-      summaries.push({
-        id: product.id,
-        sku: product.sku,
-        name: product.name,
-        stock: product.stock,
-        renderedBoxes,
-        slotIds: placedSlotIds,
-        aspectRatio: Number(aspect.toFixed(3)),
+      const cached = requestProductImage(product.imageUrl, () => {
+        if (disposed || currentGen !== renderGeneration) return
+        const entry = imageCache.get(product.imageUrl!)
+        if (entry?.status === 'loaded') {
+          product.aspectRatio = entry.aspectRatio
+          plan.dims = computeBoxDimensions(entry.aspectRatio)
+          // Recompute slot box counts for the true image aspect ratio
+          let remaining = plan.targetCount
+          for (const slotAlloc of plan.slots) {
+            const layout = computeSlotLayoutCapacity(
+              slotAlloc.slot,
+              plan.dims.boxW,
+              plan.dims.boxH,
+              plan.dims.boxD,
+            )
+            slotAlloc.count = Math.min(remaining, layout.capacity)
+            remaining -= slotAlloc.count
+          }
+        }
+        enqueueProductBoxes(plan, currentGen)
       })
+
+      if (cached.status === 'loaded' || cached.status === 'error') {
+        if (cached.status === 'loaded') {
+          product.aspectRatio = cached.aspectRatio
+          plan.dims = computeBoxDimensions(cached.aspectRatio)
+        }
+        enqueueProductBoxes(plan, currentGen)
+      }
     }
 
-    activeSummary = summaries
-    onBoxesChanged?.(summaries)
+    activeSummary = buildSummaryFromPlans()
+    if (pendingBoxTasks.length === 0 && activeImageFetches === 0) {
+      emitSummaryNow()
+    }
+  }
+
+  const update = (nowMs: number) => {
+    if (disposed || pendingBoxTasks.length === 0) {
+      if (summaryDirty && nowMs - lastSummaryEmitMs >= SUMMARY_EMIT_INTERVAL_MS) {
+        lastSummaryEmitMs = nowMs
+        emitSummaryNow()
+      }
+      return
+    }
+
+    if (nowMs - lastBoxSpawnMs < BOX_SPAWN_INTERVAL_MS) {
+      return
+    }
+
+    while (pendingBoxTasks.length > 0) {
+      const task = pendingBoxTasks.shift()!
+      if (task.generation !== renderGeneration) continue
+      spawnOneBoxFromTask(task)
+      lastBoxSpawnMs = nowMs
+      break
+    }
+
+    if (
+      summaryDirty &&
+      (pendingBoxTasks.length === 0 ||
+        nowMs - lastSummaryEmitMs >= SUMMARY_EMIT_INTERVAL_MS)
+    ) {
+      lastSummaryEmitMs = nowMs
+      emitSummaryNow()
+    }
   }
 
   const setProducts = (products: ShelfProductInput[]): ShelfProductSummary[] => {
     activeProducts = products.map((p, idx) => normalizeProduct(p, idx))
-    renderProducts()
+    scheduleFullShelfSync()
     return activeSummary
   }
 
@@ -896,19 +1105,60 @@ export function buildWallsAndShelves(
         boxColor: raw.boxColor ?? prev.boxColor,
         maxVisible: raw.maxVisible ?? prev.maxVisible,
       }
-      activeProducts[idx] = normalizeProduct(merged, idx)
+      const nextProd = normalizeProduct(merged, idx)
+      activeProducts[idx] = nextProd
+
+      // Fast path: if this product already has an assigned plan and same image/slot/wall,
+      // rebuild ONLY this single product instead of the entire room!
+      const existingPlan = activePlans.find((pl) => pl.product.id === idStr)
+      if (
+        existingPlan &&
+        existingPlan.slots.length > 0 &&
+        prev.imageUrl === nextProd.imageUrl &&
+        prev.slotId === nextProd.slotId &&
+        prev.wall === nextProd.wall &&
+        prev.boxColor === nextProd.boxColor &&
+        existingPlan.slots.length === 1
+      ) {
+        const slot = existingPlan.slots[0].slot
+        const dims = computeBoxDimensions(nextProd.aspectRatio)
+        const targetCount =
+          nextProd.maxVisible !== undefined
+            ? Math.min(nextProd.stock, nextProd.maxVisible)
+            : Math.min(nextProd.stock, 48)
+        const layout = computeSlotLayoutCapacity(slot, dims.boxW, dims.boxH, dims.boxD)
+
+        if (targetCount > 0 && targetCount <= layout.capacity) {
+          existingPlan.product = nextProd
+          existingPlan.dims = dims
+          existingPlan.targetCount = targetCount
+          existingPlan.slots[0].count = targetCount
+
+          // Remove any pending tasks for this product and rebuild just its boxes
+          for (let i = pendingBoxTasks.length - 1; i >= 0; i--) {
+            if (pendingBoxTasks[i].plan.product.id === idStr) {
+              pendingBoxTasks.splice(i, 1)
+            }
+          }
+          disposeProductState(idStr)
+          enqueueProductBoxes(existingPlan, renderGeneration)
+          activeSummary = buildSummaryFromPlans()
+          return activeSummary
+        }
+      }
     } else {
       activeProducts.push(
         normalizeProduct({ stock: 0, ...raw, id: idStr }, activeProducts.length),
       )
     }
-    renderProducts()
+
+    scheduleFullShelfSync()
     return activeSummary
   }
 
   const clearProducts = () => {
     activeProducts = []
-    renderProducts()
+    scheduleFullShelfSync()
   }
 
   markFocusSharp(roomGroup)
@@ -916,7 +1166,10 @@ export function buildWallsAndShelves(
 
   disposables.push({
     dispose: () => {
-      disposeDynamicBoxes()
+      disposed = true
+      pendingBoxTasks.length = 0
+      imageFetchQueue.length = 0
+      disposeAllProductStates()
       for (const cached of imageCache.values()) {
         cached.texture?.dispose()
       }
@@ -927,8 +1180,12 @@ export function buildWallsAndShelves(
   return {
     roomGroup,
     wallAndShelfSurfaceMeshes: staticSurfaceMeshes,
-    getBoxSurfaceMeshes: () => activeBoxSurfaceMeshes,
+    getBoxSurfaceMeshes: () => {
+      rebuildBoxSurfaceCache()
+      return cachedBoxSurfaceMeshes
+    },
     shelfSlots,
+    update,
     setProducts,
     upsertProduct,
     clearProducts,

@@ -1435,6 +1435,8 @@ export function mountSceneEngine({
         updateBerlinTimeLighting(new Date())
       }
 
+      shelvesController.update(now)
+
       // Proximity grow animations for the 4 navigation loupes & cash drawer button
       // Disabled while holding the barcode scanner so aiming/clicking never triggers loupes or buttons
       const scannerActive = heldMode === 'scanner'
