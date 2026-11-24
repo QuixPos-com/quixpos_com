@@ -120,6 +120,108 @@ function parseNums(str: string): Array<number | undefined> {
 }
 
 /**
+ * Decodes ZPL II ^GFA ASCII hex data, including Zebra run-length compression
+ * (G-Z = 1..20, g-z = 20..400, ',' = zero-pad row, '!' = 1-pad row, ':' = repeat previous row).
+ */
+function decodeZplGfAscii(
+  rawData: string,
+  bytesPerRow: number,
+  expectedBytes: number,
+): Uint8Array {
+  const nibblesPerRow = bytesPerRow * 2
+  const outNibbles: number[] = []
+  let repeatCount = 0
+
+  const padRow = (nibbleVal: number) => {
+    const posInRow = outNibbles.length % nibblesPerRow
+    const remaining = posInRow === 0 ? nibblesPerRow : nibblesPerRow - posInRow
+    for (let k = 0; k < remaining; k++) {
+      outNibbles.push(nibbleVal)
+    }
+  }
+
+  for (let i = 0; i < rawData.length; i++) {
+    const ch = rawData[i]
+    const code = ch.charCodeAt(0)
+
+    // Whitespace
+    if (ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t') {
+      continue
+    }
+
+    // Uppercase G-Z: repeat 1..20
+    if (code >= 71 && code <= 90) {
+      repeatCount += code - 70
+      continue
+    }
+
+    // Lowercase g-z: repeat 20..400 in steps of 20
+    if (code >= 103 && code <= 122) {
+      repeatCount += (code - 102) * 20
+      continue
+    }
+
+    // ',' = fill remainder of current row with 0s
+    if (ch === ',') {
+      repeatCount = 0
+      padRow(0)
+      continue
+    }
+
+    // '!' = fill remainder of current row with Fs
+    if (ch === '!') {
+      repeatCount = 0
+      padRow(0xf)
+      continue
+    }
+
+    // ':' = repeat previous row
+    if (ch === ':') {
+      repeatCount = 0
+      const posInRow = outNibbles.length % nibblesPerRow
+      if (posInRow !== 0) {
+        padRow(0)
+      }
+      if (outNibbles.length >= nibblesPerRow) {
+        const rowStart = outNibbles.length - nibblesPerRow
+        for (let k = 0; k < nibblesPerRow; k++) {
+          outNibbles.push(outNibbles[rowStart + k])
+        }
+      } else {
+        for (let k = 0; k < nibblesPerRow; k++) {
+          outNibbles.push(0)
+        }
+      }
+      continue
+    }
+
+    // Hex digit 0-9, A-F, a-f
+    const nibble = parseInt(ch, 16)
+    if (!Number.isNaN(nibble)) {
+      const count = repeatCount > 0 ? repeatCount : 1
+      repeatCount = 0
+      for (let k = 0; k < count; k++) {
+        outNibbles.push(nibble)
+      }
+    } else {
+      repeatCount = 0
+    }
+  }
+
+  const byteCount =
+    expectedBytes > 0
+      ? Math.min(expectedBytes, Math.ceil(outNibbles.length / 2))
+      : Math.ceil(outNibbles.length / 2)
+  const result = new Uint8Array(byteCount)
+  for (let b = 0; b < byteCount; b++) {
+    const hi = outNibbles[b * 2] ?? 0
+    const lo = outNibbles[b * 2 + 1] ?? 0
+    result[b] = ((hi & 0xf) << 4) | (lo & 0xf)
+  }
+  return result
+}
+
+/**
  * Emulates ZPL II label commands onto an HTMLCanvasElement (203 dpi thermal label).
  */
 export function renderZplToCanvas(zplSource: string): ZplRenderResult {
@@ -208,6 +310,7 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
   // State machine
   let homeX = 0
   let homeY = 0
+  let labelShiftX = 0
   let defaultFontH = 30
   let defaultFontW = 0
   let defaultFontMono = false
@@ -279,6 +382,12 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
         break
       }
 
+      case 'LS': {
+        const [sx] = parseNums(trimmed)
+        labelShiftX = sx ?? 0
+        break
+      }
+
       case 'CF': {
         const parts = trimmed.split(',')
         const fontId = (parts[0] || '0').trim().toUpperCase()
@@ -300,7 +409,7 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
       case 'FO':
       case 'FT': {
         const [fx, fy] = parseNums(trimmed)
-        fieldX = homeX + (fx ?? 0)
+        fieldX = homeX + labelShiftX + (fx ?? 0)
         fieldY = homeY + (fy ?? 0)
         fieldTypesetBaseline = cmd.code === 'FT'
         break
@@ -461,25 +570,26 @@ export function renderZplToCanvas(zplSource: string): ZplRenderResult {
       }
 
       case 'GF': {
-        // ^GFA,binaryBytes,graphicFieldBytes,bytesPerRow,HEXDATA
-        const commaParts = trimmed.split(',')
-        if (commaParts.length >= 5) {
-          const mode = commaParts[0].trim().toUpperCase()
-          const bytesPerRow = Math.max(1, Number(commaParts[3]) || 1)
-          const hexData = commaParts.slice(4).join('').replace(/\s+/g, '')
-          if (mode === 'A' && hexData.length >= 2) {
+        // ^GFA,binaryBytes,graphicFieldBytes,bytesPerRow,DATA
+        // Preserve commas inside DATA because ',' is a ZPL RLE row-zero-pad token!
+        const headerMatch = trimmed.match(
+          /^([ABC])\s*,\s*(\d*)\s*,\s*(\d*)\s*,\s*(\d+)\s*,(.*)$/s,
+        )
+        if (headerMatch) {
+          const mode = headerMatch[1].toUpperCase()
+          const binaryBytes = Number(headerMatch[2]) || 0
+          const bytesPerRow = Math.max(1, Number(headerMatch[4]) || 1)
+          const payload = headerMatch[5]
+
+          if (mode === 'A' && payload.length > 0) {
+            const decoded = decodeZplGfAscii(payload, bytesPerRow, binaryBytes)
             withFieldDrawMode((fillColor) => {
               ctx.fillStyle = fillColor
-              const totalBytes = Math.floor(hexData.length / 2)
-              const rows = Math.ceil(totalBytes / bytesPerRow)
+              const rows = Math.ceil(decoded.length / bytesPerRow)
               let byteIdx = 0
               for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < bytesPerRow && byteIdx < totalBytes; c++) {
-                  const byteVal = parseInt(
-                    hexData.slice(byteIdx * 2, byteIdx * 2 + 2),
-                    16,
-                  )
-                  byteIdx++
+                for (let c = 0; c < bytesPerRow && byteIdx < decoded.length; c++) {
+                  const byteVal = decoded[byteIdx++]
                   if (!byteVal) continue
                   for (let bit = 0; bit < 8; bit++) {
                     if (byteVal & (0x80 >>> bit)) {
