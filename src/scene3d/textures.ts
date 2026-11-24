@@ -102,6 +102,177 @@ export function createNameplateTexture(
   return tex
 }
 
+export type EuroNoteDenom = 5 | 10 | 20 | 50 | 100
+
+const EURO_NOTE_STYLES: Record<
+  EuroNoteDenom,
+  { bg: string; band: string; accent: string; ink: string }
+> = {
+  5: { bg: '#cfd6de', band: '#b4beca', accent: '#475569', ink: '#1e293b' },
+  10: { bg: '#eab4ae', band: '#df948c', accent: '#b91c1c', ink: '#7f1d1d' },
+  20: { bg: '#a8cdf6', band: '#83b8f2', accent: '#1d4ed8', ink: '#1e3a8a' },
+  50: { bg: '#f4c089', band: '#eca55d', accent: '#c2410c', ink: '#7c2d12' },
+  100: { bg: '#9fdba9', band: '#7ac888', accent: '#15803d', ink: '#14532d' },
+}
+
+export function createEuroNoteTexture(
+  THREE: ThreeModule,
+  denom: EuroNoteDenom,
+) {
+  const style = EURO_NOTE_STYLES[denom]
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+
+  // Paper base
+  ctx.fillStyle = style.bg
+  ctx.fillRect(0, 0, 256, 512)
+
+  // Subtle decorative color band across middle
+  ctx.fillStyle = style.band
+  ctx.fillRect(16, 130, 224, 252)
+
+  // Crisp outer banknote border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.lineWidth = 10
+  ctx.strokeRect(5, 5, 246, 502)
+
+  ctx.strokeStyle = style.accent
+  ctx.lineWidth = 3
+  ctx.strokeRect(14, 14, 228, 484)
+
+  // Holographic foil strip along right edge
+  const foilGrad = ctx.createLinearGradient(204, 0, 232, 512)
+  foilGrad.addColorStop(0, 'rgba(241, 245, 249, 0.78)')
+  foilGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.92)')
+  foilGrad.addColorStop(1, 'rgba(248, 250, 252, 0.72)')
+  ctx.fillStyle = foilGrad
+  ctx.fillRect(204, 18, 26, 476)
+
+  // EU flag badge top-left
+  ctx.fillStyle = '#1d4ed8'
+  ctx.fillRect(26, 28, 54, 34)
+  ctx.fillStyle = '#facc15'
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(53 + Math.cos(a) * 11, 45 + Math.sin(a) * 11, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Subtle architectural arch motif in center
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(114, 276, 58, Math.PI, 0)
+  ctx.lineTo(172, 344)
+  ctx.moveTo(56, 276)
+  ctx.lineTo(56, 344)
+  ctx.stroke()
+
+  // Denomination numerals (top & bottom)
+  ctx.fillStyle = style.ink
+  ctx.font = '800 54px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(String(denom), 26, 74)
+
+  ctx.font = '800 66px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${denom}€`, 114, 260)
+
+  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
+  ctx.fillStyle = style.accent
+  ctx.fillText('EURO', 114, 314)
+
+  ctx.fillStyle = style.ink
+  ctx.font = '800 44px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText(String(denom), 26, 484)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+export type EuroCoinVisualStyle =
+  | 'bimetallic-2'
+  | 'bimetallic-1'
+  | 'gold'
+  | 'copper'
+
+export function createEuroCoinTexture(
+  THREE: ThreeModule,
+  label: string,
+  subLabel: 'EURO' | 'CENT',
+  style: EuroCoinVisualStyle,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const outerColor =
+    style === 'bimetallic-2'
+      ? '#d5dbe3'
+      : style === 'bimetallic-1' || style === 'gold'
+        ? '#dfb549'
+        : '#c9794c'
+  const innerColor =
+    style === 'bimetallic-2'
+      ? '#dfb549'
+      : style === 'bimetallic-1'
+        ? '#d5dbe3'
+        : style === 'gold'
+          ? '#e6c45f'
+          : '#d3875b'
+  const inkColor =
+    style === 'copper' ? '#5c2d16' : '#334155'
+
+  ctx.fillStyle = outerColor
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Raised outer rim highlight
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 59, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Inner core disc (bimetallic ring on €1 and €2, subtle embossed circle on cent coins)
+  ctx.fillStyle = innerColor
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.24)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = inkColor
+  ctx.font =
+    label.length > 1
+      ? '800 38px system-ui, -apple-system, sans-serif'
+      : '800 46px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 64, 57)
+
+  ctx.font = '700 13px system-ui, -apple-system, sans-serif'
+  ctx.fillText(subLabel, 64, 86)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
 export function createPowerButtonTexture(
   THREE: ThreeModule,
   mode: 'on' | 'active' | 'off' = 'on',
@@ -142,6 +313,177 @@ export function createPowerButtonTexture(
   return tex
 }
 
+export type EuroNoteDenom = 5 | 10 | 20 | 50 | 100
+
+const EURO_NOTE_STYLES: Record<
+  EuroNoteDenom,
+  { bg: string; band: string; accent: string; ink: string }
+> = {
+  5: { bg: '#cfd6de', band: '#b4beca', accent: '#475569', ink: '#1e293b' },
+  10: { bg: '#eab4ae', band: '#df948c', accent: '#b91c1c', ink: '#7f1d1d' },
+  20: { bg: '#a8cdf6', band: '#83b8f2', accent: '#1d4ed8', ink: '#1e3a8a' },
+  50: { bg: '#f4c089', band: '#eca55d', accent: '#c2410c', ink: '#7c2d12' },
+  100: { bg: '#9fdba9', band: '#7ac888', accent: '#15803d', ink: '#14532d' },
+}
+
+export function createEuroNoteTexture(
+  THREE: ThreeModule,
+  denom: EuroNoteDenom,
+) {
+  const style = EURO_NOTE_STYLES[denom]
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+
+  // Paper base
+  ctx.fillStyle = style.bg
+  ctx.fillRect(0, 0, 256, 512)
+
+  // Subtle decorative color band across middle
+  ctx.fillStyle = style.band
+  ctx.fillRect(16, 130, 224, 252)
+
+  // Crisp outer banknote border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.lineWidth = 10
+  ctx.strokeRect(5, 5, 246, 502)
+
+  ctx.strokeStyle = style.accent
+  ctx.lineWidth = 3
+  ctx.strokeRect(14, 14, 228, 484)
+
+  // Holographic foil strip along right edge
+  const foilGrad = ctx.createLinearGradient(204, 0, 232, 512)
+  foilGrad.addColorStop(0, 'rgba(241, 245, 249, 0.78)')
+  foilGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.92)')
+  foilGrad.addColorStop(1, 'rgba(248, 250, 252, 0.72)')
+  ctx.fillStyle = foilGrad
+  ctx.fillRect(204, 18, 26, 476)
+
+  // EU flag badge top-left
+  ctx.fillStyle = '#1d4ed8'
+  ctx.fillRect(26, 28, 54, 34)
+  ctx.fillStyle = '#facc15'
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(53 + Math.cos(a) * 11, 45 + Math.sin(a) * 11, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Subtle architectural arch motif in center
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(114, 276, 58, Math.PI, 0)
+  ctx.lineTo(172, 344)
+  ctx.moveTo(56, 276)
+  ctx.lineTo(56, 344)
+  ctx.stroke()
+
+  // Denomination numerals (top & bottom)
+  ctx.fillStyle = style.ink
+  ctx.font = '800 54px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(String(denom), 26, 74)
+
+  ctx.font = '800 66px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${denom}€`, 114, 260)
+
+  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
+  ctx.fillStyle = style.accent
+  ctx.fillText('EURO', 114, 314)
+
+  ctx.fillStyle = style.ink
+  ctx.font = '800 44px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText(String(denom), 26, 484)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+export type EuroCoinVisualStyle =
+  | 'bimetallic-2'
+  | 'bimetallic-1'
+  | 'gold'
+  | 'copper'
+
+export function createEuroCoinTexture(
+  THREE: ThreeModule,
+  label: string,
+  subLabel: 'EURO' | 'CENT',
+  style: EuroCoinVisualStyle,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const outerColor =
+    style === 'bimetallic-2'
+      ? '#d5dbe3'
+      : style === 'bimetallic-1' || style === 'gold'
+        ? '#dfb549'
+        : '#c9794c'
+  const innerColor =
+    style === 'bimetallic-2'
+      ? '#dfb549'
+      : style === 'bimetallic-1'
+        ? '#d5dbe3'
+        : style === 'gold'
+          ? '#e6c45f'
+          : '#d3875b'
+  const inkColor =
+    style === 'copper' ? '#5c2d16' : '#334155'
+
+  ctx.fillStyle = outerColor
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Raised outer rim highlight
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 59, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Inner core disc (bimetallic ring on €1 and €2, subtle embossed circle on cent coins)
+  ctx.fillStyle = innerColor
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.24)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = inkColor
+  ctx.font =
+    label.length > 1
+      ? '800 38px system-ui, -apple-system, sans-serif'
+      : '800 46px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 64, 57)
+
+  ctx.font = '700 13px system-ui, -apple-system, sans-serif'
+  ctx.fillText(subLabel, 64, 86)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
 export function createLoginFirstOsdTexture(THREE: ThreeModule) {
   const canvas = document.createElement('canvas')
   canvas.width = 512
@@ -167,6 +509,177 @@ export function createLoginFirstOsdTexture(THREE: ThreeModule) {
 
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+export type EuroNoteDenom = 5 | 10 | 20 | 50 | 100
+
+const EURO_NOTE_STYLES: Record<
+  EuroNoteDenom,
+  { bg: string; band: string; accent: string; ink: string }
+> = {
+  5: { bg: '#cfd6de', band: '#b4beca', accent: '#475569', ink: '#1e293b' },
+  10: { bg: '#eab4ae', band: '#df948c', accent: '#b91c1c', ink: '#7f1d1d' },
+  20: { bg: '#a8cdf6', band: '#83b8f2', accent: '#1d4ed8', ink: '#1e3a8a' },
+  50: { bg: '#f4c089', band: '#eca55d', accent: '#c2410c', ink: '#7c2d12' },
+  100: { bg: '#9fdba9', band: '#7ac888', accent: '#15803d', ink: '#14532d' },
+}
+
+export function createEuroNoteTexture(
+  THREE: ThreeModule,
+  denom: EuroNoteDenom,
+) {
+  const style = EURO_NOTE_STYLES[denom]
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+
+  // Paper base
+  ctx.fillStyle = style.bg
+  ctx.fillRect(0, 0, 256, 512)
+
+  // Subtle decorative color band across middle
+  ctx.fillStyle = style.band
+  ctx.fillRect(16, 130, 224, 252)
+
+  // Crisp outer banknote border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.lineWidth = 10
+  ctx.strokeRect(5, 5, 246, 502)
+
+  ctx.strokeStyle = style.accent
+  ctx.lineWidth = 3
+  ctx.strokeRect(14, 14, 228, 484)
+
+  // Holographic foil strip along right edge
+  const foilGrad = ctx.createLinearGradient(204, 0, 232, 512)
+  foilGrad.addColorStop(0, 'rgba(241, 245, 249, 0.78)')
+  foilGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.92)')
+  foilGrad.addColorStop(1, 'rgba(248, 250, 252, 0.72)')
+  ctx.fillStyle = foilGrad
+  ctx.fillRect(204, 18, 26, 476)
+
+  // EU flag badge top-left
+  ctx.fillStyle = '#1d4ed8'
+  ctx.fillRect(26, 28, 54, 34)
+  ctx.fillStyle = '#facc15'
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(53 + Math.cos(a) * 11, 45 + Math.sin(a) * 11, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Subtle architectural arch motif in center
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(114, 276, 58, Math.PI, 0)
+  ctx.lineTo(172, 344)
+  ctx.moveTo(56, 276)
+  ctx.lineTo(56, 344)
+  ctx.stroke()
+
+  // Denomination numerals (top & bottom)
+  ctx.fillStyle = style.ink
+  ctx.font = '800 54px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(String(denom), 26, 74)
+
+  ctx.font = '800 66px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${denom}€`, 114, 260)
+
+  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
+  ctx.fillStyle = style.accent
+  ctx.fillText('EURO', 114, 314)
+
+  ctx.fillStyle = style.ink
+  ctx.font = '800 44px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText(String(denom), 26, 484)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+export type EuroCoinVisualStyle =
+  | 'bimetallic-2'
+  | 'bimetallic-1'
+  | 'gold'
+  | 'copper'
+
+export function createEuroCoinTexture(
+  THREE: ThreeModule,
+  label: string,
+  subLabel: 'EURO' | 'CENT',
+  style: EuroCoinVisualStyle,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const outerColor =
+    style === 'bimetallic-2'
+      ? '#d5dbe3'
+      : style === 'bimetallic-1' || style === 'gold'
+        ? '#dfb549'
+        : '#c9794c'
+  const innerColor =
+    style === 'bimetallic-2'
+      ? '#dfb549'
+      : style === 'bimetallic-1'
+        ? '#d5dbe3'
+        : style === 'gold'
+          ? '#e6c45f'
+          : '#d3875b'
+  const inkColor =
+    style === 'copper' ? '#5c2d16' : '#334155'
+
+  ctx.fillStyle = outerColor
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Raised outer rim highlight
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 59, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Inner core disc (bimetallic ring on €1 and €2, subtle embossed circle on cent coins)
+  ctx.fillStyle = innerColor
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.24)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = inkColor
+  ctx.font =
+    label.length > 1
+      ? '800 38px system-ui, -apple-system, sans-serif'
+      : '800 46px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 64, 57)
+
+  ctx.font = '700 13px system-ui, -apple-system, sans-serif'
+  ctx.fillText(subLabel, 64, 86)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
   return tex
 }
 
@@ -198,6 +711,177 @@ export function createCashButtonTexture(
   return tex
 }
 
+export type EuroNoteDenom = 5 | 10 | 20 | 50 | 100
+
+const EURO_NOTE_STYLES: Record<
+  EuroNoteDenom,
+  { bg: string; band: string; accent: string; ink: string }
+> = {
+  5: { bg: '#cfd6de', band: '#b4beca', accent: '#475569', ink: '#1e293b' },
+  10: { bg: '#eab4ae', band: '#df948c', accent: '#b91c1c', ink: '#7f1d1d' },
+  20: { bg: '#a8cdf6', band: '#83b8f2', accent: '#1d4ed8', ink: '#1e3a8a' },
+  50: { bg: '#f4c089', band: '#eca55d', accent: '#c2410c', ink: '#7c2d12' },
+  100: { bg: '#9fdba9', band: '#7ac888', accent: '#15803d', ink: '#14532d' },
+}
+
+export function createEuroNoteTexture(
+  THREE: ThreeModule,
+  denom: EuroNoteDenom,
+) {
+  const style = EURO_NOTE_STYLES[denom]
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+
+  // Paper base
+  ctx.fillStyle = style.bg
+  ctx.fillRect(0, 0, 256, 512)
+
+  // Subtle decorative color band across middle
+  ctx.fillStyle = style.band
+  ctx.fillRect(16, 130, 224, 252)
+
+  // Crisp outer banknote border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.lineWidth = 10
+  ctx.strokeRect(5, 5, 246, 502)
+
+  ctx.strokeStyle = style.accent
+  ctx.lineWidth = 3
+  ctx.strokeRect(14, 14, 228, 484)
+
+  // Holographic foil strip along right edge
+  const foilGrad = ctx.createLinearGradient(204, 0, 232, 512)
+  foilGrad.addColorStop(0, 'rgba(241, 245, 249, 0.78)')
+  foilGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.92)')
+  foilGrad.addColorStop(1, 'rgba(248, 250, 252, 0.72)')
+  ctx.fillStyle = foilGrad
+  ctx.fillRect(204, 18, 26, 476)
+
+  // EU flag badge top-left
+  ctx.fillStyle = '#1d4ed8'
+  ctx.fillRect(26, 28, 54, 34)
+  ctx.fillStyle = '#facc15'
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(53 + Math.cos(a) * 11, 45 + Math.sin(a) * 11, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Subtle architectural arch motif in center
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(114, 276, 58, Math.PI, 0)
+  ctx.lineTo(172, 344)
+  ctx.moveTo(56, 276)
+  ctx.lineTo(56, 344)
+  ctx.stroke()
+
+  // Denomination numerals (top & bottom)
+  ctx.fillStyle = style.ink
+  ctx.font = '800 54px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(String(denom), 26, 74)
+
+  ctx.font = '800 66px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${denom}€`, 114, 260)
+
+  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
+  ctx.fillStyle = style.accent
+  ctx.fillText('EURO', 114, 314)
+
+  ctx.fillStyle = style.ink
+  ctx.font = '800 44px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText(String(denom), 26, 484)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+export type EuroCoinVisualStyle =
+  | 'bimetallic-2'
+  | 'bimetallic-1'
+  | 'gold'
+  | 'copper'
+
+export function createEuroCoinTexture(
+  THREE: ThreeModule,
+  label: string,
+  subLabel: 'EURO' | 'CENT',
+  style: EuroCoinVisualStyle,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const outerColor =
+    style === 'bimetallic-2'
+      ? '#d5dbe3'
+      : style === 'bimetallic-1' || style === 'gold'
+        ? '#dfb549'
+        : '#c9794c'
+  const innerColor =
+    style === 'bimetallic-2'
+      ? '#dfb549'
+      : style === 'bimetallic-1'
+        ? '#d5dbe3'
+        : style === 'gold'
+          ? '#e6c45f'
+          : '#d3875b'
+  const inkColor =
+    style === 'copper' ? '#5c2d16' : '#334155'
+
+  ctx.fillStyle = outerColor
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Raised outer rim highlight
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 59, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Inner core disc (bimetallic ring on €1 and €2, subtle embossed circle on cent coins)
+  ctx.fillStyle = innerColor
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.24)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = inkColor
+  ctx.font =
+    label.length > 1
+      ? '800 38px system-ui, -apple-system, sans-serif'
+      : '800 46px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 64, 57)
+
+  ctx.font = '700 13px system-ui, -apple-system, sans-serif'
+  ctx.fillText(subLabel, 64, 86)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
 export function createPrinterFrontTexture(THREE: ThreeModule) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
@@ -219,6 +903,177 @@ export function createPrinterFrontTexture(THREE: ThreeModule) {
 
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+export type EuroNoteDenom = 5 | 10 | 20 | 50 | 100
+
+const EURO_NOTE_STYLES: Record<
+  EuroNoteDenom,
+  { bg: string; band: string; accent: string; ink: string }
+> = {
+  5: { bg: '#cfd6de', band: '#b4beca', accent: '#475569', ink: '#1e293b' },
+  10: { bg: '#eab4ae', band: '#df948c', accent: '#b91c1c', ink: '#7f1d1d' },
+  20: { bg: '#a8cdf6', band: '#83b8f2', accent: '#1d4ed8', ink: '#1e3a8a' },
+  50: { bg: '#f4c089', band: '#eca55d', accent: '#c2410c', ink: '#7c2d12' },
+  100: { bg: '#9fdba9', band: '#7ac888', accent: '#15803d', ink: '#14532d' },
+}
+
+export function createEuroNoteTexture(
+  THREE: ThreeModule,
+  denom: EuroNoteDenom,
+) {
+  const style = EURO_NOTE_STYLES[denom]
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+
+  // Paper base
+  ctx.fillStyle = style.bg
+  ctx.fillRect(0, 0, 256, 512)
+
+  // Subtle decorative color band across middle
+  ctx.fillStyle = style.band
+  ctx.fillRect(16, 130, 224, 252)
+
+  // Crisp outer banknote border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.lineWidth = 10
+  ctx.strokeRect(5, 5, 246, 502)
+
+  ctx.strokeStyle = style.accent
+  ctx.lineWidth = 3
+  ctx.strokeRect(14, 14, 228, 484)
+
+  // Holographic foil strip along right edge
+  const foilGrad = ctx.createLinearGradient(204, 0, 232, 512)
+  foilGrad.addColorStop(0, 'rgba(241, 245, 249, 0.78)')
+  foilGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.92)')
+  foilGrad.addColorStop(1, 'rgba(248, 250, 252, 0.72)')
+  ctx.fillStyle = foilGrad
+  ctx.fillRect(204, 18, 26, 476)
+
+  // EU flag badge top-left
+  ctx.fillStyle = '#1d4ed8'
+  ctx.fillRect(26, 28, 54, 34)
+  ctx.fillStyle = '#facc15'
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(53 + Math.cos(a) * 11, 45 + Math.sin(a) * 11, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Subtle architectural arch motif in center
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(114, 276, 58, Math.PI, 0)
+  ctx.lineTo(172, 344)
+  ctx.moveTo(56, 276)
+  ctx.lineTo(56, 344)
+  ctx.stroke()
+
+  // Denomination numerals (top & bottom)
+  ctx.fillStyle = style.ink
+  ctx.font = '800 54px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(String(denom), 26, 74)
+
+  ctx.font = '800 66px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${denom}€`, 114, 260)
+
+  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
+  ctx.fillStyle = style.accent
+  ctx.fillText('EURO', 114, 314)
+
+  ctx.fillStyle = style.ink
+  ctx.font = '800 44px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText(String(denom), 26, 484)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+export type EuroCoinVisualStyle =
+  | 'bimetallic-2'
+  | 'bimetallic-1'
+  | 'gold'
+  | 'copper'
+
+export function createEuroCoinTexture(
+  THREE: ThreeModule,
+  label: string,
+  subLabel: 'EURO' | 'CENT',
+  style: EuroCoinVisualStyle,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const outerColor =
+    style === 'bimetallic-2'
+      ? '#d5dbe3'
+      : style === 'bimetallic-1' || style === 'gold'
+        ? '#dfb549'
+        : '#c9794c'
+  const innerColor =
+    style === 'bimetallic-2'
+      ? '#dfb549'
+      : style === 'bimetallic-1'
+        ? '#d5dbe3'
+        : style === 'gold'
+          ? '#e6c45f'
+          : '#d3875b'
+  const inkColor =
+    style === 'copper' ? '#5c2d16' : '#334155'
+
+  ctx.fillStyle = outerColor
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Raised outer rim highlight
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 59, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Inner core disc (bimetallic ring on €1 and €2, subtle embossed circle on cent coins)
+  ctx.fillStyle = innerColor
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.24)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = inkColor
+  ctx.font =
+    label.length > 1
+      ? '800 38px system-ui, -apple-system, sans-serif'
+      : '800 46px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 64, 57)
+
+  ctx.font = '700 13px system-ui, -apple-system, sans-serif'
+  ctx.fillText(subLabel, 64, 86)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
   return tex
 }
 
@@ -250,6 +1105,177 @@ export function createReceiptTexture(THREE: ThreeModule) {
 
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+export type EuroNoteDenom = 5 | 10 | 20 | 50 | 100
+
+const EURO_NOTE_STYLES: Record<
+  EuroNoteDenom,
+  { bg: string; band: string; accent: string; ink: string }
+> = {
+  5: { bg: '#cfd6de', band: '#b4beca', accent: '#475569', ink: '#1e293b' },
+  10: { bg: '#eab4ae', band: '#df948c', accent: '#b91c1c', ink: '#7f1d1d' },
+  20: { bg: '#a8cdf6', band: '#83b8f2', accent: '#1d4ed8', ink: '#1e3a8a' },
+  50: { bg: '#f4c089', band: '#eca55d', accent: '#c2410c', ink: '#7c2d12' },
+  100: { bg: '#9fdba9', band: '#7ac888', accent: '#15803d', ink: '#14532d' },
+}
+
+export function createEuroNoteTexture(
+  THREE: ThreeModule,
+  denom: EuroNoteDenom,
+) {
+  const style = EURO_NOTE_STYLES[denom]
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+
+  // Paper base
+  ctx.fillStyle = style.bg
+  ctx.fillRect(0, 0, 256, 512)
+
+  // Subtle decorative color band across middle
+  ctx.fillStyle = style.band
+  ctx.fillRect(16, 130, 224, 252)
+
+  // Crisp outer banknote border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.lineWidth = 10
+  ctx.strokeRect(5, 5, 246, 502)
+
+  ctx.strokeStyle = style.accent
+  ctx.lineWidth = 3
+  ctx.strokeRect(14, 14, 228, 484)
+
+  // Holographic foil strip along right edge
+  const foilGrad = ctx.createLinearGradient(204, 0, 232, 512)
+  foilGrad.addColorStop(0, 'rgba(241, 245, 249, 0.78)')
+  foilGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.92)')
+  foilGrad.addColorStop(1, 'rgba(248, 250, 252, 0.72)')
+  ctx.fillStyle = foilGrad
+  ctx.fillRect(204, 18, 26, 476)
+
+  // EU flag badge top-left
+  ctx.fillStyle = '#1d4ed8'
+  ctx.fillRect(26, 28, 54, 34)
+  ctx.fillStyle = '#facc15'
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(53 + Math.cos(a) * 11, 45 + Math.sin(a) * 11, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Subtle architectural arch motif in center
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(114, 276, 58, Math.PI, 0)
+  ctx.lineTo(172, 344)
+  ctx.moveTo(56, 276)
+  ctx.lineTo(56, 344)
+  ctx.stroke()
+
+  // Denomination numerals (top & bottom)
+  ctx.fillStyle = style.ink
+  ctx.font = '800 54px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(String(denom), 26, 74)
+
+  ctx.font = '800 66px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${denom}€`, 114, 260)
+
+  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
+  ctx.fillStyle = style.accent
+  ctx.fillText('EURO', 114, 314)
+
+  ctx.fillStyle = style.ink
+  ctx.font = '800 44px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText(String(denom), 26, 484)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+export type EuroCoinVisualStyle =
+  | 'bimetallic-2'
+  | 'bimetallic-1'
+  | 'gold'
+  | 'copper'
+
+export function createEuroCoinTexture(
+  THREE: ThreeModule,
+  label: string,
+  subLabel: 'EURO' | 'CENT',
+  style: EuroCoinVisualStyle,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const outerColor =
+    style === 'bimetallic-2'
+      ? '#d5dbe3'
+      : style === 'bimetallic-1' || style === 'gold'
+        ? '#dfb549'
+        : '#c9794c'
+  const innerColor =
+    style === 'bimetallic-2'
+      ? '#dfb549'
+      : style === 'bimetallic-1'
+        ? '#d5dbe3'
+        : style === 'gold'
+          ? '#e6c45f'
+          : '#d3875b'
+  const inkColor =
+    style === 'copper' ? '#5c2d16' : '#334155'
+
+  ctx.fillStyle = outerColor
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Raised outer rim highlight
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 59, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Inner core disc (bimetallic ring on €1 and €2, subtle embossed circle on cent coins)
+  ctx.fillStyle = innerColor
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.24)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = inkColor
+  ctx.font =
+    label.length > 1
+      ? '800 38px system-ui, -apple-system, sans-serif'
+      : '800 46px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 64, 57)
+
+  ctx.font = '700 13px system-ui, -apple-system, sans-serif'
+  ctx.fillText(subLabel, 64, 86)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
   return tex
 }
 
@@ -333,6 +1359,177 @@ export function createZebraBadgeTexture(THREE: ThreeModule) {
   return tex
 }
 
+export type EuroNoteDenom = 5 | 10 | 20 | 50 | 100
+
+const EURO_NOTE_STYLES: Record<
+  EuroNoteDenom,
+  { bg: string; band: string; accent: string; ink: string }
+> = {
+  5: { bg: '#cfd6de', band: '#b4beca', accent: '#475569', ink: '#1e293b' },
+  10: { bg: '#eab4ae', band: '#df948c', accent: '#b91c1c', ink: '#7f1d1d' },
+  20: { bg: '#a8cdf6', band: '#83b8f2', accent: '#1d4ed8', ink: '#1e3a8a' },
+  50: { bg: '#f4c089', band: '#eca55d', accent: '#c2410c', ink: '#7c2d12' },
+  100: { bg: '#9fdba9', band: '#7ac888', accent: '#15803d', ink: '#14532d' },
+}
+
+export function createEuroNoteTexture(
+  THREE: ThreeModule,
+  denom: EuroNoteDenom,
+) {
+  const style = EURO_NOTE_STYLES[denom]
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+
+  // Paper base
+  ctx.fillStyle = style.bg
+  ctx.fillRect(0, 0, 256, 512)
+
+  // Subtle decorative color band across middle
+  ctx.fillStyle = style.band
+  ctx.fillRect(16, 130, 224, 252)
+
+  // Crisp outer banknote border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.lineWidth = 10
+  ctx.strokeRect(5, 5, 246, 502)
+
+  ctx.strokeStyle = style.accent
+  ctx.lineWidth = 3
+  ctx.strokeRect(14, 14, 228, 484)
+
+  // Holographic foil strip along right edge
+  const foilGrad = ctx.createLinearGradient(204, 0, 232, 512)
+  foilGrad.addColorStop(0, 'rgba(241, 245, 249, 0.78)')
+  foilGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.92)')
+  foilGrad.addColorStop(1, 'rgba(248, 250, 252, 0.72)')
+  ctx.fillStyle = foilGrad
+  ctx.fillRect(204, 18, 26, 476)
+
+  // EU flag badge top-left
+  ctx.fillStyle = '#1d4ed8'
+  ctx.fillRect(26, 28, 54, 34)
+  ctx.fillStyle = '#facc15'
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(53 + Math.cos(a) * 11, 45 + Math.sin(a) * 11, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Subtle architectural arch motif in center
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(114, 276, 58, Math.PI, 0)
+  ctx.lineTo(172, 344)
+  ctx.moveTo(56, 276)
+  ctx.lineTo(56, 344)
+  ctx.stroke()
+
+  // Denomination numerals (top & bottom)
+  ctx.fillStyle = style.ink
+  ctx.font = '800 54px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(String(denom), 26, 74)
+
+  ctx.font = '800 66px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${denom}€`, 114, 260)
+
+  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
+  ctx.fillStyle = style.accent
+  ctx.fillText('EURO', 114, 314)
+
+  ctx.fillStyle = style.ink
+  ctx.font = '800 44px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText(String(denom), 26, 484)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+export type EuroCoinVisualStyle =
+  | 'bimetallic-2'
+  | 'bimetallic-1'
+  | 'gold'
+  | 'copper'
+
+export function createEuroCoinTexture(
+  THREE: ThreeModule,
+  label: string,
+  subLabel: 'EURO' | 'CENT',
+  style: EuroCoinVisualStyle,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const outerColor =
+    style === 'bimetallic-2'
+      ? '#d5dbe3'
+      : style === 'bimetallic-1' || style === 'gold'
+        ? '#dfb549'
+        : '#c9794c'
+  const innerColor =
+    style === 'bimetallic-2'
+      ? '#dfb549'
+      : style === 'bimetallic-1'
+        ? '#d5dbe3'
+        : style === 'gold'
+          ? '#e6c45f'
+          : '#d3875b'
+  const inkColor =
+    style === 'copper' ? '#5c2d16' : '#334155'
+
+  ctx.fillStyle = outerColor
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Raised outer rim highlight
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 59, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Inner core disc (bimetallic ring on €1 and €2, subtle embossed circle on cent coins)
+  ctx.fillStyle = innerColor
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.24)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = inkColor
+  ctx.font =
+    label.length > 1
+      ? '800 38px system-ui, -apple-system, sans-serif'
+      : '800 46px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 64, 57)
+
+  ctx.font = '700 13px system-ui, -apple-system, sans-serif'
+  ctx.fillText(subLabel, 64, 86)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
 export function createShippingLabelTexture(THREE: ThreeModule) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
@@ -376,5 +1573,176 @@ export function createShippingLabelTexture(THREE: ThreeModule) {
 
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+export type EuroNoteDenom = 5 | 10 | 20 | 50 | 100
+
+const EURO_NOTE_STYLES: Record<
+  EuroNoteDenom,
+  { bg: string; band: string; accent: string; ink: string }
+> = {
+  5: { bg: '#cfd6de', band: '#b4beca', accent: '#475569', ink: '#1e293b' },
+  10: { bg: '#eab4ae', band: '#df948c', accent: '#b91c1c', ink: '#7f1d1d' },
+  20: { bg: '#a8cdf6', band: '#83b8f2', accent: '#1d4ed8', ink: '#1e3a8a' },
+  50: { bg: '#f4c089', band: '#eca55d', accent: '#c2410c', ink: '#7c2d12' },
+  100: { bg: '#9fdba9', band: '#7ac888', accent: '#15803d', ink: '#14532d' },
+}
+
+export function createEuroNoteTexture(
+  THREE: ThreeModule,
+  denom: EuroNoteDenom,
+) {
+  const style = EURO_NOTE_STYLES[denom]
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+
+  // Paper base
+  ctx.fillStyle = style.bg
+  ctx.fillRect(0, 0, 256, 512)
+
+  // Subtle decorative color band across middle
+  ctx.fillStyle = style.band
+  ctx.fillRect(16, 130, 224, 252)
+
+  // Crisp outer banknote border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.lineWidth = 10
+  ctx.strokeRect(5, 5, 246, 502)
+
+  ctx.strokeStyle = style.accent
+  ctx.lineWidth = 3
+  ctx.strokeRect(14, 14, 228, 484)
+
+  // Holographic foil strip along right edge
+  const foilGrad = ctx.createLinearGradient(204, 0, 232, 512)
+  foilGrad.addColorStop(0, 'rgba(241, 245, 249, 0.78)')
+  foilGrad.addColorStop(0.5, 'rgba(203, 213, 225, 0.92)')
+  foilGrad.addColorStop(1, 'rgba(248, 250, 252, 0.72)')
+  ctx.fillStyle = foilGrad
+  ctx.fillRect(204, 18, 26, 476)
+
+  // EU flag badge top-left
+  ctx.fillStyle = '#1d4ed8'
+  ctx.fillRect(26, 28, 54, 34)
+  ctx.fillStyle = '#facc15'
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    ctx.beginPath()
+    ctx.arc(53 + Math.cos(a) * 11, 45 + Math.sin(a) * 11, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Subtle architectural arch motif in center
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(114, 276, 58, Math.PI, 0)
+  ctx.lineTo(172, 344)
+  ctx.moveTo(56, 276)
+  ctx.lineTo(56, 344)
+  ctx.stroke()
+
+  // Denomination numerals (top & bottom)
+  ctx.fillStyle = style.ink
+  ctx.font = '800 54px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(String(denom), 26, 74)
+
+  ctx.font = '800 66px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${denom}€`, 114, 260)
+
+  ctx.font = '700 22px system-ui, -apple-system, sans-serif'
+  ctx.fillStyle = style.accent
+  ctx.fillText('EURO', 114, 314)
+
+  ctx.fillStyle = style.ink
+  ctx.font = '800 44px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText(String(denom), 26, 484)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+export type EuroCoinVisualStyle =
+  | 'bimetallic-2'
+  | 'bimetallic-1'
+  | 'gold'
+  | 'copper'
+
+export function createEuroCoinTexture(
+  THREE: ThreeModule,
+  label: string,
+  subLabel: 'EURO' | 'CENT',
+  style: EuroCoinVisualStyle,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')!
+
+  const outerColor =
+    style === 'bimetallic-2'
+      ? '#d5dbe3'
+      : style === 'bimetallic-1' || style === 'gold'
+        ? '#dfb549'
+        : '#c9794c'
+  const innerColor =
+    style === 'bimetallic-2'
+      ? '#dfb549'
+      : style === 'bimetallic-1'
+        ? '#d5dbe3'
+        : style === 'gold'
+          ? '#e6c45f'
+          : '#d3875b'
+  const inkColor =
+    style === 'copper' ? '#5c2d16' : '#334155'
+
+  ctx.fillStyle = outerColor
+  ctx.fillRect(0, 0, 128, 128)
+
+  // Raised outer rim highlight
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.arc(64, 64, 59, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Inner core disc (bimetallic ring on €1 and €2, subtle embossed circle on cent coins)
+  ctx.fillStyle = innerColor
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.24)'
+  ctx.lineWidth = 2.5
+  ctx.beginPath()
+  ctx.arc(64, 64, 41, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.fillStyle = inkColor
+  ctx.font =
+    label.length > 1
+      ? '800 38px system-ui, -apple-system, sans-serif'
+      : '800 46px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, 64, 57)
+
+  ctx.font = '700 13px system-ui, -apple-system, sans-serif'
+  ctx.fillText(subLabel, 64, 86)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
   return tex
 }

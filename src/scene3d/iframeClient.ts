@@ -87,6 +87,17 @@ export type BarcodeScanCallback = (
   payload: BarcodeScanPayload,
 ) => void
 
+export interface DrawerCashChangedPayload {
+  [key: string]: unknown
+  currency: 'EUR'
+  /** Total cash in EUR (e.g. 137.85) */
+  amount: number
+  /** Total cash in integer cents (e.g. 13785) */
+  cents: number
+  notes: Record<'100' | '50' | '20' | '10' | '5', number>
+  coins: Record<'200' | '100' | '50' | '20' | '10' | '5' | '2' | '1', number>
+}
+
 export interface ScreensChangedPayload {
   [key: string]: unknown
   tabletId?: string
@@ -706,6 +717,33 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     })
   }
 
+  /**
+   * Set the total cash amount in the 3D cash drawer in EUR (e.g. `137.85`).
+   * The 3D drawer automatically calculates and renders the matching Euro notes
+   * (€5–€100) and Euro coins (1c–€2).
+   */
+  const setDrawerCash = (amountEur: number) => {
+    send('drawer:setCash', { amount: amountEur })
+  }
+
+  /**
+   * Set the total cash amount in the 3D cash drawer in integer euro cents (e.g. `13785` = €137.85).
+   */
+  const setDrawerCashCents = (cents: number) => {
+    send('drawer:setCash', { cents: Math.round(cents) })
+  }
+
+  /**
+   * Subscribe to `'drawer:cashChanged'` updates reporting the drawer's Euro breakdown.
+   */
+  const onDrawerCashChanged = (
+    callback: (info: DrawerCashChangedPayload) => void,
+  ): (() => void) => {
+    return on<DrawerCashChangedPayload>('drawer:cashChanged', (data) => {
+      callback(data)
+    })
+  }
+
   const dispose = () => {
     if (disposed) return
     disposed = true
@@ -760,6 +798,9 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     waitForPairingPin,
     ackPairingPin,
     onBarcodeScan,
+    setDrawerCash,
+    setDrawerCashCents,
+    onDrawerCashChanged,
     dispose,
   }
 }

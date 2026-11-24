@@ -92,6 +92,7 @@ export function mountSceneEngine({
   let navigateImpl: ((view: NavPresetId) => void) | null = null
   let returnPrevImpl: (() => void) | null = null
   let toggleDrawerImpl: (() => void) | null = null
+  let setDrawerCashImpl: ((amountEur: number) => void) | null = null
   let setTabletPowerImpl: ((tabletId: string, poweredOn: boolean) => void) | null =
     null
   let toggleTabletPowerImpl: ((tabletId: string) => void) | null = null
@@ -237,6 +238,8 @@ export function mountSceneEngine({
       openBtnTex,
       closeBtnTex,
       drawerTargets,
+      setCashAmount,
+      setCashCents,
       drawerSurfaceMeshes,
     } = buildCashDrawer(THREE, webglScene, disposables)
 
@@ -1015,6 +1018,43 @@ export function mountSceneEngine({
     channel.on('drawer:toggle', () => {
       toggleCashDrawer()
     })
+
+    const applyDrawerCashFromChannel = (data: Record<string, unknown>) => {
+      let breakdown = null
+      if (typeof data.cents === 'number' && Number.isFinite(data.cents)) {
+        breakdown = setCashCents(data.cents)
+      } else if (
+        typeof data.amountCents === 'number' &&
+        Number.isFinite(data.amountCents)
+      ) {
+        breakdown = setCashCents(data.amountCents)
+      } else if (
+        typeof data.amount === 'number' &&
+        Number.isFinite(data.amount)
+      ) {
+        breakdown = setCashAmount(data.amount)
+      } else if (typeof data.amount === 'string') {
+        const parsed = Number(data.amount.replace(',', '.'))
+        if (Number.isFinite(parsed)) {
+          breakdown = setCashAmount(parsed)
+        }
+      }
+      if (!breakdown) return
+      channel.send('drawer:cashChanged', {
+        currency: 'EUR',
+        amount: breakdown.amount,
+        cents: breakdown.cents,
+        notes: breakdown.notes,
+        coins: breakdown.coins,
+      })
+    }
+
+    channel.on('drawer:setCash', (data) => {
+      applyDrawerCashFromChannel(data)
+    })
+    channel.on('drawer:cash', (data) => {
+      applyDrawerCashFromChannel(data)
+    })
     channel.on('camera:focus', (data) => {
       const view = data.view as NavPresetId
       if (validFocusViews.has(view)) {
@@ -1158,6 +1198,10 @@ export function mountSceneEngine({
 
     toggleDrawerImpl = () => {
       toggleCashDrawer()
+    }
+
+    setDrawerCashImpl = (amountEur: number) => {
+      applyDrawerCashFromChannel({ amount: amountEur })
     }
 
     setTabletPowerImpl = (tabletId: string, poweredOn: boolean) => {
@@ -1937,6 +1981,7 @@ export function mountSceneEngine({
     navigateToView: (view: NavPresetId) => navigateImpl?.(view),
     returnToPrevious: () => returnPrevImpl?.(),
     toggleDrawer: () => toggleDrawerImpl?.(),
+    setDrawerCash: (amountEur: number) => setDrawerCashImpl?.(amountEur),
     setTabletPower: (tabletId: string, poweredOn: boolean) =>
       setTabletPowerImpl?.(tabletId, poweredOn),
     toggleTabletPower: (tabletId: string) => toggleTabletPowerImpl?.(tabletId),

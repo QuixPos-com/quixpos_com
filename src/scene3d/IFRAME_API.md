@@ -350,6 +350,7 @@ window.addEventListener('message', (event) => {
 | `'drawer:open'` | `{}` | Slides the 3D cash drawer open. |
 | `'drawer:close'` | `{}` | Slides the 3D cash drawer closed. |
 | `'drawer:toggle'` | `{}` | Toggles the 3D cash drawer open/closed. |
+| `'drawer:setCash'` | `{ amount: number }` *(EUR)* or `{ cents: number }` *(integer cents)* | Sets the total cash amount in the 3D cash drawer and updates its 5 Euro note compartments (`€5–€100`) and 8 Euro coin cups (`1c–€2`) to match. |
 | `'camera:focus'` | `{ view: 'total' \| 'left' \| 'center' \| 'right' \| 'drawer' }` | Smoothly flies the 3D camera to the specified station preset. |
 | `'camera:return'` | `{}` | Returns the 3D camera to its previous pose. |
 | `'tablet:reload'` | `{ tabletId?: string }` | Reloads a powered-on tablet screen (defaults to caller's own `tabletId`). |
@@ -365,6 +366,7 @@ window.addEventListener('message', (event) => {
 | `'screen:powerBlocked'` | `{ tabletId, reason: 'login_required' }` | When a visitor clicks the 3D power button on an off screen not yet enabled by `dash-left` (`<- Login first` shown). |
 | `'screens:state'` | `{ screens }` | Direct reply to `'screens:get'`. |
 | `'drawer:changed'` | `{ open: boolean }` | Whenever the 3D cash drawer opens or closes. |
+| `'drawer:cashChanged'` | `{ currency: 'EUR', amount: number, cents: number, notes, coins }` | Whenever the 3D cash drawer's Euro cash amount is updated via `'drawer:setCash'`. |
 | `'camera:viewChanged'` | `{ view: 'total' \| 'left' \| 'center' \| 'right' \| 'drawer' \| null }` | Whenever the active camera preset changes (or `null` during free walk/look). |
 | `'scene:lockChanged'` | `{ locked: boolean }` | Whenever first-person pointer-lock crosshair mode toggles. |
 | *Custom names* | `{ ... }` | Any custom `(name, data)` broadcast by another iframe (`sender` = peer `tabletId`) or the host (`sender` = `'host'`). |

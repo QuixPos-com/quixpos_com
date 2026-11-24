@@ -29,6 +29,13 @@ export interface BarcodeScanEvent {
   timestamp: number
 }
 
+export interface EuroCashBreakdown {
+  cents: number
+  amount: number
+  notes: Record<'100' | '50' | '20' | '10' | '5', number>
+  coins: Record<'200' | '100' | '50' | '20' | '10' | '5' | '2' | '1', number>
+}
+
 export type ZebraReelId = '25x13' | '57x32' | '101x51' | '101x152'
 
 export interface ZebraMediaInfo {
@@ -206,6 +213,7 @@ export interface SceneController {
   navigateToView: (view: NavPresetId) => void
   returnToPrevious: () => void
   toggleDrawer: () => void
+  setDrawerCash: (amountEur: number) => void
   setTabletPower: (tabletId: string, poweredOn: boolean) => void
   toggleTabletPower: (tabletId: string) => void
   setZebraReel: (reelId: ZebraReelId) => void
