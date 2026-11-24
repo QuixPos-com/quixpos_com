@@ -29,14 +29,6 @@ export interface BarcodeScanEvent {
   timestamp: number
 }
 
-export interface LaserReticleState {
-  visible: boolean
-  xPx: number
-  yPx: number
-  spotSizePx: number
-  flashSuccess: boolean
-}
-
 export type ZebraReelId = '25x13' | '57x32' | '101x51' | '101x152'
 
 export interface ZebraMediaInfo {

@@ -21,6 +21,15 @@ const READER_OPTIONS: ReaderOptions = {
   maxNumberOfSymbols: 4,
 }
 
+// Three.js WebGLRenderTarget outputs LinearSRGBColorSpace; convert to exact sRGB OETF
+const LINEAR_TO_SRGB = new Uint8Array(256)
+for (let i = 0; i < 256; i++) {
+  const lin = i / 255
+  const srgb =
+    lin <= 0.0031308 ? lin * 12.92 : 1.055 * Math.pow(lin, 1 / 2.4) - 0.055
+  LINEAR_TO_SRGB[i] = Math.max(0, Math.min(255, Math.round(srgb * 255)))
+}
+
 let modulePrepared = false
 let reusableClamped: Uint8ClampedArray<ArrayBuffer> | null = null
 
@@ -41,9 +50,9 @@ export function warmScannerDecoder(): void {
 }
 
 /**
- * Converts a WebGL `readRenderTargetPixels` bottom-up RGBA buffer into a top-down
- * `ImageData` (optionally painting into `previewCtx` for the live HUD viewfinder)
- * and decodes 1D barcodes & 2D QR codes via `zxing-wasm`.
+ * Converts a WebGL `readRenderTargetPixels` bottom-up Linear-RGBA buffer into a
+ * top-down sRGB `ImageData` (optionally painting into `previewCtx` for the live HUD
+ * viewfinder) and decodes 1D barcodes & 2D QR codes via `zxing-wasm`.
  */
 export async function decodeSpotPixels(
   rgbaBottomUp: Uint8Array,
@@ -63,12 +72,16 @@ export async function decodeSpotPixels(
 
   const rowStride = width * 4
   for (let y = 0; y < height; y++) {
-    const srcOffset = (height - 1 - y) * rowStride
-    const dstOffset = y * rowStride
-    reusableClamped.set(
-      rgbaBottomUp.subarray(srcOffset, srcOffset + rowStride),
-      dstOffset,
-    )
+    let src = (height - 1 - y) * rowStride
+    let dst = y * rowStride
+    for (let x = 0; x < width; x++) {
+      reusableClamped[dst] = LINEAR_TO_SRGB[rgbaBottomUp[src]]
+      reusableClamped[dst + 1] = LINEAR_TO_SRGB[rgbaBottomUp[src + 1]]
+      reusableClamped[dst + 2] = LINEAR_TO_SRGB[rgbaBottomUp[src + 2]]
+      reusableClamped[dst + 3] = 255
+      src += 4
+      dst += 4
+    }
   }
 
   const imageData = new ImageData(reusableClamped, width, height)

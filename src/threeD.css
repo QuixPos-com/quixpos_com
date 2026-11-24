@@ -51,16 +51,12 @@
   visibility: hidden;
   backdrop-filter: blur(3.5px) brightness(0.92);
   -webkit-backdrop-filter: blur(3.5px) brightness(0.92);
-  mask-image: radial-gradient(
-    ellipse 38% 36% at 50% 54%,
-    transparent 56%,
-    rgba(0, 0, 0, 1) 86%
-  );
-  -webkit-mask-image: radial-gradient(
-    ellipse 38% 36% at 50% 54%,
-    transparent 56%,
-    rgba(0, 0, 0, 1) 86%
-  );
+  mask-image: radial-gradient(ellipse 38% 36% at 50% 54%,
+      transparent 56%,
+      rgba(0, 0, 0, 1) 86%);
+  -webkit-mask-image: radial-gradient(ellipse 38% 36% at 50% 54%,
+      transparent 56%,
+      rgba(0, 0, 0, 1) 86%);
   transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
@@ -638,8 +634,8 @@
   position: absolute;
   left: 0;
   top: 0;
-  width: 256px;
-  height: 160px;
+  width: 112px;
+  height: 70px;
   z-index: 9;
   pointer-events: none;
   opacity: 0;
@@ -655,11 +651,11 @@
 
 .scene3d-laser-corner {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  border-color: rgba(239, 68, 68, 0.85);
+  width: 10px;
+  height: 10px;
+  border-color: rgba(239, 68, 68, 0.88);
   border-style: solid;
-  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.65));
+  filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.65));
   transition: border-color 0.1s ease, filter 0.1s ease;
 }
 
@@ -667,75 +663,71 @@
   top: 0;
   left: 0;
   border-width: 2px 0 0 2px;
-  border-top-left-radius: 5px;
+  border-top-left-radius: 3px;
 }
 
 .scene3d-laser-corner.is-tr {
   top: 0;
   right: 0;
   border-width: 2px 2px 0 0;
-  border-top-right-radius: 5px;
+  border-top-right-radius: 3px;
 }
 
 .scene3d-laser-corner.is-bl {
   bottom: 0;
   left: 0;
   border-width: 0 0 2px 2px;
-  border-bottom-left-radius: 5px;
+  border-bottom-left-radius: 3px;
 }
 
 .scene3d-laser-corner.is-br {
   bottom: 0;
   right: 0;
   border-width: 0 2px 2px 0;
-  border-bottom-right-radius: 5px;
+  border-bottom-right-radius: 3px;
 }
 
 .scene3d-laser-line-h {
   position: absolute;
-  left: 18px;
-  right: 18px;
+  left: 10px;
+  right: 10px;
   top: 50%;
-  height: 2px;
+  height: 1.5px;
   transform: translateY(-50%);
-  background: linear-gradient(
-    90deg,
-    rgba(239, 68, 68, 0) 0%,
-    rgba(239, 68, 68, 0.95) 28%,
-    #ffffff 50%,
-    rgba(239, 68, 68, 0.95) 72%,
-    rgba(239, 68, 68, 0) 100%
-  );
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.9);
+  background: linear-gradient(90deg,
+      rgba(239, 68, 68, 0) 0%,
+      rgba(239, 68, 68, 0.95) 26%,
+      #ffffff 50%,
+      rgba(239, 68, 68, 0.95) 74%,
+      rgba(239, 68, 68, 0) 100%);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.9);
 }
 
 .scene3d-laser-line-v {
   position: absolute;
-  top: 56px;
-  bottom: 56px;
+  top: 18px;
+  bottom: 18px;
   left: 50%;
   width: 1.5px;
   transform: translateX(-50%);
-  background: linear-gradient(
-    180deg,
-    rgba(239, 68, 68, 0) 0%,
-    rgba(239, 68, 68, 0.9) 50%,
-    rgba(239, 68, 68, 0) 100%
-  );
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+  background: linear-gradient(180deg,
+      rgba(239, 68, 68, 0) 0%,
+      rgba(239, 68, 68, 0.9) 50%,
+      rgba(239, 68, 68, 0) 100%);
+  box-shadow: 0 0 5px rgba(239, 68, 68, 0.8);
 }
 
 .scene3d-laser-dot {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   background: #ffffff;
-  border: 1.5px solid #ef4444;
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.98);
+  border: 1px solid #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.98);
 }
 
 .scene3d-laser-reticle.is-hit .scene3d-laser-corner {

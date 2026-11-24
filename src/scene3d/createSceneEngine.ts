@@ -68,11 +68,11 @@ export interface MountSceneOptions {
   callbacks: SceneCallbacks
 }
 
-const SCAN_SPOT_CSS_W = 256
-const SCAN_SPOT_CSS_H = 160
-const SCAN_RT_W = 448
-const SCAN_RT_H = 280
-const SCAN_INTERVAL_MS = 95
+const SCAN_SPOT_CSS_W = 112
+const SCAN_SPOT_CSS_H = 70
+const SCAN_RT_W = 960
+const SCAN_RT_H = 600
+const SCAN_INTERVAL_MS = 100
 
 export function mountSceneEngine({
   stageEl,
@@ -174,7 +174,6 @@ export function mountSceneEngine({
       format: THREE.RGBAFormat,
       depthBuffer: true,
     })
-    scanRT.texture.colorSpace = THREE.SRGBColorSpace
     disposables.push(scanRT)
     const scanPixelBuf = new Uint8Array(SCAN_RT_W * SCAN_RT_H * 4)
 
@@ -377,8 +376,31 @@ export function mountSceneEngine({
       return false
     }
 
-    const commitHeldLabelPlacement = (): boolean => {
+    const commitHeldLabelPlacement = (
+      clientX?: number,
+      clientY?: number,
+    ): boolean => {
       if (heldMode !== 'label') return false
+      if (typeof clientX === 'number' && typeof clientY === 'number') {
+        const rect = stageEl.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          const ndc = new THREE.Vector2(
+            ((clientX - rect.left) / rect.width) * 2 - 1,
+            -((clientY - rect.top) / rect.height) * 2 + 1,
+          )
+          raycaster.setFromCamera(ndc, camera)
+          printManager.updateHeldLabelPreview(
+            raycaster,
+            camera,
+            state.yaw,
+            [
+              ...placeableBaseSurfaces,
+              ...printManager.getPlacedLabelSurfaces(),
+            ],
+            1,
+          )
+        }
+      }
       if (printManager.placeHeldLabel()) {
         setHeldMode('none')
         return true
@@ -1890,9 +1912,9 @@ export function mountSceneEngine({
       }
 
       const targetBlur =
-            (state.activeView === 'left' ||
-              state.activeView === 'center' ||
-              state.activeView === 'right') &&
+        (state.activeView === 'left' ||
+          state.activeView === 'center' ||
+          state.activeView === 'right') &&
           heldMode === 'none'
           ? 1
           : 0

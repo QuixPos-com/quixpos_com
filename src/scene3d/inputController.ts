@@ -38,7 +38,7 @@ export interface InputControllerParams {
   pickUpZebraLabel: (
     target: InstanceType<ThreeModule['Object3D']> | string,
   ) => boolean
-  placeHeldLabel: () => boolean
+  placeHeldLabel: (clientX?: number, clientY?: number) => boolean
   rotateHeldLabel: () => void
   cancelHeldItem: () => void
   pickUpScanner: () => void
@@ -409,7 +409,9 @@ export function attachInputController({
 
   // Stick visual & deadzone helper (shared by touch and desktop mouse stick drag)
   const setMirrorVisibility = (isMove: boolean, visible: boolean) => {
-    const stickEl = isMove ? stickRefs.moveStickRef.current : stickRefs.aimStickRef.current
+    const stickEl = isMove
+      ? stickRefs.moveStickRef.current
+      : stickRefs.aimStickRef.current
     const mirrorEl = isMove
       ? stickRefs.moveMirrorRef.current
       : stickRefs.aimMirrorRef.current
@@ -489,7 +491,9 @@ export function attachInputController({
   }
 
   const resetStick = (isMove: boolean) => {
-    const knobEl = isMove ? stickRefs.moveKnobRef.current : stickRefs.aimKnobRef.current
+    const knobEl = isMove
+      ? stickRefs.moveKnobRef.current
+      : stickRefs.aimKnobRef.current
     if (knobEl) {
       knobEl.style.transform = 'translate(0px, 0px)'
     }
@@ -543,94 +547,269 @@ export function attachInputController({
     } else if (code === 'KeyE' || code === 'Tab') {
       e.preventDefault()
       if (document.pointerLockElement === stageEl) {
-          if (held === 'label') {
-            if (canPlaceHeldLabel()) {
-              placeHeldLabel()
-            }
-            return
+        if (held === 'label') {
+          if (canPlaceHeldLabel()) {
+            placeHeldLabel()
           }
-          if (held === 'scanner') {
-            if (state.currentTargetKind === 'scanner-dock') {
-              putDownScanner()
-            } else {
-              triggerScannerPulse()
-            }
-            return
-          }
-          if (state.currentTargetKind === 'zebra-label' && state.currentTargetId) {
-            pickUpZebraLabel(state.currentTargetId)
-          } else if (state.currentTargetKind === 'scanner') {
-            pickUpScanner()
-          } else if (state.currentTargetKind === 'power' && state.currentTargetId) {
-            reloadTablet(state.currentTargetId)
-          } else if (state.currentTargetKind === 'zebra-latch') {
-            document.exitPointerLock()
-            openZebraReelPicker()
-          } else if (state.currentTargetKind === 'drawer') {
-            toggleCashDrawer()
-          } else if (state.currentTargetId && state.currentTargetKind === 'label') {
-            navigateToFocusView(state.currentTargetId as FocusViewId)
+          return
+        }
+        if (held === 'scanner') {
+          if (state.currentTargetKind === 'scanner-dock') {
+            putDownScanner()
           } else {
-            document.exitPointerLock()
+            triggerScannerPulse()
           }
+          return
+        }
+        if (state.currentTargetKind === 'zebra-label' && state.currentTargetId) {
+          pickUpZebraLabel(state.currentTargetId)
+        } else if (state.currentTargetKind === 'scanner') {
+          pickUpScanner()
+        } else if (state.currentTargetKind === 'power' && state.currentTargetId) {
+          reloadTablet(state.currentTargetId)
+        } else if (state.currentTargetKind === 'zebra-latch') {
+          document.exitPointerLock()
+          openZebraReelPicker()
+        } else if (state.currentTargetKind === 'drawer') {
+          toggleCashDrawer()
+        } else if (state.currentTargetId && state.currentTargetKind === 'label') {
+          navigateToFocusView(state.currentTargetId as FocusViewId)
         } else {
-          abortedHoldPointerLock = false
-          holdPointerLocked = false
-          tryEnterPointerLock()
+          document.exitPointerLock()
+        }
+      } else {
+        abortedHoldPointerLock = false
+        holdPointerLocked = false
+        tryEnterPointerLock()
+      }
+    }
+  }
+
+  const onKeyUp = (e: KeyboardEvent) => {
+    state.pressedKeys.delete(e.code)
+  }
+
+  const onWindowBlur = () => {
+    state.pressedKeys.clear()
+    state.wheelMoveY = 0
+    dragLooking = false
+    mouseDownOnStage = false
+    setIframeDragShield(false)
+    if (holdPointerLocked && document.pointerLockElement === stageEl) {
+      holdPointerLocked = false
+      document.exitPointerLock()
+    }
+    if (mouseStickMode === 'move') resetStick(true)
+    if (mouseStickMode === 'aim') resetStick(false)
+    mouseStickMode = null
+    window.setTimeout(() => {
+      if (disposed || state.pointerLocked) return
+      const activeEl = document.activeElement
+      const hit = tabletInstances.find((t) => t.iframeEl === activeEl)
+      if (!hit) return
+      if (
+        getHeldMode() !== 'none' ||
+        (!(hasPointerActivity && hoveredTabletId === hit.spec.id) &&
+          !isFocusedWithBlur())
+      ) {
+        window.focus()
+      }
+    }, 0)
+  }
+
+  const pushMouseAimVisual = (dxPx: number, dyPx: number) => {
+    let vx = state.mouseAimVisualX * 0.45 + dxPx
+    let vy = state.mouseAimVisualY * 0.45 + dyPx
+    const mag = Math.hypot(vx, vy)
+    if (mag > STICK_MAX_R) {
+      vx = (vx / mag) * STICK_MAX_R
+      vy = (vy / mag) * STICK_MAX_R
+    }
+    state.mouseAimVisualX = vx
+    state.mouseAimVisualY = vy
+  }
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (Date.now() - lastTouchTime < 700) return
+    state.lastMouseX = e.clientX
+    state.lastMouseY = e.clientY
+
+    if (mouseStickMode === 'move') {
+      updateStickVector(
+        stickRefs.moveStickRef.current,
+        stickRefs.moveKnobRef.current,
+        stickRefs.moveMirrorRef.current,
+        stickRefs.moveMirrorDotRef.current,
+        e.clientX,
+        e.clientY,
+        true,
+      )
+      return
+    }
+
+    if (mouseStickMode === 'aim') {
+      updateStickVector(
+        stickRefs.aimStickRef.current,
+        stickRefs.aimKnobRef.current,
+        stickRefs.aimMirrorRef.current,
+        stickRefs.aimMirrorDotRef.current,
+        e.clientX,
+        e.clientY,
+        false,
+      )
+      return
+    }
+
+    const sensitivity = 0.0022
+    if (state.pointerLocked) {
+      // Ignore synthetic browser cursor-warp deltas emitted right as pointer lock engages
+      const moveMag = Math.hypot(e.movementX, e.movementY)
+      if (pointerLockSkipFirstMove) {
+        pointerLockSkipFirstMove = false
+        return
+      }
+      if (
+        (performance.now() - pointerLockEnteredAt < 180 && moveMag > 40) ||
+        moveMag > 250
+      ) {
+        return
+      }
+      if (state.cameraTween) {
+        state.targetYaw = state.yaw
+        state.targetPitch = state.pitch
+        state.cameraTween = null
+      }
+      const prevYaw = state.targetYaw
+      const prevPitch = state.targetPitch
+      state.targetYaw -= e.movementX * sensitivity
+      state.targetPitch -= e.movementY * sensitivity
+      const maxPitch = Math.PI * 0.46
+      state.targetPitch = Math.max(
+        -maxPitch,
+        Math.min(maxPitch, state.targetPitch),
+      )
+      const dYaw = state.targetYaw - prevYaw
+      const dPitch = state.targetPitch - prevPitch
+      if (dYaw !== 0 || dPitch !== 0) {
+        pushMouseAimVisual(-dYaw * 640, -dPitch * 640)
+      }
+    } else if (dragLooking) {
+      const distFromDown = Math.hypot(
+        e.clientX - mouseDownStartX,
+        e.clientY - mouseDownStartY,
+      )
+      if (!mouseDragged && distFromDown >= 5) {
+        mouseDragged = true
+        clearActiveFocusForFreeMove()
+        setIframeDragShield(true)
+        abortedHoldPointerLock = false
+        holdPointerLocked = true
+        tryEnterPointerLock()
+      }
+      if (mouseDragged) {
+        if (state.cameraTween) {
+          state.targetYaw = state.yaw
+          state.targetPitch = state.pitch
+          state.cameraTween = null
+        }
+        const prevYaw = state.targetYaw
+        const prevPitch = state.targetPitch
+        const dx = e.clientX - lastDragX
+        const dy = e.clientY - lastDragY
+        if (Math.hypot(dx, dy) <= 150) {
+          state.targetYaw -= dx * sensitivity * 1.25
+          state.targetPitch -= dy * sensitivity * 1.25
+          const maxPitch = Math.PI * 0.46
+          state.targetPitch = Math.max(
+            -maxPitch,
+            Math.min(maxPitch, state.targetPitch),
+          )
+          const dYaw = state.targetYaw - prevYaw
+          const dPitch = state.targetPitch - prevPitch
+          if (dYaw !== 0 || dPitch !== 0) {
+            pushMouseAimVisual(-dYaw * 640, -dPitch * 640)
+          }
         }
       }
-    }
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      state.pressedKeys.delete(e.code)
-    }
-
-    const onWindowBlur = () => {
-      state.pressedKeys.clear()
-      state.wheelMoveY = 0
-      dragLooking = false
-      mouseDownOnStage = false
-      setIframeDragShield(false)
-      if (holdPointerLocked && document.pointerLockElement === stageEl) {
-        holdPointerLocked = false
-        document.exitPointerLock()
+      lastDragX = e.clientX
+      lastDragY = e.clientY
+    } else {
+      const held = getHeldMode()
+      if (held === 'label') {
+        stageEl.style.cursor = canPlaceHeldLabel() ? 'copy' : 'grabbing'
+        return
       }
-      if (mouseStickMode === 'move') resetStick(true)
-      if (mouseStickMode === 'aim') resetStick(false)
-      mouseStickMode = null
-      window.setTimeout(() => {
-        if (disposed || state.pointerLocked) return
-        const activeEl = document.activeElement
-        const hit = tabletInstances.find((t) => t.iframeEl === activeEl)
-        if (!hit) return
-          if (
-            getHeldMode() !== 'none' ||
-            (!(hasPointerActivity && hoveredTabletId === hit.spec.id) &&
-              !isFocusedWithBlur())
-          ) {
-            window.focus()
-          }
-        }, 0)
-    }
-
-    const pushMouseAimVisual = (dxPx: number, dyPx: number) => {
-      let vx = state.mouseAimVisualX * 0.45 + dxPx
-      let vy = state.mouseAimVisualY * 0.45 + dyPx
-      const mag = Math.hypot(vx, vy)
-      if (mag > STICK_MAX_R) {
-        vx = (vx / mag) * STICK_MAX_R
-        vy = (vy / mag) * STICK_MAX_R
+      if (held === 'scanner') {
+        const hitInteractive =
+          hitScannerDockAtClient(e.clientX, e.clientY) ||
+          Boolean(hitPowerAtClient(e.clientX, e.clientY)) ||
+          Boolean(hitPlateAtClient(e.clientX, e.clientY)) ||
+          hitDrawerAtClient(e.clientX, e.clientY)
+        stageEl.style.cursor = hitInteractive ? 'pointer' : 'none'
+        return
       }
-      state.mouseAimVisualX = vx
-      state.mouseAimVisualY = vy
+      const hitLabel = Boolean(hitZebraLabelAtClient(e.clientX, e.clientY))
+      const hitScanner = !hitLabel && hitScannerAtClient(e.clientX, e.clientY)
+      const hitPower =
+        !hitLabel && !hitScanner ? hitPowerAtClient(e.clientX, e.clientY) : null
+      const hitZebra =
+        !hitLabel &&
+        !hitScanner &&
+        !hitPower &&
+        hitZebraLatchAtClient(e.clientX, e.clientY)
+      const hitPlate =
+        !hitLabel && !hitScanner && !hitPower && !hitZebra
+          ? hitPlateAtClient(e.clientX, e.clientY)
+          : null
+      const hitDrawer =
+        !hitLabel &&
+        !hitScanner &&
+        !hitPower &&
+        !hitZebra &&
+        !hitPlate &&
+        hitDrawerAtClient(e.clientX, e.clientY)
+      stageEl.style.cursor =
+        hitLabel ||
+        hitScanner ||
+        hitPower ||
+        hitZebra ||
+        hitDrawer ||
+        hitPlate ||
+        isFocusedWithBlur()
+          ? 'pointer'
+          : ''
+    }
+  }
+
+  const onStageContextMenu = (e: MouseEvent) => {
+    if (getHeldMode() !== 'none') {
+      e.preventDefault()
+      cancelHeldItem()
+    }
+  }
+
+  const onStageMouseDown = (e: MouseEvent) => {
+    if (Date.now() - lastTouchTime < 700) return
+    const target = e.target as HTMLElement | null
+    if (
+      target &&
+      target.closest(
+        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
+      )
+    ) {
+      return
     }
 
-    const onMouseMove = (e: MouseEvent) => {
-      if (Date.now() - lastTouchTime < 700) return
-      state.lastMouseX = e.clientX
-      state.lastMouseY = e.clientY
+    if (e.button === 2 && getHeldMode() !== 'none') {
+      e.preventDefault()
+      return
+    }
 
-      if (mouseStickMode === 'move') {
+    if (e.button === 0 && target) {
+      if (stickRefs.moveStickRef.current?.contains(target)) {
+        e.preventDefault()
+        mouseStickMode = 'move'
+        setMirrorVisibility(true, true)
         updateStickVector(
           stickRefs.moveStickRef.current,
           stickRefs.moveKnobRef.current,
@@ -642,8 +821,10 @@ export function attachInputController({
         )
         return
       }
-
-      if (mouseStickMode === 'aim') {
+      if (stickRefs.aimStickRef.current?.contains(target)) {
+        e.preventDefault()
+        mouseStickMode = 'aim'
+        setMirrorVisibility(false, true)
         updateStickVector(
           stickRefs.aimStickRef.current,
           stickRefs.aimKnobRef.current,
@@ -655,368 +836,201 @@ export function attachInputController({
         )
         return
       }
+    }
 
-      const sensitivity = 0.0022
-      if (state.pointerLocked) {
-        // Ignore synthetic browser cursor-warp deltas emitted right as pointer lock engages
-        const moveMag = Math.hypot(e.movementX, e.movementY)
-        if (pointerLockSkipFirstMove) {
-          pointerLockSkipFirstMove = false
+    if (state.pointerLocked) {
+      if (!holdPointerLocked && e.button === 0) {
+        const held = getHeldMode()
+        if (held === 'label') {
+          placeHeldLabel()
           return
         }
-        if (
-          (performance.now() - pointerLockEnteredAt < 180 && moveMag > 40) ||
-          moveMag > 250
-        ) {
+        if (held === 'scanner') {
+          if (state.currentTargetKind === 'scanner-dock') {
+            putDownScanner()
+          } else {
+            triggerScannerPulse()
+          }
           return
         }
-        if (state.cameraTween) {
-          state.targetYaw = state.yaw
-          state.targetPitch = state.pitch
-          state.cameraTween = null
-        }
-        const prevYaw = state.targetYaw
-        const prevPitch = state.targetPitch
-        state.targetYaw -= e.movementX * sensitivity
-        state.targetPitch -= e.movementY * sensitivity
-        const maxPitch = Math.PI * 0.46
-        state.targetPitch = Math.max(-maxPitch, Math.min(maxPitch, state.targetPitch))
-        const dYaw = state.targetYaw - prevYaw
-        const dPitch = state.targetPitch - prevPitch
-        if (dYaw !== 0 || dPitch !== 0) {
-          pushMouseAimVisual(-dYaw * 640, -dPitch * 640)
-        }
-      } else if (dragLooking) {
-        const distFromDown = Math.hypot(
-          e.clientX - mouseDownStartX,
-          e.clientY - mouseDownStartY,
-        )
-          if (!mouseDragged && distFromDown >= 5) {
-            mouseDragged = true
-            clearActiveFocusForFreeMove()
-            setIframeDragShield(true)
-            abortedHoldPointerLock = false
-            holdPointerLocked = true
-            tryEnterPointerLock()
+        if (state.currentTargetId) {
+          if (state.currentTargetKind === 'zebra-label') {
+            pickUpZebraLabel(state.currentTargetId)
+          } else if (state.currentTargetKind === 'scanner') {
+            pickUpScanner()
+          } else if (state.currentTargetKind === 'power') {
+            reloadTablet(state.currentTargetId)
+          } else if (state.currentTargetKind === 'zebra-latch') {
+            document.exitPointerLock()
+            openZebraReelPicker()
+          } else if (state.currentTargetKind === 'drawer') {
+            toggleCashDrawer()
+          } else if (state.currentTargetKind === 'label') {
+            navigateToFocusView(state.currentTargetId as FocusViewId)
+          } else {
+            document.exitPointerLock()
           }
-          if (mouseDragged) {
-            if (state.cameraTween) {
-              state.targetYaw = state.yaw
-              state.targetPitch = state.pitch
-              state.cameraTween = null
-            }
-            const prevYaw = state.targetYaw
-            const prevPitch = state.targetPitch
-            const dx = e.clientX - lastDragX
-            const dy = e.clientY - lastDragY
-            if (Math.hypot(dx, dy) <= 150) {
-              state.targetYaw -= dx * sensitivity * 1.25
-              state.targetPitch -= dy * sensitivity * 1.25
-              const maxPitch = Math.PI * 0.46
-              state.targetPitch = Math.max(-maxPitch, Math.min(maxPitch, state.targetPitch))
-              const dYaw = state.targetYaw - prevYaw
-              const dPitch = state.targetPitch - prevPitch
-              if (dYaw !== 0 || dPitch !== 0) {
-                pushMouseAimVisual(-dYaw * 640, -dPitch * 640)
-              }
-            }
-          }
-          lastDragX = e.clientX
-          lastDragY = e.clientY
-        } else {
-          const held = getHeldMode()
-          if (held === 'label') {
-            stageEl.style.cursor = canPlaceHeldLabel() ? 'copy' : 'grabbing'
-            return
-          }
-          if (held === 'scanner') {
-            const hitInteractive =
-              hitScannerDockAtClient(e.clientX, e.clientY) ||
-              Boolean(hitPowerAtClient(e.clientX, e.clientY)) ||
-              Boolean(hitPlateAtClient(e.clientX, e.clientY)) ||
-              hitDrawerAtClient(e.clientX, e.clientY)
-            stageEl.style.cursor = hitInteractive ? 'pointer' : 'none'
-            return
-          }
-          const hitLabel = Boolean(hitZebraLabelAtClient(e.clientX, e.clientY))
-          const hitScanner = !hitLabel && hitScannerAtClient(e.clientX, e.clientY)
-          const hitPower =
-            !hitLabel && !hitScanner ? hitPowerAtClient(e.clientX, e.clientY) : null
-          const hitZebra =
-            !hitLabel &&
-            !hitScanner &&
-            !hitPower &&
-            hitZebraLatchAtClient(e.clientX, e.clientY)
-          const hitPlate =
-            !hitLabel && !hitScanner && !hitPower && !hitZebra
-              ? hitPlateAtClient(e.clientX, e.clientY)
-              : null
-          const hitDrawer =
-            !hitLabel &&
-            !hitScanner &&
-            !hitPower &&
-            !hitZebra &&
-            !hitPlate &&
-            hitDrawerAtClient(e.clientX, e.clientY)
-          stageEl.style.cursor =
-          hitLabel ||
-            hitScanner ||
-            hitPower ||
-            hitZebra ||
-            hitDrawer ||
-            hitPlate ||
-            isFocusedWithBlur()
-            ? 'pointer'
-            : ''
         }
       }
+      return
+    }
 
-      const onStageContextMenu = (e: MouseEvent) => {
-        if (getHeldMode() !== 'none') {
-          e.preventDefault()
-          cancelHeldItem()
-        }
+    if (e.button === 0) {
+      mouseDownOnStage = true
+      mouseDragged = false
+      mouseDownStartX = e.clientX
+      mouseDownStartY = e.clientY
+      dragLooking = true
+      lastDragX = e.clientX
+      lastDragY = e.clientY
+
+      const hitInteractive =
+        getHeldMode() !== 'none' ||
+        Boolean(hitZebraLabelAtClient(e.clientX, e.clientY)) ||
+        hitScannerAtClient(e.clientX, e.clientY) ||
+        Boolean(hitPowerAtClient(e.clientX, e.clientY)) ||
+        hitZebraLatchAtClient(e.clientX, e.clientY) ||
+        Boolean(hitPlateAtClient(e.clientX, e.clientY)) ||
+        hitDrawerAtClient(e.clientX, e.clientY)
+      if (!hitInteractive) {
+        setIframeDragShield(true)
       }
-
-      const onStageMouseDown = (e: MouseEvent) => {
-        if (Date.now() - lastTouchTime < 700) return
-        const target = e.target as HTMLElement | null
-          if (
-            target &&
-            target.closest(
-              '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
-            )
-          ) {
-            return
-          }
-
-          if (e.button === 2 && getHeldMode() !== 'none') {
-            e.preventDefault()
-            return
-          }
-
-          if (e.button === 0 && target) {
-            if (stickRefs.moveStickRef.current?.contains(target)) {
-              e.preventDefault()
-              mouseStickMode = 'move'
-              setMirrorVisibility(true, true)
-              updateStickVector(
-                stickRefs.moveStickRef.current,
-                stickRefs.moveKnobRef.current,
-                stickRefs.moveMirrorRef.current,
-                stickRefs.moveMirrorDotRef.current,
-                e.clientX,
-                e.clientY,
-                true,
-              )
-              return
-            }
-            if (stickRefs.aimStickRef.current?.contains(target)) {
-              e.preventDefault()
-              mouseStickMode = 'aim'
-              setMirrorVisibility(false, true)
-              updateStickVector(
-                stickRefs.aimStickRef.current,
-                stickRefs.aimKnobRef.current,
-                stickRefs.aimMirrorRef.current,
-                stickRefs.aimMirrorDotRef.current,
-                e.clientX,
-                e.clientY,
-                false,
-              )
-              return
-            }
-          }
-
-          if (state.pointerLocked) {
-                if (!holdPointerLocked && e.button === 0) {
-                  const held = getHeldMode()
-                  if (held === 'label') {
-                    placeHeldLabel()
-                    return
-                  }
-                  if (held === 'scanner') {
-                    if (state.currentTargetKind === 'scanner-dock') {
-                      putDownScanner()
-                    } else {
-                      triggerScannerPulse()
-                    }
-                    return
-                  }
-                  if (state.currentTargetId) {
-                    if (state.currentTargetKind === 'zebra-label') {
-                      pickUpZebraLabel(state.currentTargetId)
-                    } else if (state.currentTargetKind === 'scanner') {
-                      pickUpScanner()
-                    } else if (state.currentTargetKind === 'power') {
-                      reloadTablet(state.currentTargetId)
-                    } else if (state.currentTargetKind === 'zebra-latch') {
-                      document.exitPointerLock()
-                      openZebraReelPicker()
-                    } else if (state.currentTargetKind === 'drawer') {
-                      toggleCashDrawer()
-                    } else if (state.currentTargetKind === 'label') {
-                      navigateToFocusView(state.currentTargetId as FocusViewId)
-                    } else {
-                      document.exitPointerLock()
-                    }
-                  }
-                }
-                return
-              }
-
-              if (e.button === 0) {
-                mouseDownOnStage = true
-                mouseDragged = false
-                mouseDownStartX = e.clientX
-                mouseDownStartY = e.clientY
-                dragLooking = true
-                lastDragX = e.clientX
-                lastDragY = e.clientY
-
-                const hitInteractive =
-                  getHeldMode() !== 'none' ||
-                  Boolean(hitZebraLabelAtClient(e.clientX, e.clientY)) ||
-                  hitScannerAtClient(e.clientX, e.clientY) ||
-                  Boolean(hitPowerAtClient(e.clientX, e.clientY)) ||
-                  hitZebraLatchAtClient(e.clientX, e.clientY) ||
-                  Boolean(hitPlateAtClient(e.clientX, e.clientY)) ||
-                  hitDrawerAtClient(e.clientX, e.clientY)
-                if (!hitInteractive) {
-                  setIframeDragShield(true)
-                }
-              }
-            }
-
-            const onWindowMouseUp = (e: MouseEvent) => {
-              if (mouseStickMode === 'move') {
-                resetStick(true)
-                mouseStickMode = null
-                return
-              }
-              if (mouseStickMode === 'aim') {
-                resetStick(false)
-                mouseStickMode = null
-                return
-              }
-
-              setIframeDragShield(false)
-
-              if (holdPointerLocked && e.button === 0) {
-                holdPointerLocked = false
-                dragLooking = false
-                mouseDownOnStage = false
-                if (document.pointerLockElement === stageEl) {
-                  document.exitPointerLock()
-                } else {
-                  abortedHoldPointerLock = true
-                }
-                return
-              }
-
-              const wasClickOnStage = mouseDownOnStage && !mouseDragged && e.button === 0
-              dragLooking = false
-              mouseDownOnStage = false
-
-              if (wasClickOnStage && !state.pointerLocked && Date.now() - lastTouchTime >= 700) {
-                const held = getHeldMode()
-                if (held === 'label') {
-                  placeHeldLabel()
-                  return
-                }
-
-                if (held === 'scanner') {
-                  if (hitScannerDockAtClient(e.clientX, e.clientY)) {
-                    putDownScanner()
-                    return
-                  }
-                  const powerId = hitPowerAtClient(e.clientX, e.clientY)
-                  if (powerId) {
-                    reloadTablet(powerId)
-                    return
-                  }
-                  const plateId = hitPlateAtClient(e.clientX, e.clientY)
-                  if (plateId) {
-                    navigateToFocusView(plateId)
-                    return
-                  }
-                  if (hitDrawerAtClient(e.clientX, e.clientY)) {
-                    toggleCashDrawer()
-                    return
-                  }
-                  triggerScannerPulse()
-                  return
-                }
-
-                const labelObj = hitZebraLabelAtClient(e.clientX, e.clientY)
-                if (labelObj) {
-                  pickUpZebraLabel(labelObj)
-                  return
-                }
-                if (hitScannerAtClient(e.clientX, e.clientY)) {
-                  pickUpScanner()
-                  return
-                }
-                const powerId = hitPowerAtClient(e.clientX, e.clientY)
-                if (powerId) {
-                  reloadTablet(powerId)
-                  return
-                }
-                if (hitZebraLatchAtClient(e.clientX, e.clientY)) {
-                  openZebraReelPicker()
-                  return
-                }
-                const plateId = hitPlateAtClient(e.clientX, e.clientY)
-                if (plateId) {
-                  navigateToFocusView(plateId)
-                  return
-                }
-                if (hitDrawerAtClient(e.clientX, e.clientY)) {
-                  toggleCashDrawer()
-                  return
-                }
-                // Clicking the blurred backdrop around the focused item returns to previous position
-                if (isFocusedWithBlur()) {
-                  returnToPreviousPose()
-                }
-              }
-            }
-
-            const onStageWheel = (e: WheelEvent) => {
-              if (e.ctrlKey || e.deltaY === 0) return
-              const target = e.target as HTMLElement | null
-              if (
-                target &&
-      target.closest(
-                  '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
-                )
-    ) {
-    return
+    }
   }
-  if (
+
+  const onWindowMouseUp = (e: MouseEvent) => {
+    if (mouseStickMode === 'move') {
+      resetStick(true)
+      mouseStickMode = null
+      return
+    }
+    if (mouseStickMode === 'aim') {
+      resetStick(false)
+      mouseStickMode = null
+      return
+    }
+
+    setIframeDragShield(false)
+
+    if (holdPointerLocked && e.button === 0) {
+      holdPointerLocked = false
+      dragLooking = false
+      mouseDownOnStage = false
+      if (document.pointerLockElement === stageEl) {
+        document.exitPointerLock()
+      } else {
+        abortedHoldPointerLock = true
+      }
+      return
+    }
+
+    const wasClickOnStage = mouseDownOnStage && !mouseDragged && e.button === 0
+    dragLooking = false
+    mouseDownOnStage = false
+
+    if (
+      wasClickOnStage &&
+      !state.pointerLocked &&
+      Date.now() - lastTouchTime >= 700
+    ) {
+      const held = getHeldMode()
+      if (held === 'label') {
+        placeHeldLabel()
+        return
+      }
+
+      if (held === 'scanner') {
+        if (hitScannerDockAtClient(e.clientX, e.clientY)) {
+          putDownScanner()
+          return
+        }
+        const powerId = hitPowerAtClient(e.clientX, e.clientY)
+        if (powerId) {
+          reloadTablet(powerId)
+          return
+        }
+        const plateId = hitPlateAtClient(e.clientX, e.clientY)
+        if (plateId) {
+          navigateToFocusView(plateId)
+          return
+        }
+        if (hitDrawerAtClient(e.clientX, e.clientY)) {
+          toggleCashDrawer()
+          return
+        }
+        triggerScannerPulse()
+        return
+      }
+
+      const labelObj = hitZebraLabelAtClient(e.clientX, e.clientY)
+      if (labelObj) {
+        pickUpZebraLabel(labelObj)
+        return
+      }
+      if (hitScannerAtClient(e.clientX, e.clientY)) {
+        pickUpScanner()
+        return
+      }
+      const powerId = hitPowerAtClient(e.clientX, e.clientY)
+      if (powerId) {
+        reloadTablet(powerId)
+        return
+      }
+      if (hitZebraLatchAtClient(e.clientX, e.clientY)) {
+        openZebraReelPicker()
+        return
+      }
+      const plateId = hitPlateAtClient(e.clientX, e.clientY)
+      if (plateId) {
+        navigateToFocusView(plateId)
+        return
+      }
+      if (hitDrawerAtClient(e.clientX, e.clientY)) {
+        toggleCashDrawer()
+        return
+      }
+      // Clicking the blurred backdrop around the focused item returns to previous position
+      if (isFocusedWithBlur()) {
+        returnToPreviousPose()
+      }
+    }
+  }
+
+  const onStageWheel = (e: WheelEvent) => {
+    if (e.ctrlKey || e.deltaY === 0) return
+    const target = e.target as HTMLElement | null
+    if (
+      target &&
+      target.closest(
+        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
+      )
+    ) {
+      return
+    }
+    if (
       getHeldMode() === 'none' &&
       (hoveredTabletId !== null ||
         (!state.pointerLocked && hitScreenAtClient(e.clientX, e.clientY)))
     ) {
-    return
-  }
-  e.preventDefault()
+      return
+    }
+    e.preventDefault()
 
-  let normDeltaY = e.deltaY
-  if (e.deltaMode === 1) {
-    normDeltaY *= 32
-  } else if (e.deltaMode === 2) {
-    normDeltaY *= 400
+    let normDeltaY = e.deltaY
+    if (e.deltaMode === 1) {
+      normDeltaY *= 32
+    } else if (e.deltaMode === 2) {
+      normDeltaY *= 400
+    }
+    state.wheelMoveY = Math.max(
+      -1.2,
+      Math.min(1.2, state.wheelMoveY - normDeltaY / 120),
+    )
   }
-  state.wheelMoveY = Math.max(
-    -1.2,
-    Math.min(1.2, state.wheelMoveY - normDeltaY / 120),
-  )
-}
 
-const onStageTouchStart = (e: TouchEvent) => {
-  lastTouchTime = Date.now()
-  const target = e.target as HTMLElement | null
+  const onStageTouchStart = (e: TouchEvent) => {
+    lastTouchTime = Date.now()
+    const target = e.target as HTMLElement | null
     if (
       target &&
       target.closest(
@@ -1044,7 +1058,10 @@ const onStageTouchStart = (e: TouchEvent) => {
           )
         }
         e.preventDefault()
-      } else if (touchTarget && stickRefs.aimStickRef.current?.contains(touchTarget)) {
+      } else if (
+        touchTarget &&
+        stickRefs.aimStickRef.current?.contains(touchTarget)
+      ) {
         if (aimTouchId === null) {
           aimTouchId = touch.identifier
           setMirrorVisibility(false, true)
@@ -1107,99 +1124,101 @@ const onStageTouchStart = (e: TouchEvent) => {
         resetStick(false)
       } else if (touch.identifier === tapTouchId) {
         tapTouchId = null
-        const dist = Math.hypot(touch.clientX - tapStartX, touch.clientY - tapStartY)
+        const dist = Math.hypot(
+          touch.clientX - tapStartX,
+          touch.clientY - tapStartY,
+        )
         if (dist < 14) {
-            const held = getHeldMode()
-            if (held === 'label') {
-              // Update pointer ray from tap location on touch before placing if desired, or place at center preview
-              placeHeldLabel()
-            } else if (held === 'scanner') {
-              if (hitScannerDockAtClient(touch.clientX, touch.clientY)) {
-                putDownScanner()
+          const held = getHeldMode()
+          if (held === 'label') {
+            placeHeldLabel(touch.clientX, touch.clientY)
+          } else if (held === 'scanner') {
+            if (hitScannerDockAtClient(touch.clientX, touch.clientY)) {
+              putDownScanner()
+            } else {
+              const powerId = hitPowerAtClient(touch.clientX, touch.clientY)
+              if (powerId) {
+                reloadTablet(powerId)
               } else {
-                const powerId = hitPowerAtClient(touch.clientX, touch.clientY)
-                if (powerId) {
-                  reloadTablet(powerId)
+                const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
+                if (plateId) {
+                  navigateToFocusView(plateId)
+                } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
+                  toggleCashDrawer()
                 } else {
-                  const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
-                  if (plateId) {
-                    navigateToFocusView(plateId)
-                  } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
-                    toggleCashDrawer()
-                  } else {
-                    triggerScannerPulse()
-                  }
+                  triggerScannerPulse()
                 }
               }
+            }
+          } else {
+            const labelObj = hitZebraLabelAtClient(touch.clientX, touch.clientY)
+            if (labelObj) {
+              pickUpZebraLabel(labelObj)
+            } else if (hitScannerAtClient(touch.clientX, touch.clientY)) {
+              pickUpScanner()
             } else {
-                const labelObj = hitZebraLabelAtClient(touch.clientX, touch.clientY)
-                if (labelObj) {
-                  pickUpZebraLabel(labelObj)
-                } else if (hitScannerAtClient(touch.clientX, touch.clientY)) {
-                  pickUpScanner()
-                } else {
-                  const powerId = hitPowerAtClient(touch.clientX, touch.clientY)
-                  if (powerId) {
-                    reloadTablet(powerId)
-                  } else if (hitZebraLatchAtClient(touch.clientX, touch.clientY)) {
-                    openZebraReelPicker()
-                  } else {
-                    const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
-                    if (plateId) {
-                      navigateToFocusView(plateId)
-                    } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
-                      toggleCashDrawer()
-                    } else if (isFocusedWithBlur()) {
-                      returnToPreviousPose()
-                    }
-                  }
+              const powerId = hitPowerAtClient(touch.clientX, touch.clientY)
+              if (powerId) {
+                reloadTablet(powerId)
+              } else if (hitZebraLatchAtClient(touch.clientX, touch.clientY)) {
+                openZebraReelPicker()
+              } else {
+                const plateId = hitPlateAtClient(touch.clientX, touch.clientY)
+                if (plateId) {
+                  navigateToFocusView(plateId)
+                } else if (hitDrawerAtClient(touch.clientX, touch.clientY)) {
+                  toggleCashDrawer()
+                } else if (isFocusedWithBlur()) {
+                  returnToPreviousPose()
                 }
               }
             }
           }
         }
       }
-
-      document.addEventListener('pointerlockchange', onPointerLockChange)
-      document.addEventListener('pointerlockerror', onPointerLockError)
-      window.addEventListener('keydown', onKeyDown)
-      window.addEventListener('keyup', onKeyUp)
-      window.addEventListener('blur', onWindowBlur)
-      window.addEventListener('mousemove', onMouseMove)
-      window.addEventListener('mouseup', onWindowMouseUp)
-      window.addEventListener('touchmove', onWindowTouchMove, { passive: false })
-      window.addEventListener('touchend', onWindowTouchEnd)
-      window.addEventListener('touchcancel', onWindowTouchEnd)
-      stageEl.addEventListener('mousedown', onStageMouseDown)
-      stageEl.addEventListener('contextmenu', onStageContextMenu)
-      stageEl.addEventListener('wheel', onStageWheel, { passive: false })
-      stageEl.addEventListener('touchstart', onStageTouchStart, { passive: false })
-
-      const cleanup = () => {
-        disposed = true
-        document.removeEventListener('pointerlockchange', onPointerLockChange)
-        document.removeEventListener('pointerlockerror', onPointerLockError)
-        window.removeEventListener('keydown', onKeyDown)
-        window.removeEventListener('keyup', onKeyUp)
-        window.removeEventListener('blur', onWindowBlur)
-        window.removeEventListener('mousemove', onMouseMove)
-        window.removeEventListener('mouseup', onWindowMouseUp)
-        window.removeEventListener('touchmove', onWindowTouchMove)
-        window.removeEventListener('touchend', onWindowTouchEnd)
-        window.removeEventListener('touchcancel', onWindowTouchEnd)
-        stageEl.removeEventListener('mousedown', onStageMouseDown)
-        stageEl.removeEventListener('contextmenu', onStageContextMenu)
-        stageEl.removeEventListener('wheel', onStageWheel)
-        stageEl.removeEventListener('touchstart', onStageTouchStart)
-
-        for (const fn of cleanupFns) fn()
-      }
-
-      return {
-        navigateToFocusView,
-        returnToPreviousPose,
-        clearActiveFocusForFreeMove,
-        refreshCursorAndShield,
-        cleanup,
-      }
     }
+  }
+
+  document.addEventListener('pointerlockchange', onPointerLockChange)
+  document.addEventListener('pointerlockerror', onPointerLockError)
+  window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keyup', onKeyUp)
+  window.addEventListener('blur', onWindowBlur)
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onWindowMouseUp)
+  window.addEventListener('touchmove', onWindowTouchMove, { passive: false })
+  window.addEventListener('touchend', onWindowTouchEnd)
+  window.addEventListener('touchcancel', onWindowTouchEnd)
+  stageEl.addEventListener('mousedown', onStageMouseDown)
+  stageEl.addEventListener('contextmenu', onStageContextMenu)
+  stageEl.addEventListener('wheel', onStageWheel, { passive: false })
+  stageEl.addEventListener('touchstart', onStageTouchStart, { passive: false })
+
+  const cleanup = () => {
+    disposed = true
+    document.removeEventListener('pointerlockchange', onPointerLockChange)
+    document.removeEventListener('pointerlockerror', onPointerLockError)
+    window.removeEventListener('keydown', onKeyDown)
+    window.removeEventListener('keyup', onKeyUp)
+    window.removeEventListener('blur', onWindowBlur)
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onWindowMouseUp)
+    window.removeEventListener('touchmove', onWindowTouchMove)
+    window.removeEventListener('touchend', onWindowTouchEnd)
+    window.removeEventListener('touchcancel', onWindowTouchEnd)
+    stageEl.removeEventListener('mousedown', onStageMouseDown)
+    stageEl.removeEventListener('contextmenu', onStageContextMenu)
+    stageEl.removeEventListener('wheel', onStageWheel)
+    stageEl.removeEventListener('touchstart', onStageTouchStart)
+
+    for (const fn of cleanupFns) fn()
+  }
+
+  return {
+    navigateToFocusView,
+    returnToPreviousPose,
+    clearActiveFocusForFreeMove,
+    refreshCursorAndShield,
+    cleanup,
+  }
+}

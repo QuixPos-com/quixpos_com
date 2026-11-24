@@ -167,114 +167,114 @@ export function SceneHud({
         </nav>
       </div>
 
-        {(heldMode !== 'none' || (isLocked && targetedTablet)) && (
-          <div class="scene3d-hud-bottom">
-            {isLocked && targetedTablet && heldMode !== 'label' && (
-              <div class="scene3d-target-badge">
-                {targetedTablet.title} —{' '}
-                {targetedTablet.loginRequiredPrompt
-                  ? '<- Login first'
-                  : targetedTablet.kind === 'zebra-label'
+      {(heldMode !== 'none' || (isLocked && targetedTablet)) && (
+        <div class="scene3d-hud-bottom">
+          {isLocked && targetedTablet && heldMode !== 'label' && (
+            <div class="scene3d-target-badge">
+              {targetedTablet.title} —{' '}
+              {targetedTablet.loginRequiredPrompt
+                ? '<- Login first'
+                : targetedTablet.kind === 'zebra-label'
+                  ? 'Klicken oder E drücken zum Aufnehmen'
+                  : targetedTablet.kind === 'scanner'
                     ? 'Klicken oder E drücken zum Aufnehmen'
-                    : targetedTablet.kind === 'scanner'
-                      ? 'Klicken oder E drücken zum Aufnehmen'
-                      : targetedTablet.kind === 'scanner-dock'
-                        ? 'Klicken oder E drücken zum Ablegen'
-                        : targetedTablet.kind === 'power'
-                          ? targetedTablet.controllablePower
-                            ? targetedTablet.poweredOn
-                              ? 'Klicken oder E drücken zum Ausschalten'
-                              : 'Klicken oder E drücken zum Einschalten'
-                            : 'Klicken oder E drücken zum Neu laden'
-                          : targetedTablet.kind === 'zebra-latch'
-                            ? 'Klicken oder E drücken für Rollenwechsel'
-                            : targetedTablet.kind === 'drawer'
-                              ? isDrawerOpen
-                                ? 'Klicken oder E drücken zum Schließen'
-                                : 'Klicken oder E drücken zum Öffnen'
-                              : targetedTablet.kind === 'label'
-                                ? 'Klicken oder E drücken zum Fokussieren'
-                                : targetedTablet.poweredOn === false
-                                  ? 'Ausgeschaltet'
-                                  : 'Klicken oder E drücken zum Bedienen'}
-              </div>
-            )}
+                    : targetedTablet.kind === 'scanner-dock'
+                      ? 'Klicken oder E drücken zum Ablegen'
+                      : targetedTablet.kind === 'power'
+                        ? targetedTablet.controllablePower
+                          ? targetedTablet.poweredOn
+                            ? 'Klicken oder E drücken zum Ausschalten'
+                            : 'Klicken oder E drücken zum Einschalten'
+                          : 'Klicken oder E drücken zum Neu laden'
+                        : targetedTablet.kind === 'zebra-latch'
+                          ? 'Klicken oder E drücken für Rollenwechsel'
+                          : targetedTablet.kind === 'drawer'
+                            ? isDrawerOpen
+                              ? 'Klicken oder E drücken zum Schließen'
+                              : 'Klicken oder E drücken zum Öffnen'
+                            : targetedTablet.kind === 'label'
+                              ? 'Klicken oder E drücken zum Fokussieren'
+                              : targetedTablet.poweredOn === false
+                                ? 'Ausgeschaltet'
+                                : 'Klicken oder E drücken zum Bedienen'}
+            </div>
+          )}
 
-            {heldMode === 'label' && (
-              <div class="scene3d-held-bar">
-                <span class="scene3d-held-status">
-                  Etikett aufgenommen — auf Tisch oder Oberfläche klicken zum
-                  Platzieren
-                </span>
-                <div class="scene3d-held-actions">
-                  <button
-                    type="button"
-                    class="scene3d-held-btn"
-                    onClick={onRotateHeldLabel}
-                  >
-                    ↻ Drehen (R)
-                  </button>
-                  <button
-                    type="button"
-                    class="scene3d-held-btn is-secondary"
-                    onClick={onDropHeldItem}
-                  >
-                    Ablegen (Esc)
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {heldMode === 'scanner' && (
-              <div class="scene3d-held-bar is-scanner">
-                <div
-                  class="scene3d-sensor-box"
-                  title="Live-Ausschnitt um das Laser-Fadenkreuz"
+          {heldMode === 'label' && (
+            <div class="scene3d-held-bar">
+              <span class="scene3d-held-status">
+                Etikett aufgenommen — auf Tisch oder Oberfläche klicken zum
+                Platzieren
+              </span>
+              <div class="scene3d-held-actions">
+                <button
+                  type="button"
+                  class="scene3d-held-btn"
+                  onClick={onRotateHeldLabel}
                 >
-                  <canvas
-                    ref={scannerPreviewCanvasRef}
-                    class="scene3d-sensor-canvas"
-                    width={448}
-                    height={280}
-                  />
-                  <span class="scene3d-sensor-laser" aria-hidden="true" />
-                </div>
-
-                <div class="scene3d-scanner-info">
-                  <div class="scene3d-scanner-title">
-                    Barcode-Scanner in der Hand
-                  </div>
-                  {lastScan ? (
-                    <div class="scene3d-scanner-readout is-decoded">
-                      ✓ <code>{lastScan.code}</code>{' '}
-                      <span class="scene3d-scanner-meta">
-                        ({lastScan.format}
-                        {lastScan.deliveredToTablet
-                          ? ' → Kasse'
-                          : ' · Kasse ausgeschaltet'}
-                        )
-                      </span>
-                    </div>
-                  ) : (
-                    <div class="scene3d-scanner-readout">
-                      Laser-Fadenkreuz auf Barcode oder QR-Code richten
-                    </div>
-                  )}
-                </div>
-
-                <div class="scene3d-held-actions">
-                  <button
-                    type="button"
-                    class="scene3d-held-btn is-secondary"
-                    onClick={onDropHeldItem}
-                  >
-                    Ablegen (Esc)
-                  </button>
-                </div>
+                  ↻ Drehen (R)
+                </button>
+                <button
+                  type="button"
+                  class="scene3d-held-btn is-secondary"
+                  onClick={onDropHeldItem}
+                >
+                  Ablegen (Esc)
+                </button>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+
+          {heldMode === 'scanner' && (
+            <div class="scene3d-held-bar is-scanner">
+              <div
+                class="scene3d-sensor-box"
+                title="Live-Ausschnitt um das Laser-Fadenkreuz"
+              >
+                <canvas
+                  ref={scannerPreviewCanvasRef}
+                  class="scene3d-sensor-canvas"
+                  width={960}
+                  height={600}
+                />
+                <span class="scene3d-sensor-laser" aria-hidden="true" />
+              </div>
+
+              <div class="scene3d-scanner-info">
+                <div class="scene3d-scanner-title">
+                  Barcode-Scanner in der Hand
+                </div>
+                {lastScan ? (
+                  <div class="scene3d-scanner-readout is-decoded">
+                    ✓ <code>{lastScan.code}</code>{' '}
+                    <span class="scene3d-scanner-meta">
+                      ({lastScan.format}
+                      {lastScan.deliveredToTablet
+                        ? ' → Kasse'
+                        : ' · Kasse ausgeschaltet'}
+                      )
+                    </span>
+                  </div>
+                ) : (
+                  <div class="scene3d-scanner-readout">
+                    Laser-Fadenkreuz auf Barcode oder QR-Code richten
+                  </div>
+                )}
+              </div>
+
+              <div class="scene3d-held-actions">
+                <button
+                  type="button"
+                  class="scene3d-held-btn is-secondary"
+                  onClick={onDropHeldItem}
+                >
+                  Ablegen (Esc)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {isReelPickerOpen && (
         <div

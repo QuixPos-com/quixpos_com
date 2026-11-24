@@ -94,7 +94,7 @@ export function buildBarcodeScanner(
   })
 
   // 3D laser beam & surface laser crosshair visuals (hidden during optical spot screenshot!)
-  const laserRayGeo = new THREE.CylinderGeometry(1.5, 3.2, 1, 8, 1, true)
+  const laserRayGeo = new THREE.CylinderGeometry(0.9, 1.8, 1, 8, 1, true)
   laserRayGeo.translate(0, 0.5, 0)
   laserRayGeo.rotateX(Math.PI / 2)
   const laserRayMat = new THREE.MeshBasicMaterial({
@@ -105,9 +105,9 @@ export function buildBarcodeScanner(
     side: THREE.DoubleSide,
   })
 
-  const laserLineHGeo = new THREE.PlaneGeometry(110, 5)
-  const laserLineVGeo = new THREE.PlaneGeometry(4, 38)
-  const laserCoreDotGeo = new THREE.CircleGeometry(7, 16)
+  const laserLineHGeo = new THREE.PlaneGeometry(64, 3)
+  const laserLineVGeo = new THREE.PlaneGeometry(2.5, 22)
+  const laserCoreDotGeo = new THREE.CircleGeometry(4.5, 16)
   const laserSpotMat = new THREE.MeshBasicMaterial({
     color: '#ff3b3b',
     transparent: true,
@@ -160,10 +160,14 @@ export function buildBarcodeScanner(
     laserCoreMat,
   )
 
+  const SCANNER_REST_SCALE = 0.65
+  const SCANNER_HAND_SCALE = 0.46
+
   // Tabletop dock pad
   const dockGroup = new THREE.Group()
   dockGroup.position.set(SCANNER_X, TABLE_TOP_Y, SCANNER_Z)
   dockGroup.rotation.y = -0.36
+  dockGroup.scale.set(SCANNER_REST_SCALE, 1, SCANNER_REST_SCALE)
   webglScene.add(dockGroup)
 
   const dockUserData = {
@@ -194,8 +198,9 @@ export function buildBarcodeScanner(
 
   // Handheld scanner body
   const scannerGroup = new THREE.Group()
-  scannerGroup.position.set(SCANNER_X, TABLE_TOP_Y + 6, SCANNER_Z)
+  scannerGroup.position.set(SCANNER_X, TABLE_TOP_Y + 5, SCANNER_Z)
   scannerGroup.rotation.y = -0.36
+  scannerGroup.scale.setScalar(SCANNER_REST_SCALE)
   webglScene.add(scannerGroup)
 
   const scannerUserData = {
@@ -319,7 +324,7 @@ export function buildBarcodeScanner(
   markFocusSharp(laserVisualsGroup)
 
   // Reusable math temporaries
-  const restPos = new THREE.Vector3(SCANNER_X, TABLE_TOP_Y + 6, SCANNER_Z)
+  const restPos = new THREE.Vector3(SCANNER_X, TABLE_TOP_Y + 5, SCANNER_Z)
   const restQuat = new THREE.Quaternion().setFromEuler(
     new THREE.Euler(0, -0.36, 0, 'YXZ'),
   )
@@ -371,7 +376,8 @@ export function buildBarcodeScanner(
       : 0.1 + hoverAmount * 0.35
     dockRingMat.emissiveIntensity +=
       (dockTargetIntensity - dockRingMat.emissiveIntensity) * blendRate
-    const dockScale = 1 + (held ? dockHoverAmount * 0.09 : 0)
+    const dockScale =
+      SCANNER_REST_SCALE * (1 + (held ? dockHoverAmount * 0.09 : 0))
     dockGroup.scale.set(dockScale, 1, dockScale)
 
     // Scanner status LED & beam colors (emerald flash on successful decode)
@@ -400,11 +406,11 @@ export function buildBarcodeScanner(
     if (handBlend <= 0.002 && !held) {
       scannerGroup.position.set(
         restPos.x,
-        restPos.y + hoverAmount * 18,
+        restPos.y + hoverAmount * 14,
         restPos.z,
       )
       scannerGroup.quaternion.copy(restQuat)
-      const hoverScale = 1 + hoverAmount * 0.045
+      const hoverScale = SCANNER_REST_SCALE * (1 + hoverAmount * 0.05)
       scannerGroup.scale.setScalar(hoverScale)
       sFoot.castShadow = true
       sLowerGrip.castShadow = true
@@ -422,27 +428,30 @@ export function buildBarcodeScanner(
     sUpperNeck.castShadow = castWorldShadows
     sHeadCore.castShadow = castWorldShadows
     sHeadCap.castShadow = castWorldShadows
-    scannerGroup.scale.setScalar(1)
+    const blendedScale =
+      SCANNER_REST_SCALE +
+      (SCANNER_HAND_SCALE - SCANNER_REST_SCALE) * handBlend
+    scannerGroup.scale.setScalar(blendedScale)
 
-    // Compute right-hand viewmodel pose in camera space
-    const walkBobX = Math.sin(timeSec * 7.2) * 8 * moveSpeedNorm
-    const walkBobY = Math.abs(Math.cos(timeSec * 7.2)) * -10 * moveSpeedNorm
-    const idleBreathY = Math.sin(timeSec * 2.1) * 3.5
+    // Compute compact right-hand viewmodel pose in camera space
+    const walkBobX = Math.sin(timeSec * 7.2) * 6 * moveSpeedNorm
+    const walkBobY = Math.abs(Math.cos(timeSec * 7.2)) * -7 * moveSpeedNorm
+    const idleBreathY = Math.sin(timeSec * 2.1) * 2.5
     const recoilZ =
-      Math.sin(triggerAnim * Math.PI) * 18 +
-      Math.sin(Math.min(1, successFlash) * Math.PI) * 14
+    Math.sin(triggerAnim * Math.PI) * 14 +
+      Math.sin(Math.min(1, successFlash) * Math.PI) * 10
 
-    const handX = Math.min(250, Math.max(116, 192 * Math.min(aspect, 1.45)))
+    const handX = Math.min(265, Math.max(122, 205 * Math.min(aspect, 1.5)))
     tmpHandLocal.set(
       handX + walkBobX,
-      -528 + walkBobY + idleBreathY,
-      -610 + recoilZ,
+      -455 + walkBobY + idleBreathY,
+      -620 + recoilZ,
     )
     tmpTargetPos.copy(tmpHandLocal).applyMatrix4(camera.matrixWorld)
 
     // Subtle wrist pivot so the scanner nozzle tracks the 3D laser crosshair hit point
     let wristYaw = Math.PI + 0.14
-    let wristPitch = 0.14
+    let wristPitch = 0.12
     if (aimWorldPoint) {
       tmpCamInvQuat.copy(camera.quaternion).invert()
       tmpLocalAim
@@ -451,12 +460,13 @@ export function buildBarcodeScanner(
         .applyQuaternion(tmpCamInvQuat)
       if (tmpLocalAim.z < -60) {
         const horizYaw = Math.atan2(-tmpLocalAim.x, -tmpLocalAim.z)
+        const headOffsetY = 474 * SCANNER_HAND_SCALE
         const vertPitch = Math.atan2(
-          tmpLocalAim.y - 380,
+          tmpLocalAim.y - headOffsetY,
           Math.hypot(tmpLocalAim.x, tmpLocalAim.z),
         )
         wristYaw = Math.PI + Math.max(-0.48, Math.min(0.48, horizYaw))
-        wristPitch = 0.16 - Math.max(-0.42, Math.min(0.42, vertPitch))
+        wristPitch = 0.14 - Math.max(-0.42, Math.min(0.42, vertPitch))
       }
     }
 
@@ -508,7 +518,7 @@ export function buildBarcodeScanner(
           laserSpotGroup.quaternion.setFromRotationMatrix(tmpSpotMat)
 
           // Scale surface spot gently with distance so it stays legible up close and across the desk
-          const spotScale = Math.min(2.2, Math.max(0.55, rayLen / 2800))
+          const spotScale = Math.min(1.5, Math.max(0.4, rayLen / 3400))
           laserSpotGroup.scale.setScalar(spotScale)
         } else {
           laserSpotGroup.visible = false
