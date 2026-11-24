@@ -183,7 +183,8 @@ export interface SceneRuntimeState {
   lastMouseX: number
   lastMouseY: number
   pressedKeys: Set<string>
-  wheelMoveY: number
+  mouseMoveX: number
+  mouseMoveY: number
   touchMoveX: number
   touchMoveY: number
   touchAimX: number

@@ -49,6 +49,7 @@ function frameBoxPose(
   minDist: number,
   fillV = 0.72,
   fillH = 0.78,
+  yaw = 0,
 ) {
   const fovRad = THREE.MathUtils.degToRad(cameraFov)
   const halfV = Math.tan(fovRad / 2)
@@ -56,12 +57,15 @@ function frameBoxPose(
   const dVert = boxH / 2 / (fillV * halfV)
   const dHoriz = boxW / 2 / (fillH * aspect * halfV)
   const dist = Math.max(dVert, dHoriz, minDist)
-  const tilt = -pitch
+  const cosPitch = Math.cos(pitch)
+  const lookX = -Math.sin(yaw) * cosPitch
+  const lookY = Math.sin(pitch)
+  const lookZ = -Math.cos(yaw) * cosPitch
   return {
-    x: centerX,
-    y: centerY + dist * Math.sin(tilt),
-    z: centerZ + dist * Math.cos(tilt),
-    yaw: 0,
+    x: centerX - lookX * dist,
+    y: centerY - lookY * dist,
+    z: centerZ - lookZ * dist,
+    yaw,
     pitch,
   }
 }
@@ -126,7 +130,7 @@ export function getViewCameraPose(
   }
 
   if (view === 'right') {
-    // Frames Kundendisplay + SumUp Virtual Solo + Epson TM-m30III + Inateck BCST-70 scanner
+    // Frames Kundendisplay + SumUp Virtual Solo + Epson TM-m30III + Inateck BCST-70 scanner, slightly pulled back and angled left
     return frameBoxPose(
       THREE,
       cameraFov,
@@ -138,9 +142,10 @@ export function getViewCameraPose(
       1860,
       980,
       -0.34,
-      1250,
-      0.68,
-      0.78,
+      1580,
+      0.56,
+      0.66,
+      0.2,
     )
   }
 

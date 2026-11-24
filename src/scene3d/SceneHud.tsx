@@ -370,45 +370,52 @@ export function SceneHud({
             </span>
             <span class="scene3d-knob-slash">/</span>
             <svg
-              class="scene3d-knob-wheel"
-              viewBox="0 0 18 26"
-              width="11"
-              height="17"
+              class="scene3d-knob-mouse"
+              viewBox="0 0 24 28"
+              width="14"
+              height="16"
               aria-hidden="true"
             >
+              {/* Click indicator arc above right mouse button */}
               <path
-                d="M6 3.5 L9 1 L12 3.5"
+                d="M20.8 7.5 A5.5 5.5 0 0 0 15.2 2"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.8"
+                stroke-width="2"
                 stroke-linecap="round"
-                stroke-linejoin="round"
               />
+              {/* Mouse body */}
               <rect
-                x="2.5"
-                y="5"
-                width="13"
-                height="16"
-                rx="6.5"
+                x="4"
+                y="3.5"
+                width="16"
+                height="21.5"
+                rx="8"
                 fill="rgba(255, 255, 255, 0.22)"
                 stroke="currentColor"
-                stroke-width="1.8"
+                stroke-width="2"
               />
-              <rect
-                x="7.4"
-                y="7.5"
-                width="3.2"
-                height="5.5"
-                rx="1.6"
+              {/* Highlighted right mouse button */}
+              <path
+                d="M12 3.5 V12.5 H20 V11.5 A8 8 0 0 0 12 3.5 Z"
                 fill="currentColor"
               />
-              <path
-                d="M6 22.5 L9 25 L12 22.5"
-                fill="none"
+              {/* Button split lines */}
+              <line
+                x1="4"
+                y1="12.5"
+                x2="20"
+                y2="12.5"
                 stroke="currentColor"
                 stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+              />
+              <line
+                x1="12"
+                y1="3.5"
+                x2="12"
+                y2="12.5"
+                stroke="currentColor"
+                stroke-width="1.8"
               />
             </svg>
           </span>

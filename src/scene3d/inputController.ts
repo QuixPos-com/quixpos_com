@@ -29,7 +29,6 @@ export interface InputControllerParams {
   raycaster: InstanceType<ThreeModule['Raycaster']>
   state: SceneRuntimeState
   tabletInstances: TabletInstance[]
-  cutoutTargets: Array<InstanceType<ThreeModule['Mesh']>>
   plateTargets: Array<InstanceType<ThreeModule['Mesh']>>
   drawerTargets: Array<InstanceType<ThreeModule['Mesh']>>
   powerTargets: Array<InstanceType<ThreeModule['Mesh']>>
@@ -66,7 +65,6 @@ export function attachInputController({
   raycaster,
   state,
   tabletInstances,
-  cutoutTargets,
   plateTargets,
   drawerTargets,
   powerTargets,
@@ -93,7 +91,8 @@ export function attachInputController({
 }: InputControllerParams) {
   let disposed = false
   let dragLooking = false
-  let holdPointerLocked = false
+  let dragMoving = false
+  let holdPointerLockMode: 'look' | 'move' | null = null
   let abortedHoldPointerLock = false
   let pointerLockEnteredAt = 0
   let pointerLockSkipFirstMove = false
@@ -390,11 +389,6 @@ export function attachInputController({
     return raycaster.intersectObjects(scannerDockTargets, false).length > 0
   }
 
-  const hitScreenAtClient = (clientX: number, clientY: number) => {
-    if (!setNdcFromClient(clientX, clientY)) return false
-    return raycaster.intersectObjects(cutoutTargets, false).length > 0
-  }
-
   const setIframeDragShield = (shielded: boolean) => {
     state.dragTurning = shielded
     const mode =
@@ -429,7 +423,7 @@ export function attachInputController({
   const syncPointerMode = (locked: boolean) => {
     if (locked && abortedHoldPointerLock) {
       abortedHoldPointerLock = false
-      holdPointerLocked = false
+      holdPointerLockMode = null
       if (document.pointerLockElement === stageEl) {
         document.exitPointerLock()
       }
@@ -437,13 +431,14 @@ export function attachInputController({
     }
     state.pointerLocked = locked
     if (!locked) {
-      holdPointerLocked = false
+      holdPointerLockMode = null
       abortedHoldPointerLock = false
       pointerLockSkipFirstMove = false
     }
     if (locked) {
       hoveredTabletId = null
       dragLooking = false
+      dragMoving = false
       pointerLockEnteredAt = performance.now()
       pointerLockSkipFirstMove = true
       state.cameraTween = null
@@ -454,7 +449,7 @@ export function attachInputController({
     } else {
       refreshCursorAndShield()
     }
-    const showFpsCrosshair = locked && !holdPointerLocked
+    const showFpsCrosshair = locked && holdPointerLockMode === null
     callbacks.onLockChange(showFpsCrosshair)
     if (!showFpsCrosshair) {
       callbacks.onTargetChange(null)
@@ -660,7 +655,7 @@ export function attachInputController({
         }
       } else {
         abortedHoldPointerLock = false
-        holdPointerLocked = false
+        holdPointerLockMode = null
         tryEnterPointerLock()
       }
     }
@@ -672,12 +667,14 @@ export function attachInputController({
 
   const onWindowBlur = () => {
     state.pressedKeys.clear()
-    state.wheelMoveY = 0
+    state.mouseMoveX = 0
+    state.mouseMoveY = 0
     dragLooking = false
+    dragMoving = false
     mouseDownOnStage = false
     setIframeDragShield(false)
-    if (holdPointerLocked && document.pointerLockElement === stageEl) {
-      holdPointerLocked = false
+    if (holdPointerLockMode !== null && document.pointerLockElement === stageEl) {
+      holdPointerLockMode = null
       document.exitPointerLock()
     }
     if (mouseStickMode === 'move') resetStick(true)
@@ -742,6 +739,7 @@ export function attachInputController({
     }
 
     const sensitivity = 0.0022
+    const moveSensitivity = 0.018
     if (state.pointerLocked) {
       // Ignore synthetic browser cursor-warp deltas emitted right as pointer lock engages
       const moveMag = Math.hypot(e.movementX, e.movementY)
@@ -753,6 +751,17 @@ export function attachInputController({
         (performance.now() - pointerLockEnteredAt < 180 && moveMag > 40) ||
         moveMag > 250
       ) {
+        return
+      }
+      if (holdPointerLockMode === 'move') {
+        state.mouseMoveX = Math.max(
+          -1.4,
+          Math.min(1.4, state.mouseMoveX + e.movementX * moveSensitivity),
+        )
+        state.mouseMoveY = Math.max(
+          -1.4,
+          Math.min(1.4, state.mouseMoveY - e.movementY * moveSensitivity),
+        )
         return
       }
       if (state.cameraTween) {
@@ -774,6 +783,35 @@ export function attachInputController({
       if (dYaw !== 0 || dPitch !== 0) {
         pushMouseAimVisual(-dYaw * 640, -dPitch * 640)
       }
+    } else if (dragMoving) {
+      const distFromDown = Math.hypot(
+        e.clientX - mouseDownStartX,
+        e.clientY - mouseDownStartY,
+      )
+      if (!mouseDragged && distFromDown >= 5) {
+        mouseDragged = true
+        clearActiveFocusForFreeMove()
+        setIframeDragShield(true)
+        abortedHoldPointerLock = false
+        holdPointerLockMode = 'move'
+        tryEnterPointerLock()
+      }
+      if (mouseDragged) {
+        const dx = e.clientX - lastDragX
+        const dy = e.clientY - lastDragY
+        if (Math.hypot(dx, dy) <= 150) {
+          state.mouseMoveX = Math.max(
+            -1.4,
+            Math.min(1.4, state.mouseMoveX + dx * moveSensitivity),
+          )
+          state.mouseMoveY = Math.max(
+            -1.4,
+            Math.min(1.4, state.mouseMoveY - dy * moveSensitivity),
+          )
+        }
+      }
+      lastDragX = e.clientX
+      lastDragY = e.clientY
     } else if (dragLooking) {
       const distFromDown = Math.hypot(
         e.clientX - mouseDownStartX,
@@ -784,7 +822,7 @@ export function attachInputController({
         clearActiveFocusForFreeMove()
         setIframeDragShield(true)
         abortedHoldPointerLock = false
-        holdPointerLocked = true
+        holdPointerLockMode = 'look'
         tryEnterPointerLock()
       }
       if (mouseDragged) {
@@ -871,8 +909,17 @@ export function attachInputController({
   }
 
   const onStageContextMenu = (e: MouseEvent) => {
+    const target = e.target as HTMLElement | null
+    if (
+      target &&
+      target.closest(
+        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
+      )
+    ) {
+      return
+    }
+    e.preventDefault()
     if (getHeldMode() !== 'none') {
-      e.preventDefault()
       cancelHeldItem()
     }
   }
@@ -889,8 +936,21 @@ export function attachInputController({
       return
     }
 
-    if (e.button === 2 && getHeldMode() !== 'none') {
+    if (e.button === 2) {
       e.preventDefault()
+      if (getHeldMode() !== 'none') {
+        return
+      }
+      if (!state.pointerLocked) {
+        mouseDownOnStage = true
+        mouseDragged = false
+        mouseDownStartX = e.clientX
+        mouseDownStartY = e.clientY
+        dragMoving = true
+        lastDragX = e.clientX
+        lastDragY = e.clientY
+        setIframeDragShield(true)
+      }
       return
     }
 
@@ -928,7 +988,7 @@ export function attachInputController({
     }
 
     if (state.pointerLocked) {
-      if (!holdPointerLocked && e.button === 0) {
+      if (holdPointerLockMode === null && e.button === 0) {
         const held = getHeldMode()
         if (held === 'label') {
           placeHeldLabel()
@@ -1004,9 +1064,14 @@ export function attachInputController({
 
     setIframeDragShield(false)
 
-    if (holdPointerLocked && e.button === 0) {
-      holdPointerLocked = false
+    if (
+      holdPointerLockMode !== null &&
+      ((holdPointerLockMode === 'look' && e.button === 0) ||
+        (holdPointerLockMode === 'move' && e.button === 2))
+    ) {
+      holdPointerLockMode = null
       dragLooking = false
+      dragMoving = false
       mouseDownOnStage = false
       if (document.pointerLockElement === stageEl) {
         document.exitPointerLock()
@@ -1016,8 +1081,15 @@ export function attachInputController({
       return
     }
 
+    if (e.button === 2) {
+      dragMoving = false
+      mouseDownOnStage = false
+      return
+    }
+
     const wasClickOnStage = mouseDownOnStage && !mouseDragged && e.button === 0
     dragLooking = false
+    dragMoving = false
     mouseDownOnStage = false
 
     if (
@@ -1096,38 +1168,6 @@ export function attachInputController({
         returnToPreviousPose()
       }
     }
-  }
-
-  const onStageWheel = (e: WheelEvent) => {
-    if (e.ctrlKey || e.deltaY === 0) return
-    const target = e.target as HTMLElement | null
-    if (
-      target &&
-      target.closest(
-        '.scene3d-hud-top, .scene3d-hud-bottom, .scene3d-reel-modal',
-      )
-    ) {
-      return
-    }
-    if (
-      getHeldMode() === 'none' &&
-      (hoveredTabletId !== null ||
-        (!state.pointerLocked && hitScreenAtClient(e.clientX, e.clientY)))
-    ) {
-      return
-    }
-    e.preventDefault()
-
-    let normDeltaY = e.deltaY
-    if (e.deltaMode === 1) {
-      normDeltaY *= 32
-    } else if (e.deltaMode === 2) {
-      normDeltaY *= 400
-    }
-    state.wheelMoveY = Math.max(
-      -1.2,
-      Math.min(1.2, state.wheelMoveY - normDeltaY / 120),
-    )
   }
 
   const onStageTouchStart = (e: TouchEvent) => {
@@ -1309,7 +1349,6 @@ export function attachInputController({
   window.addEventListener('touchcancel', onWindowTouchEnd)
   stageEl.addEventListener('mousedown', onStageMouseDown)
   stageEl.addEventListener('contextmenu', onStageContextMenu)
-  stageEl.addEventListener('wheel', onStageWheel, { passive: false })
   stageEl.addEventListener('touchstart', onStageTouchStart, { passive: false })
 
   const cleanup = () => {
@@ -1326,7 +1365,6 @@ export function attachInputController({
     window.removeEventListener('touchcancel', onWindowTouchEnd)
     stageEl.removeEventListener('mousedown', onStageMouseDown)
     stageEl.removeEventListener('contextmenu', onStageContextMenu)
-    stageEl.removeEventListener('wheel', onStageWheel)
     stageEl.removeEventListener('touchstart', onStageTouchStart)
 
     for (const fn of cleanupFns) fn()

@@ -326,7 +326,8 @@ export function mountSceneEngine({
       lastMouseX: -9999,
       lastMouseY: -9999,
       pressedKeys: new Set<string>(),
-      wheelMoveY: 0,
+      mouseMoveX: 0,
+      mouseMoveY: 0,
       touchMoveX: 0,
       touchMoveY: 0,
       touchAimX: 0,
@@ -683,7 +684,6 @@ export function mountSceneEngine({
       raycaster,
       state,
       tabletInstances,
-      cutoutTargets,
       plateTargets,
       drawerTargets,
       powerTargets,
@@ -1588,12 +1588,14 @@ export function mountSceneEngine({
         keyRight -= 1
       }
 
-      const manualForward = keyForward + state.wheelMoveY
-      const hasManualMove = Math.abs(manualForward) > 0.01 || keyRight !== 0
+      const manualForward = keyForward + state.mouseMoveY
+      const manualRight = keyRight + state.mouseMoveX
+      const hasManualMove =
+        Math.abs(manualForward) > 0.01 || Math.abs(manualRight) > 0.01
 
-      // Animate left stick knob on desktop keypresses/wheel or viewpoint flight when stick isn't manually dragged
+      // Animate left stick knob on desktop keypresses/right-drag or viewpoint flight when stick isn't manually dragged
       if (!state.moveStickEngaged) {
-        let targetKx = hasManualMove ? keyRight : tweenStickMoveX
+        let targetKx = hasManualMove ? manualRight : tweenStickMoveX
         let targetKy = hasManualMove ? -manualForward : tweenStickMoveY
         const kLen = Math.hypot(targetKx, targetKy)
         if (kLen > 1) {
@@ -1645,14 +1647,15 @@ export function mountSceneEngine({
       }
 
       const moveForward = manualForward + state.touchMoveY
-      const moveRight = keyRight + state.touchMoveX
+      const moveRight = manualRight + state.touchMoveX
       const hasMoveInput = Math.abs(moveForward) > 0.005 || Math.abs(moveRight) > 0.005
 
-      if (state.wheelMoveY !== 0) {
-        state.wheelMoveY *= Math.exp(-10 * dt)
-        if (Math.abs(state.wheelMoveY) < 0.01) {
-          state.wheelMoveY = 0
-        }
+      if (state.mouseMoveX !== 0 || state.mouseMoveY !== 0) {
+        const moveDecay = Math.exp(-12 * dt)
+        state.mouseMoveX *= moveDecay
+        state.mouseMoveY *= moveDecay
+        if (Math.abs(state.mouseMoveX) < 0.01) state.mouseMoveX = 0
+        if (Math.abs(state.mouseMoveY) < 0.01) state.mouseMoveY = 0
       }
 
       if (hasMoveInput) {
