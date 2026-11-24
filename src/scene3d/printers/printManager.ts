@@ -152,13 +152,13 @@ const SLOT_CONFIGS: Record<PrinterKind, PrinterSlotConfig> = {
     kind: 'epson',
     slotX: PRINTER_X,
     slotY: TABLE_TOP_Y + PRINTER_SIZE - 22,
-    slotZ: PRINTER_Z + PRINTER_SIZE / 2 - 12,
+    slotZ: PRINTER_Z + PRINTER_SIZE / 2 + 2,
     paperWorldW: 220,
     minWorldH: 150,
     maxWorldH: 700,
     tiltX: -1.18,
     feedSpeed: 520,
-    extraFeed: -12,
+    extraFeed: 12,
   },
 }
 

@@ -743,7 +743,7 @@ export function attachInputController({
     }
 
     const sensitivity = 0.0022
-    const moveSensitivity = 0.014
+    const moveSensitivity = 0.003
     const addMouseMoveStick = (dx: number, dy: number) => {
       let nx = state.mouseMoveX + dx * moveSensitivity
       let ny = state.mouseMoveY - dy * moveSensitivity
