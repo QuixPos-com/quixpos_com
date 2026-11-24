@@ -125,7 +125,46 @@ Only the leftmost screen (`dash-left`, `dashdemo.quixpos.com`) is authorized to 
 
 ---
 
-## 3. Printing on the Two 3D Printers (ZPL & ESC/POS)
+## 3. Terminal Pairing PIN Delivery (`pos:pairing`)
+
+When `dash-left` provisions unpaired showroom terminals (`pos` -> `pos-center`, `customer` -> `pos-vertical`), it sends `'pos:pairing'` upstream. Because `pos-center` and `pos-vertical` boot asynchronously after `'screen:on'`, the 3D host **stores** the latest pairing PIN per `tabletId` and replays it automatically:
+
+- Immediately to any already-loaded peer iframe when `'pos:pairing'` arrives
+- Automatically when a peer iframe finishes `load` or sends `'scene:ping'`
+- Immediately in response to `'pos:pairing:get'`
+
+Stored PINs are cleared when a peer acknowledges binding (`'pos:pairing:consumed'`), when `dash-left` sends `'pos:pairing:clear'` or reloads, or when a screen is disabled/turned off on logout.
+
+### Wire Messages
+
+| Message `name` | Direction | `data` object | Description |
+| --- | --- | --- | --- |
+| `'pos:pairing'` | `dash-left` -> Host -> Peers | `{ host, origin, terminals, byTabletId }` | Stores pending PIN(s) on the 3D host and delivers them to peer iframes. |
+| `'pos:pairing:get'` | Peer -> Host | `{}` | Pulls any waiting `'pos:pairing'` payload for the calling iframe's `tabletId`. |
+| `'pos:pairing:consumed'` | Peer -> Host | `{ pin?: string, id?: number \| string }` | Clears the calling iframe's waiting PIN on the host after binding succeeds. |
+| `'pos:pairing:clear'` | `dash-left` -> Host | `{ tabletId?: string }` | Clears waiting PIN for one tablet (or all tablets if `tabletId` omitted). |
+
+### Client Helper Usage (`iframeClient.ts`)
+
+```ts
+import { createSceneChannelClient } from './iframeClient'
+
+const scene = createSceneChannelClient()
+
+// Fires immediately if a PIN is already waiting (locally or cached on the 3D host),
+// and whenever a new PIN arrives later. Automatically scoped to this iframe's tabletId.
+const unsub = scene.onPairingPin(async (pairing) => {
+  await bindTerminalWithPin(pairing.host, pairing.pin)
+  scene.ackPairingPin(pairing.pin) // clear waiting PIN on host
+})
+
+// Or await once during boot:
+// const pairing = await scene.waitForPairingPin(5000)
+```
+
+---
+
+## 4. Printing on the Two 3D Printers (ZPL & ESC/POS)
 
 The 3D desk includes two physical printers that any powered-on iframe can print to:
 
@@ -219,13 +258,17 @@ window.parent.postMessage(
 
 ---
 
-## 4. All Built-in Host Commands & Events
+## 5. All Built-in Host Commands & Events
 
 ### Built-in Host Commands (Iframe -> 3D Scene)
 
 | Message `name` | `data` object | Description |
 | --- | --- | --- |
-| `'scene:ping'` | `{}` | Requests an immediate `'scene:presence'` snapshot back to the caller. |
+| `'scene:ping'` | `{}` | Requests an immediate `'scene:presence'` snapshot back to the caller (and replays any waiting `'pos:pairing'` PIN). |
+| `'pos:pairing'` | `{ host, origin, terminals, byTabletId }` | *(Authorized for `dash-left`)* Caches pending terminal pairing PINs on the host and relays them to peer iframes. |
+| `'pos:pairing:get'` | `{}` | Replies directly to the caller with `'pos:pairing'` if a waiting PIN exists for its `tabletId`. |
+| `'pos:pairing:consumed'` | `{ pin?, id? }` | Clears the caller's waiting pairing PIN on the 3D host once paired. |
+| `'pos:pairing:clear'` | `{ tabletId? }` | *(Authorized for `dash-left`)* Clears waiting pairing PIN(s) on the 3D host. |
 | `'printer:zpl'` | `{ zpl: string, jobId?: string }` | Renders ZPL II onto Zebra ZD420; drops previous Zebra label to the floor. |
 | `'printer:escpos'` | `{ escpos?: string, base64?: string, bytes?: number[], encoding?: string, jobId?: string }` | Renders ESC/POS onto Epson TM-m30III; drops previous receipt to the floor (and opens drawer on `ESC p`). |
 | `'drawer:open'` | `{}` | Slides the 3D cash drawer open. |

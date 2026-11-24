@@ -58,6 +58,30 @@ export interface ScreensChangedPayload {
   screens: Record<string, ScreenPowerSummary>
 }
 
+export interface PosPairingEntry {
+  [key: string]: unknown
+  id?: number | string
+  name?: string
+  pin: string
+  tabletId: string
+  host: string
+  origin: string
+  created?: boolean
+}
+
+export interface PosPairingPayload {
+  [key: string]: unknown
+  host: string
+  origin: string
+  terminals: Record<string, PosPairingEntry>
+  byTabletId: Record<string, PosPairingEntry>
+}
+
+export type PosPairingCallback = (
+  pairing: PosPairingEntry,
+  payload: PosPairingPayload,
+) => void
+
 export interface SceneClientMessageMeta {
   name: string
   /** 'host' when sent by the 3D scene, or the peer tabletId (e.g. 'pos-center') */
@@ -123,10 +147,91 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
 
   const listeners = new Map<string, Set<SceneClientCallback<any>>>()
   const presenceListeners = new Set<(info: ScenePresenceInfo) => void>()
+  const pairingListeners = new Set<PosPairingCallback>()
+  const pairingListenerLastKey = new WeakMap<PosPairingCallback, string>()
 
   let disposed = false
   let hostOrigin: string | null = null
   let presenceInfo: ScenePresenceInfo | null = null
+  let latestPairingPayload: PosPairingPayload | null = null
+  let latestPairingEntry: PosPairingEntry | null = null
+
+  const getCurrentTabletId = (): string | null =>
+    presenceInfo?.tabletId ?? getSceneTabletIdSync()
+
+  const getPairingDedupKey = (entry: PosPairingEntry): string =>
+    `${entry.tabletId}:${entry.id ?? ''}:${entry.pin}:${entry.host}`
+
+  const extractMyPairingEntry = (
+    raw: SceneMessageData,
+  ): { entry: PosPairingEntry; payload: PosPairingPayload } | null => {
+    const myTabletId = getCurrentTabletId()
+    if (!myTabletId) return null
+
+    const topHost = typeof raw.host === 'string' ? raw.host.trim() : ''
+    const topOrigin = typeof raw.origin === 'string' ? raw.origin.trim() : ''
+
+    const byTabletId = isPlainObject(raw.byTabletId)
+      ? (raw.byTabletId as Record<string, unknown>)
+      : {}
+    const terminals = isPlainObject(raw.terminals)
+      ? (raw.terminals as Record<string, unknown>)
+      : {}
+
+    let candidate: unknown = byTabletId[myTabletId]
+    if (!isPlainObject(candidate)) {
+      candidate = Object.values(terminals).find(
+        (v) => isPlainObject(v) && v.tabletId === myTabletId,
+      )
+    }
+    if (!isPlainObject(candidate)) return null
+
+    const pin = typeof candidate.pin === 'string' ? candidate.pin.trim() : ''
+    if (!pin) return null
+
+    const entry: PosPairingEntry = {
+      ...candidate,
+      id:
+        typeof candidate.id === 'number' || typeof candidate.id === 'string'
+          ? candidate.id
+          : undefined,
+      name:
+        typeof candidate.name === 'string' ? candidate.name : undefined,
+      pin,
+      tabletId: myTabletId,
+      host:
+        typeof candidate.host === 'string' && candidate.host.trim()
+          ? candidate.host.trim()
+          : topHost,
+      origin:
+        typeof candidate.origin === 'string' && candidate.origin.trim()
+          ? candidate.origin.trim()
+          : topOrigin,
+      created:
+        typeof candidate.created === 'boolean' ? candidate.created : undefined,
+    }
+
+    const payload: PosPairingPayload = {
+      ...raw,
+      host: topHost || entry.host,
+      origin: topOrigin || entry.origin,
+      terminals: terminals as Record<string, PosPairingEntry>,
+      byTabletId: byTabletId as Record<string, PosPairingEntry>,
+    }
+
+    return { entry, payload }
+  }
+
+  const notifyPairingListener = (
+    cb: PosPairingCallback,
+    entry: PosPairingEntry,
+    payload: PosPairingPayload,
+  ) => {
+    const key = getPairingDedupKey(entry)
+    if (pairingListenerLastKey.get(cb) === key) return
+    pairingListenerLastKey.set(cb, key)
+    cb(entry, payload)
+  }
 
   // Pre-seed hostOrigin from document.referrer if it matches a trusted host origin
   if (typeof document !== 'undefined' && document.referrer) {
@@ -170,6 +275,23 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
       presenceInfo = {
         ...presenceInfo,
         screens: data.screens as Record<string, ScreenPowerSummary>,
+      }
+    } else if (name === 'pos:pairing') {
+      const extracted = extractMyPairingEntry(data)
+      if (extracted) {
+        latestPairingEntry = extracted.entry
+        latestPairingPayload = extracted.payload
+        for (const cb of Array.from(pairingListeners)) {
+          notifyPairingListener(cb, extracted.entry, extracted.payload)
+        }
+      }
+    } else if (name === 'pos:pairing:clear') {
+      const targetId =
+        typeof data.tabletId === 'string' ? data.tabletId.trim() : ''
+      const myTabletId = getCurrentTabletId()
+      if (!targetId || targetId === myTabletId) {
+        latestPairingEntry = null
+        latestPairingPayload = null
       }
     }
 
@@ -409,6 +531,82 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     })
   }
 
+  // ── POS / Customer Terminal Pairing PIN Helpers ──────────────────────────
+
+  /** Pull any waiting pairing PIN for this tablet from the 3D host */
+  const requestPairingPin = () => {
+    send('pos:pairing:get', {})
+  }
+
+  /** Synchronous getter for the latest cached pairing PIN for this tablet, if any */
+  const getPairingPin = (): PosPairingEntry | null => latestPairingEntry
+
+  /**
+   * Register a callback for pairing PIN delivery scoped to this iframe's tabletId.
+   * - If a waiting PIN is already cached locally, invokes `callback` immediately.
+   * - Otherwise pulls `'pos:pairing:get'` from the 3D host so any waiting PIN stored
+   *   before this iframe booted is delivered immediately.
+   * - Deduplicates identical `(tabletId, id, pin, host)` deliveries per callback.
+   */
+  const onPairingPin = (callback: PosPairingCallback): (() => void) => {
+    pairingListeners.add(callback)
+    if (latestPairingEntry && latestPairingPayload) {
+      notifyPairingListener(callback, latestPairingEntry, latestPairingPayload)
+    } else {
+      requestPairingPin()
+    }
+    return () => {
+      pairingListeners.delete(callback)
+    }
+  }
+
+  /**
+   * Promise helper that resolves with this tablet's pairing PIN entry as soon as
+   * it is available (immediately if waiting), or `null` if timed out / not embedded.
+   */
+  const waitForPairingPin = (
+    timeoutMs = 5000,
+  ): Promise<PosPairingEntry | null> => {
+    if (latestPairingEntry) return Promise.resolve(latestPairingEntry)
+    if (typeof window === 'undefined' || window.parent === window) {
+      return Promise.resolve(null)
+    }
+    return new Promise((resolve) => {
+      let settled = false
+      const timer = window.setTimeout(() => {
+        if (settled) return
+        settled = true
+        unsub()
+        resolve(null)
+      }, timeoutMs)
+
+      const unsub = onPairingPin((entry) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timer)
+        unsub()
+        resolve(entry)
+      })
+    })
+  }
+
+  /**
+   * Acknowledge that this iframe has bound/consumed the pairing PIN so the 3D host
+   * clears it and won't replay a used PIN on future reloads.
+   */
+  const ackPairingPin = (pin?: string) => {
+    const consumedPin = pin ?? latestPairingEntry?.pin
+    const consumedId = latestPairingEntry?.id
+    if (!consumedPin || latestPairingEntry?.pin === consumedPin) {
+      latestPairingEntry = null
+      latestPairingPayload = null
+    }
+    send('pos:pairing:consumed', {
+      ...(consumedPin ? { pin: consumedPin } : {}),
+      ...(consumedId !== undefined ? { id: consumedId } : {}),
+    })
+  }
+
   const dispose = () => {
     if (disposed) return
     disposed = true
@@ -417,6 +615,9 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     }
     listeners.clear()
     presenceListeners.clear()
+    pairingListeners.clear()
+    latestPairingEntry = null
+    latestPairingPayload = null
   }
 
   if (
@@ -449,6 +650,11 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     printZpl,
     printEscPos,
     onPrinted,
+    requestPairingPin,
+    getPairingPin,
+    onPairingPin,
+    waitForPairingPin,
+    ackPairingPin,
     dispose,
   }
 }

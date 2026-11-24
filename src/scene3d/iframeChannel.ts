@@ -35,6 +35,25 @@ export interface ScenePresencePayload extends ScenePresenceState {
   peers: string[]
 }
 
+export interface PosPairingEntry {
+  [key: string]: unknown
+  id?: number | string
+  name?: string
+  pin: string
+  tabletId: string
+  host: string
+  origin?: string
+  created?: boolean
+}
+
+export interface PosPairingPayload {
+  [key: string]: unknown
+  host: string
+  origin: string
+  terminals: Record<string, PosPairingEntry>
+  byTabletId: Record<string, PosPairingEntry>
+}
+
 export interface SceneMessageMeta {
   name: string
   sender: string
@@ -66,6 +85,7 @@ export interface SceneBroadcastChannel {
   attachTablets: (
     tablets: TabletInstance[],
     getPresenceState: () => ScenePresenceState,
+    onTabletLoaded?: (tabletId: string) => void,
   ) => void
   /** Internal: mark a tablet as unloading before resetting its src */
   notifyTabletReloading: (tabletId: string) => void
@@ -196,10 +216,10 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
     const data: SceneMessageData = isPlainObject(raw.data) ? raw.data : {}
     const senderId = senderTablet.spec.id
 
-    // Built-in presence handshake probe
+    // Built-in presence handshake probe & host-only pull queries
     if (name === 'scene:ping') {
       sendPresenceToTablet(senderTablet)
-    } else {
+    } else if (name !== 'pos:pairing:get' && name !== 'screens:get') {
       // Relay broadcast message to all other loaded iframes on the channel
       for (const peer of tablets) {
         if (peer.spec.id !== senderId) {
@@ -270,6 +290,7 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
   const attachTablets = (
     nextTablets: TabletInstance[],
     presenceStateGetter: () => ScenePresenceState,
+    onTabletLoaded?: (tabletId: string) => void,
   ) => {
     for (const fn of tabletCleanupFns) fn()
     tabletCleanupFns.length = 0
@@ -285,6 +306,7 @@ export function createSceneBroadcastChannel(): SceneBroadcastChannel {
         if (!src || src === 'about:blank') return
         loadedTablets.add(tablet.spec.id)
         sendPresenceToTablet(tablet)
+        onTabletLoaded?.(tablet.spec.id)
       }
       tablet.iframeEl.addEventListener('load', onLoad)
       tabletCleanupFns.push(() => {

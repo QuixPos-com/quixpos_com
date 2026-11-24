@@ -15,7 +15,11 @@ import {
   STICK_YAW_SPEED,
   WALK_SPEED,
 } from './config'
-import { createSceneBroadcastChannel } from './iframeChannel'
+import {
+  createSceneBroadcastChannel,
+  type PosPairingEntry,
+  type PosPairingPayload,
+} from './iframeChannel'
 import { attachInputController } from './inputController'
 import { buildBarcodeScanner } from './models/barcodeScanner'
 import { buildCashDrawer } from './models/cashDrawer'
@@ -374,6 +378,9 @@ export function mountSceneEngine({
             window.focus()
           }
           target.iframeEl.src = 'about:blank'
+          if (!target.enabledByMain) {
+            clearPendingPairing(target.spec.id)
+          }
         }
       }
 
@@ -421,6 +428,9 @@ export function mountSceneEngine({
       target.powerFaceMat.needsUpdate = true
 
       channel.notifyTabletReloading(tabletId)
+      if (target.spec.canControlScreens) {
+        clearPendingPairing()
+      }
       target.iframeEl.src = 'about:blank'
       requestAnimationFrame(() => {
         if (!disposed && target.poweredOn) {
@@ -480,12 +490,147 @@ export function mountSceneEngine({
       'drawer',
     ])
 
-    channel.attachTablets(tabletInstances, () => ({
-      activeView: state.activeView,
-      drawerOpen,
-      pointerLocked: state.pointerLocked,
-      screens: getControllableScreensMap(),
-    }))
+    let pendingPairingHost = ''
+    let pendingPairingOrigin = ''
+    const pendingPairingByTablet = new Map<string, PosPairingEntry>()
+
+    const isPlainRecord = (v: unknown): v is Record<string, unknown> =>
+      typeof v === 'object' && v !== null && !Array.isArray(v)
+
+    const normalizePairingEntry = (
+      raw: unknown,
+      fallbackTabletId: string,
+      fallbackHost: string,
+      fallbackOrigin: string,
+      fallbackName?: string,
+    ): PosPairingEntry | null => {
+      if (!isPlainRecord(raw)) return null
+      const pin = typeof raw.pin === 'string' ? raw.pin.trim() : ''
+      if (!pin) return null
+      const tabletId =
+        typeof raw.tabletId === 'string' && raw.tabletId.trim()
+          ? raw.tabletId.trim()
+          : fallbackTabletId
+      if (!tabletId) return null
+      const host =
+        typeof raw.host === 'string' && raw.host.trim()
+          ? raw.host.trim()
+          : fallbackHost
+      const origin =
+        typeof raw.origin === 'string' && raw.origin.trim()
+          ? raw.origin.trim()
+          : fallbackOrigin
+      return {
+        ...raw,
+        id:
+          typeof raw.id === 'number' || typeof raw.id === 'string'
+            ? raw.id
+            : undefined,
+        name:
+          typeof raw.name === 'string' && raw.name.trim()
+            ? raw.name.trim()
+            : fallbackName,
+        pin,
+        tabletId,
+        host,
+        origin,
+        created: typeof raw.created === 'boolean' ? raw.created : undefined,
+      }
+    }
+
+    const storePairingFromMain = (data: Record<string, unknown>) => {
+      const host = typeof data.host === 'string' ? data.host.trim() : ''
+      const origin = typeof data.origin === 'string' ? data.origin.trim() : ''
+      if (host) pendingPairingHost = host
+      if (origin) pendingPairingOrigin = origin
+
+      const nextEntries = new Map<string, PosPairingEntry>()
+      if (isPlainRecord(data.byTabletId)) {
+        for (const [tabletId, rawEntry] of Object.entries(data.byTabletId)) {
+          const entry = normalizePairingEntry(
+            rawEntry,
+            tabletId,
+            pendingPairingHost,
+            pendingPairingOrigin,
+          )
+          if (entry) nextEntries.set(entry.tabletId, entry)
+        }
+      }
+      if (isPlainRecord(data.terminals)) {
+        for (const [termName, rawEntry] of Object.entries(data.terminals)) {
+          const entry = normalizePairingEntry(
+            rawEntry,
+            '',
+            pendingPairingHost,
+            pendingPairingOrigin,
+            termName,
+          )
+          if (entry && !nextEntries.has(entry.tabletId)) {
+            nextEntries.set(entry.tabletId, entry)
+          }
+        }
+      }
+
+      for (const [tabletId, entry] of nextEntries) {
+        pendingPairingByTablet.set(tabletId, entry)
+      }
+    }
+
+    const clearPendingPairing = (tabletId?: string) => {
+      if (tabletId) {
+        pendingPairingByTablet.delete(tabletId)
+        if (pendingPairingByTablet.size === 0) {
+          pendingPairingHost = ''
+          pendingPairingOrigin = ''
+        }
+      } else {
+        pendingPairingByTablet.clear()
+        pendingPairingHost = ''
+        pendingPairingOrigin = ''
+      }
+    }
+
+    const buildPairingPayloadForTablet = (
+      tabletId: string,
+    ): PosPairingPayload | null => {
+      const targetEntry = pendingPairingByTablet.get(tabletId)
+      if (!targetEntry) return null
+
+      const terminals: Record<string, PosPairingEntry> = {}
+      const byTabletId: Record<string, PosPairingEntry> = {}
+      for (const [tid, entry] of pendingPairingByTablet) {
+        byTabletId[tid] = entry
+        const termKey =
+          typeof entry.name === 'string' && entry.name ? entry.name : tid
+        terminals[termKey] = entry
+      }
+
+      return {
+        host: pendingPairingHost || targetEntry.host,
+        origin: pendingPairingOrigin || targetEntry.origin || '',
+        terminals,
+        byTabletId,
+      }
+    }
+
+    const deliverPendingPairingToTablet = (tabletId: string) => {
+      const payload = buildPairingPayloadForTablet(tabletId)
+      if (!payload) return
+      channel.sendTo(tabletId, 'pos:pairing', payload)
+    }
+
+    channel.attachTablets(
+      tabletInstances,
+      () => ({
+        activeView: state.activeView,
+        drawerOpen,
+        pointerLocked: state.pointerLocked,
+        screens: getControllableScreensMap(),
+      }),
+      (loadedTabletId) => {
+        deliverPendingPairingToTablet(loadedTabletId)
+      },
+    )
 
     // Render CSS3D once first so CSS3DRenderer appends powered-on wrapper elements
     // into the live DOM before assigning iframe.src (avoids aborted navigation on Mobile Chrome)
@@ -602,6 +747,40 @@ export function mountSceneEngine({
       meta.reply('screens:state', {
         screens: getControllableScreensMap(),
       })
+    })
+
+    channel.on('pos:pairing', (data, meta) => {
+      if (!isAuthorizedScreenController(meta.sender)) return
+      storePairingFromMain(data)
+    })
+
+    channel.on('pos:pairing:get', (_data, meta) => {
+      const payload = buildPairingPayloadForTablet(meta.sender)
+      if (payload) {
+        meta.reply('pos:pairing', payload)
+      }
+    })
+
+    channel.on('pos:pairing:consumed', (data, meta) => {
+      const existing = pendingPairingByTablet.get(meta.sender)
+      if (!existing) return
+      const consumedPin = typeof data.pin === 'string' ? data.pin.trim() : ''
+      if (!consumedPin || consumedPin === existing.pin) {
+        clearPendingPairing(meta.sender)
+      }
+    })
+
+    channel.on('pos:pairing:clear', (data, meta) => {
+      if (!isAuthorizedScreenController(meta.sender)) return
+      const targetId =
+        typeof data.tabletId === 'string' && data.tabletId.trim()
+          ? data.tabletId.trim()
+          : undefined
+      clearPendingPairing(targetId)
+    })
+
+    channel.on('scene:ping', (_data, meta) => {
+      deliverPendingPairingToTablet(meta.sender)
     })
 
     channel.on('drawer:open', () => {
