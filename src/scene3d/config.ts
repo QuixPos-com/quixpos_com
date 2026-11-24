@@ -1,14 +1,14 @@
 import type { TabletSpec } from './types'
 
 // Scale: 1 world unit = 0.25 mm (4000 units = 1 meter).
-// 22" 4:3 (1600x1200 CSS px @ scale 1.1176 -> 1788x1341 units, 447x335mm, 22.0" diag)
+// 27" 16:9 widescreen (1920x1080 CSS px @ scale 1.2418 -> 2384x1341 units, 596x335mm, 27.0" diag)
 // 12" 16:10 (1024x640 CSS px @ scale 1.0 -> 256x160mm, 11.9" diag)
 // 8" 10:16 portrait (432x688 CSS px @ scale 1.0 -> 108x172mm, 8.0" diag)
 export const TABLET_DEPTH = 28
 export const TILT_ANGLE = -0.36 // ~20.6 degrees tilted back toward viewer
 export const TABLET_Z = 920 // Near front edge of the table (front edge at +1600)
 
-export const TABLE_W = 7000 // 1.75m
+export const TABLE_W = 7800 // 1.95m
 export const TABLE_D = 3200 // 0.80m
 export const TABLE_TOP_Y = 3040 // 0.76m
 export const TABLE_THICKNESS = 140
@@ -59,10 +59,10 @@ export const TABLETS: TabletSpec[] = [
     title: 'Artikelverwaltung',
     subtitle: 'dashdemo.quixpos.com',
     url: 'https://dashdemo.quixpos.com',
-    x: -2150,
-    cssW: 1600,
-    cssH: 1200,
-    physicalScale: 1.1176,
+    x: -2460,
+    cssW: 1920,
+    cssH: 1080,
+    physicalScale: 1.2418,
     bezelPad: 42,
     bottomClearance: 160,
   },

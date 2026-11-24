@@ -20,7 +20,7 @@ const TABLETOP_STATIONS: TabletopStationSpec[] = [
     viewId: 'left',
     title: 'Büro',
     subtitle: 'Artikelverwaltung · Etikettendruck',
-    x: -1830,
+    x: -2150,
     width: 700,
   },
   {

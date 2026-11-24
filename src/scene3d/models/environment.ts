@@ -99,9 +99,11 @@ export function buildTable(
   }
 
   // Subtle under-table crossbar frame (front beam leaves opening for under-table cash drawer)
+  const leftBeamW = legOffsetX - 640
+  const rightBeamW = legOffsetX - 780
   const beamBackGeo = new THREE.BoxGeometry(TABLE_W - 520, 110, 120)
-  const beamSideLeftGeo = new THREE.BoxGeometry(2600, 110, 120)
-  const beamSideRightGeo = new THREE.BoxGeometry(2460, 110, 120)
+  const beamSideLeftGeo = new THREE.BoxGeometry(leftBeamW, 110, 120)
+  const beamSideRightGeo = new THREE.BoxGeometry(rightBeamW, 110, 120)
   const beamZGeo = new THREE.BoxGeometry(120, 110, TABLE_D - 520)
   disposables.push(beamBackGeo, beamSideLeftGeo, beamSideRightGeo, beamZGeo)
 
@@ -111,12 +113,20 @@ export function buildTable(
   tableGroup.add(beamBack)
 
   const beamFrontLeft = new THREE.Mesh(beamSideLeftGeo, metalMat)
-  beamFrontLeft.position.set(-1940, TABLE_TOP_Y - TABLE_THICKNESS - 55, legOffsetZ)
+  beamFrontLeft.position.set(
+    -(legOffsetX + 640) / 2,
+    TABLE_TOP_Y - TABLE_THICKNESS - 55,
+    legOffsetZ,
+  )
   beamFrontLeft.castShadow = true
   tableGroup.add(beamFrontLeft)
 
   const beamFrontRight = new THREE.Mesh(beamSideRightGeo, metalMat)
-  beamFrontRight.position.set(2010, TABLE_TOP_Y - TABLE_THICKNESS - 55, legOffsetZ)
+  beamFrontRight.position.set(
+    (legOffsetX + 780) / 2,
+    TABLE_TOP_Y - TABLE_THICKNESS - 55,
+    legOffsetZ,
+  )
   beamFrontRight.castShadow = true
   tableGroup.add(beamFrontRight)
 

@@ -82,21 +82,21 @@ export function getViewCameraPose(
   }
 
   if (view === 'left') {
-    // Frames 22" Artikelverwaltung monitor (-3086..-1214) + Zebra ZD420 shipping label printer (-1114..-574)
+    // Frames 27" 16:9 widescreen Büro monitor (-3694..-1226) + Zebra ZD420 shipping label printer (-1114..-574)
     return frameBoxPose(
       THREE,
       cameraFov,
       stageWidth,
       stageHeight,
-      -1830,
+      -2140,
       3760,
       960,
-      2580,
-      1620,
+      3140,
+      1580,
       -0.33,
-      1450,
-      0.7,
-      0.78,
+      1500,
+      0.74,
+      0.82,
     )
   }
 
