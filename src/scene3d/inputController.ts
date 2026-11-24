@@ -282,6 +282,7 @@ export function attachInputController({
       state.currentTargetId = null
       state.currentTargetKind = null
       state.currentTargetPoweredOn = null
+      state.currentTargetLoginPrompt = false
     }
   }
 

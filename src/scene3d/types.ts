@@ -20,6 +20,7 @@ export interface TargetedDevice {
   kind: TargetKind
   poweredOn?: boolean
   controllablePower?: boolean
+  loginRequiredPrompt?: boolean
 }
 
 export interface ScreenPowerSummary {
@@ -27,6 +28,7 @@ export interface ScreenPowerSummary {
   title: string
   subtitle: string
   poweredOn: boolean
+  enabled: boolean
 }
 
 export interface TabletSpec {
@@ -53,7 +55,11 @@ export interface TabletSpec {
 export interface TabletInstance {
   spec: TabletSpec
   poweredOn: boolean
+  enabledByMain: boolean
+  loginPromptTimer: number
   cutoutMesh: InstanceType<ThreeModule['Mesh']>
+  loginOsdMesh: InstanceType<ThreeModule['Mesh']>
+  loginOsdMat: InstanceType<ThreeModule['MeshBasicMaterial']>
   camDot: InstanceType<ThreeModule['Mesh']>
   powerBtnGroup: InstanceType<ThreeModule['Group']>
   powerFaceMat: InstanceType<ThreeModule['MeshStandardMaterial']>
@@ -127,6 +133,7 @@ export interface SceneRuntimeState {
   currentTargetId: string | null
   currentTargetKind: TargetKind | null
   currentTargetPoweredOn: boolean | null
+  currentTargetLoginPrompt: boolean
   lastMouseX: number
   lastMouseY: number
   pressedKeys: Set<string>

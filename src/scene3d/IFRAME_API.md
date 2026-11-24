@@ -9,7 +9,7 @@ This note is for developers of the web applications embedded as screens inside t
 | `pos-vertical` | Kundendisplay (Customer Display) | `https://posdemo.quixpos.com` | **OFF** | Controlled screen |
 | `sumup-far-right` | SumUp Virtual Solo | `https://virtual-solo.sumup.com` | **OFF** | Controlled screen |
 
-When `/3d` opens, **only the leftmost screen (`dash-left`) boots immediately**. The other 3 screens (`pos-center`, `pos-vertical`, `sumup-far-right`) start **switched OFF** (dark 3D glass panels, unloaded iframes) until switched ON via the `dash-left` API (or via their physical 3D bezel power buttons).
+When `/3d` opens, **only the leftmost screen (`dash-left`) boots immediately**. The other 3 screens (`pos-center`, `pos-vertical`, `sumup-far-right`) start **switched OFF and disabled** (`poweredOn: false, enabled: false`). If a visitor clicks a physical 3D bezel power button on any of those 3 screens before `dash-left` enables or turns them on, the screen stays off and displays **`<- Login first`** (and emits `'screen:powerBlocked'`).
 
 ---
 
@@ -116,9 +116,11 @@ Only the leftmost screen (`dash-left`, `dashdemo.quixpos.com`) is authorized to 
 
 | Message `name` | `data` object | Description |
 | --- | --- | --- |
-| `'screen:on'` | `{ tabletId: 'pos-center' }` or `{ tabletIds: string[] }` or `{ all: true }` | Switch one, several, or all 3 controllable screens **ON**. |
-| `'screen:off'` | `{ tabletId: 'pos-center' }` or `{ tabletIds: string[] }` or `{ all: true }` | Switch one, several, or all 3 controllable screens **OFF**. |
-| `'screen:power'` | `{ tabletId: 'pos-center', poweredOn: boolean }` (also supports `tabletIds` or `all: true`) | Explicitly set power state (`true` = ON, `false` = OFF). |
+| `'screen:on'` | `{ tabletId: 'pos-center' }` or `{ tabletIds: string[] }` or `{ all: true }` | Enable and switch one, several, or all 3 controllable screens **ON**. |
+| `'screen:off'` | `{ tabletId: 'pos-center', keepEnabled?: boolean }` or `{ tabletIds: string[] }` or `{ all: true }` | Switch screen(s) **OFF** (also resets `enabled: false` unless `keepEnabled: true`, so bezel buttons show `<- Login first` again after logout). |
+| `'screen:enable'` | `{ tabletId?: string, tabletIds?: string[], all?: boolean, powerOn?: boolean }` | Unlock the 3D bezel power button(s) after login (optionally booting immediately if `powerOn: true`). |
+| `'screen:disable'` | `{ tabletId?: string, tabletIds?: string[], all?: boolean }` | Switch screen(s) **OFF** and lock their 3D bezel power buttons back to `<- Login first`. |
+| `'screen:power'` | `{ tabletId: 'pos-center', poweredOn: boolean, enabled?: boolean }` (also supports `tabletIds` or `all: true`) | Explicitly set power state (`true` = ON, `false` = OFF). |
 | `'screen:toggle'` | `{ tabletId: 'pos-center' }` (or `{ tabletIds: string[] }` / `{ all: true }`) | Toggle screen(s) between ON and OFF. |
 | `'screens:get'` | `{}` | Replies directly to the caller with `'screens:state'` `{ screens }`. |
 
@@ -192,7 +194,8 @@ window.addEventListener('message', (event) => {
 | Message `name` | `data` object | When it fires |
 | --- | --- | --- |
 | `'scene:presence'` | `{ version, tabletId, title, canControlScreens, activeView, drawerOpen, pointerLocked, screens, peers }` | On iframe `load` and in response to `'scene:ping'`. |
-| `'screens:changed'` | `{ tabletId?, poweredOn?, screens }` | Whenever any of the 3 controllable screens switches ON or OFF. |
+| `'screens:changed'` | `{ tabletId?, poweredOn?, enabled?, screens }` | Whenever any of the 3 controllable screens changes power or enabled state. |
+| `'screen:powerBlocked'` | `{ tabletId, reason: 'login_required' }` | When a visitor clicks the 3D power button on an off screen that has not been enabled by `dash-left` yet (`<- Login first` shown). |
 | `'screens:state'` | `{ screens }` | Direct reply to `'screens:get'`. |
 | `'drawer:changed'` | `{ open: boolean }` | Whenever the 3D cash drawer opens or closes. |
 | `'camera:viewChanged'` | `{ view: 'total' \| 'left' \| 'center' \| 'right' \| 'drawer' \| null }` | Whenever the active camera preset changes (or `null` during free walk/look). |

@@ -119,21 +119,23 @@ export function SceneHud({
         <div class="scene3d-hud-bottom">
           <div class="scene3d-target-badge">
             {targetedTablet.title} —{' '}
-            {targetedTablet.kind === 'power'
-              ? targetedTablet.controllablePower
-                ? targetedTablet.poweredOn
-                  ? 'Klicken oder E drücken zum Ausschalten'
-                  : 'Klicken oder E drücken zum Einschalten'
-                : 'Klicken oder E drücken zum Neu laden'
-              : targetedTablet.kind === 'drawer'
-                ? isDrawerOpen
-                  ? 'Klicken oder E drücken zum Schließen'
-                  : 'Klicken oder E drücken zum Öffnen'
-                : targetedTablet.kind === 'label'
-                  ? 'Klicken oder E drücken zum Fokussieren'
-                  : targetedTablet.poweredOn === false
-                    ? 'Ausgeschaltet'
-                    : 'Klicken oder E drücken zum Bedienen'}
+            {targetedTablet.loginRequiredPrompt
+              ? '<- Login first'
+              : targetedTablet.kind === 'power'
+                ? targetedTablet.controllablePower
+                  ? targetedTablet.poweredOn
+                    ? 'Klicken oder E drücken zum Ausschalten'
+                    : 'Klicken oder E drücken zum Einschalten'
+                  : 'Klicken oder E drücken zum Neu laden'
+                : targetedTablet.kind === 'drawer'
+                  ? isDrawerOpen
+                    ? 'Klicken oder E drücken zum Schließen'
+                    : 'Klicken oder E drücken zum Öffnen'
+                  : targetedTablet.kind === 'label'
+                    ? 'Klicken oder E drücken zum Fokussieren'
+                    : targetedTablet.poweredOn === false
+                      ? 'Ausgeschaltet'
+                      : 'Klicken oder E drücken zum Bedienen'}
           </div>
         </div>
       )}

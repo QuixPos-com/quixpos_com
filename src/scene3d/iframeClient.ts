@@ -26,6 +26,7 @@ export interface ScreenPowerSummary {
   title: string
   subtitle: string
   poweredOn: boolean
+  enabled: boolean
 }
 
 export interface ScenePresenceInfo {
@@ -305,6 +306,16 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     send(poweredOn ? 'screen:on' : 'screen:off', { all: true })
   }
 
+  /** Enable or disable the 3D bezel power buttons on controllable screens (without necessarily booting them immediately) */
+  const setScreensEnabled = (
+    enabled: boolean,
+    target: { tabletId?: ControllableScreenId | string; all?: boolean } = {
+      all: true,
+    },
+  ) => {
+    send(enabled ? 'screen:enable' : 'screen:disable', target)
+  }
+
   /** Toggle a controllable screen ON <-> OFF (only honored when called from 'dash-left') */
   const toggleScreenPower = (tabletId: ControllableScreenId | string) => {
     send('screen:toggle', { tabletId })
@@ -369,6 +380,7 @@ export function createSceneChannelClient(options: SceneClientOptions = {}) {
     ping,
     setScreenPower,
     setAllScreensPower,
+    setScreensEnabled,
     toggleScreenPower,
     requestScreensState,
     onScreensChanged,

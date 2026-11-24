@@ -142,6 +142,34 @@ export function createPowerButtonTexture(
   return tex
 }
 
+export function createLoginFirstOsdTexture(THREE: ThreeModule) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 144
+  const ctx = canvas.getContext('2d')!
+
+  ctx.clearRect(0, 0, 512, 144)
+
+  // Dark OSD pill card with warm amber border
+  ctx.fillStyle = 'rgba(11, 18, 32, 0.96)'
+  ctx.strokeStyle = '#f59e0b'
+  ctx.lineWidth = 6
+  ctx.beginPath()
+  ctx.roundRect(8, 8, 496, 128, 22)
+  ctx.fill()
+  ctx.stroke()
+
+  ctx.fillStyle = '#fef3c7'
+  ctx.font = 'bold 50px system-ui, -apple-system, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('<- Login first', 256, 74)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
 export function createCashButtonTexture(
   THREE: ThreeModule,
   label: string,

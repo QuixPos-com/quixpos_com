@@ -201,6 +201,7 @@ export function mountSceneEngine({
       currentTargetId: null,
       currentTargetKind: null,
       currentTargetPoweredOn: null,
+      currentTargetLoginPrompt: false,
       lastMouseX: -9999,
       lastMouseY: -9999,
       pressedKeys: new Set<string>(),
@@ -243,6 +244,8 @@ export function mountSceneEngine({
       setCashDrawerOpen(true)
     }
 
+    const LOGIN_PROMPT_DURATION = 2.6
+
     const getControllableScreensMap = (): Record<
       string,
       ScreenPowerSummary
@@ -255,6 +258,7 @@ export function mountSceneEngine({
             title: t.spec.title,
             subtitle: t.spec.subtitle,
             poweredOn: t.poweredOn,
+            enabled: t.enabledByMain,
           }
         }
       }
@@ -276,63 +280,103 @@ export function mountSceneEngine({
       target.powerFaceMat.needsUpdate = true
     }
 
+    const triggerLoginFirstPrompt = (
+      target: (typeof tabletInstances)[number],
+    ) => {
+      target.powerPressAnim = 1
+      target.reloadFlash = 0.55
+      target.loginPromptTimer = LOGIN_PROMPT_DURATION
+      target.powerFaceMat.map = powerActiveTex
+      target.powerFaceMat.emissive.set('#f59e0b')
+      target.powerFaceMat.emissiveIntensity = 0.75
+      target.powerFaceMat.needsUpdate = true
+      channel.send('screen:powerBlocked', {
+        tabletId: target.spec.id,
+        reason: 'login_required',
+      })
+    }
+
     const setSingleTabletPower = (
       tabletId: string,
       nextOn: boolean,
       broadcast = true,
+      nextEnabled?: boolean,
     ): boolean => {
       const target = tabletInstances.find((t) => t.spec.id === tabletId)
       if (!target || target.spec.canControlScreens) return false
-      if (target.poweredOn === nextOn) return false
 
-      target.poweredOn = nextOn
-      target.powerPressAnim = 1
-      target.powerUserData.poweredOn = nextOn
-      target.cutoutMesh.userData.poweredOn = nextOn
+      const resolvedEnabled =
+        typeof nextEnabled === 'boolean'
+          ? nextEnabled
+          : nextOn
+            ? true
+            : target.enabledByMain
 
-      if (nextOn) {
-        target.reloadFlash = 0.65
-        target.powerFaceMat.map = powerActiveTex
-        target.powerFaceMat.emissive.set('#f59e0b')
-        target.powerFaceMat.emissiveIntensity = 0.75
-        target.powerFaceMat.needsUpdate = true
+      const powerChanged = target.poweredOn !== nextOn
+      const enabledChanged = target.enabledByMain !== resolvedEnabled
+      if (!powerChanged && !enabledChanged) return false
 
-        target.cutoutMesh.material = cutoutOnMat
-        target.camDot.material = camDotOnMat
-        target.wrapperEl.style.display = 'block'
-        target.iframeEl.src = target.spec.url
-      } else {
-        target.reloadFlash = 0
-        applyTabletPowerButtonVisual(target)
+      target.enabledByMain = resolvedEnabled
 
-        channel.notifyTabletReloading(target.spec.id)
-        target.cutoutMesh.material = screenOffMat
-        target.camDot.material = camDotOffMat
-        target.wrapperEl.style.display = 'none'
-        target.wrapperEl.style.visibility = 'hidden'
-        target.wrapperEl.style.pointerEvents = 'none'
-        target.iframeEl.style.pointerEvents = 'none'
-        if (document.activeElement === target.iframeEl) {
-          window.focus()
+      if (powerChanged) {
+        target.poweredOn = nextOn
+        target.powerPressAnim = 1
+        target.powerUserData.poweredOn = nextOn
+        target.cutoutMesh.userData.poweredOn = nextOn
+
+        if (nextOn) {
+          target.loginPromptTimer = 0
+          target.loginOsdMesh.visible = false
+          target.loginOsdMat.opacity = 0
+
+          target.reloadFlash = 0.65
+          target.powerFaceMat.map = powerActiveTex
+          target.powerFaceMat.emissive.set('#f59e0b')
+          target.powerFaceMat.emissiveIntensity = 0.75
+          target.powerFaceMat.needsUpdate = true
+
+          target.cutoutMesh.material = cutoutOnMat
+          target.camDot.material = camDotOnMat
+          target.wrapperEl.style.display = 'block'
+          target.iframeEl.src = target.spec.url
+        } else {
+          target.reloadFlash = 0
+          applyTabletPowerButtonVisual(target)
+
+          channel.notifyTabletReloading(target.spec.id)
+          target.cutoutMesh.material = screenOffMat
+          target.camDot.material = camDotOffMat
+          target.wrapperEl.style.display = 'none'
+          target.wrapperEl.style.visibility = 'hidden'
+          target.wrapperEl.style.pointerEvents = 'none'
+          target.iframeEl.style.pointerEvents = 'none'
+          if (document.activeElement === target.iframeEl) {
+            window.focus()
+          }
+          target.iframeEl.src = 'about:blank'
         }
-        target.iframeEl.src = 'about:blank'
       }
 
       if (broadcast) {
         channel.send('screens:changed', {
           tabletId: target.spec.id,
           poweredOn: target.poweredOn,
+          enabled: target.enabledByMain,
           screens: getControllableScreensMap(),
         })
       }
       return true
     }
 
-    const setMultipleTabletsPower = (ids: string[], nextOn: boolean) => {
+    const setMultipleTabletsPower = (
+      ids: string[],
+      nextOn: boolean,
+      nextEnabled?: boolean,
+    ) => {
       let lastChangedId: string | null = null
       let changedCount = 0
       for (const id of ids) {
-        if (setSingleTabletPower(id, nextOn, false)) {
+        if (setSingleTabletPower(id, nextOn, false, nextEnabled)) {
           lastChangedId = id
           changedCount++
         }
@@ -370,9 +414,18 @@ export function mountSceneEngine({
       if (!target) return
       if (target.spec.canControlScreens) {
         reloadTablet(tabletId)
-      } else {
-        setSingleTabletPower(tabletId, !target.poweredOn, true)
+        return
       }
+      if (target.poweredOn) {
+        // Keep enabledByMain intact so an already-enabled monitor can be switched back on manually
+        setSingleTabletPower(tabletId, false, true, target.enabledByMain)
+        return
+      }
+      if (!target.enabledByMain) {
+        triggerLoginFirstPrompt(target)
+        return
+      }
+      setSingleTabletPower(tabletId, true, true, true)
     }
 
     const raycaster = new THREE.Raycaster()
@@ -441,12 +494,44 @@ export function mountSceneEngine({
 
     channel.on('screen:on', (data, meta) => {
       if (!isAuthorizedScreenController(meta.sender)) return
-      setMultipleTabletsPower(resolveTargetScreenIds(data), true)
+      setMultipleTabletsPower(resolveTargetScreenIds(data), true, true)
     })
 
     channel.on('screen:off', (data, meta) => {
       if (!isAuthorizedScreenController(meta.sender)) return
-      setMultipleTabletsPower(resolveTargetScreenIds(data), false)
+      const keepEnabled = data.keepEnabled === true
+      setMultipleTabletsPower(resolveTargetScreenIds(data), false, keepEnabled)
+    })
+
+    channel.on('screen:enable', (data, meta) => {
+      if (!isAuthorizedScreenController(meta.sender)) return
+      const ids = resolveTargetScreenIds(data)
+      const alsoPowerOn = data.powerOn === true
+      let changed = false
+      for (const id of ids) {
+        const target = tabletInstances.find((t) => t.spec.id === id)
+        if (!target || target.spec.canControlScreens) continue
+        if (
+          setSingleTabletPower(
+            id,
+            alsoPowerOn ? true : target.poweredOn,
+            false,
+            true,
+          )
+        ) {
+          changed = true
+        }
+      }
+      if (changed) {
+        channel.send('screens:changed', {
+          screens: getControllableScreensMap(),
+        })
+      }
+    })
+
+    channel.on('screen:disable', (data, meta) => {
+      if (!isAuthorizedScreenController(meta.sender)) return
+      setMultipleTabletsPower(resolveTargetScreenIds(data), false, false)
     })
 
     channel.on('screen:power', (data, meta) => {
@@ -458,7 +543,13 @@ export function mountSceneEngine({
             ? data.on
             : null
       if (nextOn === null) return
-      setMultipleTabletsPower(resolveTargetScreenIds(data), nextOn)
+      const explicitEnabled =
+        typeof data.enabled === 'boolean' ? data.enabled : nextOn
+      setMultipleTabletsPower(
+        resolveTargetScreenIds(data),
+        nextOn,
+        explicitEnabled,
+      )
     })
 
     channel.on('screen:toggle', (data, meta) => {
@@ -467,7 +558,13 @@ export function mountSceneEngine({
       for (const id of ids) {
         const target = tabletInstances.find((t) => t.spec.id === id)
         if (target && !target.spec.canControlScreens) {
-          setSingleTabletPower(id, !target.poweredOn, true)
+          const nextOn = !target.poweredOn
+          setSingleTabletPower(
+            id,
+            nextOn,
+            true,
+            nextOn ? true : target.enabledByMain,
+          )
         }
       }
     })
@@ -653,6 +750,22 @@ export function mountSceneEngine({
           if (t.reloadFlash === 0) {
             applyTabletPowerButtonVisual(t)
           }
+        }
+
+        if (t.loginPromptTimer > 0 && !t.poweredOn) {
+          t.loginPromptTimer = Math.max(0, t.loginPromptTimer - dt)
+          const elapsed = LOGIN_PROMPT_DURATION - t.loginPromptTimer
+          const fadeIn = Math.min(1, elapsed / 0.12)
+          const fadeOut = Math.min(1, t.loginPromptTimer / 0.45)
+          const alpha = Math.min(fadeIn, fadeOut)
+          t.loginOsdMesh.visible = alpha > 0.01
+          t.loginOsdMat.opacity = alpha
+          const popScale = 0.94 + 0.06 * fadeIn
+          t.loginOsdMesh.scale.set(popScale, popScale, 1)
+        } else if (t.loginOsdMesh.visible) {
+          t.loginPromptTimer = 0
+          t.loginOsdMesh.visible = false
+          t.loginOsdMat.opacity = 0
         }
       }
 
@@ -905,15 +1018,23 @@ export function mountSceneEngine({
           hitData && typeof hitData.controllablePower === 'boolean'
             ? (hitData.controllablePower as boolean)
             : false
+        const hitTablet = nextId
+          ? tabletInstances.find((t) => t.spec.id === nextId)
+          : undefined
+        const nextLoginPrompt = Boolean(
+          hitTablet && !hitTablet.poweredOn && hitTablet.loginPromptTimer > 0,
+        )
         state.currentTargetId = nextId
         if (
           nextTitle !== state.currentTargetTitle ||
           nextKind !== state.currentTargetKind ||
-          nextPoweredOn !== state.currentTargetPoweredOn
+          nextPoweredOn !== state.currentTargetPoweredOn ||
+          nextLoginPrompt !== state.currentTargetLoginPrompt
         ) {
           state.currentTargetTitle = nextTitle
           state.currentTargetKind = nextKind
           state.currentTargetPoweredOn = nextPoweredOn
+          state.currentTargetLoginPrompt = nextLoginPrompt
           callbacks.onTargetChange(
             nextTitle && nextKind
               ? {
@@ -921,6 +1042,7 @@ export function mountSceneEngine({
                   kind: nextKind,
                   poweredOn: nextPoweredOn ?? undefined,
                   controllablePower: nextControllable,
+                  loginRequiredPrompt: nextLoginPrompt,
                 }
               : null,
           )

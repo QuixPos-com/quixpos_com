@@ -6,7 +6,10 @@ import {
   TILT_ANGLE,
 } from '../config'
 import { SCENE_WINDOW_NAME_PREFIX } from '../iframeChannel'
-import { createPowerButtonTexture } from '../textures'
+import {
+  createLoginFirstOsdTexture,
+  createPowerButtonTexture,
+} from '../textures'
 import type {
   CSS3DObjectConstructor,
   Disposable,
@@ -81,6 +84,7 @@ export function buildTablets(
   const powerIdleTex = createPowerButtonTexture(THREE, 'on')
   const powerActiveTex = createPowerButtonTexture(THREE, 'active')
   const powerOffTex = createPowerButtonTexture(THREE, 'off')
+  const loginFirstOsdTex = createLoginFirstOsdTexture(THREE)
 
   const camDotGeo = new THREE.CircleGeometry(7, 16)
   const vesaArmGeo = new THREE.BoxGeometry(110, 70, 96)
@@ -101,6 +105,7 @@ export function buildTablets(
     powerIdleTex,
     powerActiveTex,
     powerOffTex,
+    loginFirstOsdTex,
     camDotGeo,
     vesaArmGeo,
     vesaPlateGeo,
@@ -277,6 +282,26 @@ export function buildTablets(
     }
     tabletGroup.add(cutoutMesh)
 
+    // On-screen "<- Login first" OSD prompt when pressing power on a disabled screen
+    const osdW = Math.min(460, Math.round(screenW * 0.84))
+    const osdH = Math.round(osdW * (144 / 512))
+    const loginOsdGeo = new THREE.PlaneGeometry(osdW, osdH)
+    const loginOsdMat = new THREE.MeshBasicMaterial({
+      map: loginFirstOsdTex,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    })
+    disposables.push(loginOsdGeo, loginOsdMat)
+
+    const loginOsdMesh = new THREE.Mesh(loginOsdGeo, loginOsdMat)
+    loginOsdMesh.position.set(0, 0, 5)
+    loginOsdMesh.visible = false
+    tabletGroup.add(loginOsdMesh)
+
     webglScene.add(tabletGroup)
     tabletGroup.updateMatrixWorld(true)
 
@@ -326,7 +351,11 @@ export function buildTablets(
     tabletInstances.push({
       spec,
       poweredOn,
+      enabledByMain: Boolean(spec.canControlScreens || poweredOn),
+      loginPromptTimer: 0,
       cutoutMesh,
+      loginOsdMesh,
+      loginOsdMat,
       camDot,
       powerBtnGroup,
       powerFaceMat,
