@@ -560,37 +560,16 @@
 
 @media (max-width: 960px) {
   .scene3d-hud-bottom {
-    bottom: 152px;
+    bottom: 168px;
     max-width: calc(100vw - 24px);
-  }
-
-  .scene3d-zoom-ctrl {
-    left: calc(50% - 44px);
-    bottom: 22px;
-    transform: translateX(-50%);
-  }
-
-  .scene3d-scanner-btn {
-    left: calc(50% + 36px);
-    right: auto;
-    bottom: 39px;
-    transform: translateX(-50%);
-  }
-
-  .scene3d-scanner-btn:hover {
-    transform: translateX(-50%) translateY(-1px);
-  }
-
-  .scene3d-scanner-btn:active {
-    transform: translateX(-50%) scale(0.95);
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 500px) {
   .scene3d-stick {
     width: 96px;
     height: 96px;
-    bottom: 20px;
+    bottom: 18px;
   }
 
   .scene3d-stick.is-left {
@@ -601,25 +580,43 @@
     right: 12px;
   }
 
+  .scene3d-stick-mirror {
+    width: 96px;
+    height: 96px;
+    bottom: 144px;
+  }
+
+  .scene3d-stick-mirror.is-left {
+    left: 12px;
+  }
+
+  .scene3d-stick-mirror.is-right {
+    right: 12px;
+  }
+
   .scene3d-zoom-ctrl {
     height: 96px;
     width: 48px;
-    bottom: 20px;
-    left: calc(50% - 38px);
+    bottom: 18px;
+    left: 120px;
   }
 
   .scene3d-scanner-btn {
     width: 74px;
     height: 74px;
-    bottom: 31px;
-    left: calc(50% + 30px);
+    bottom: 29px;
+    right: 120px;
+  }
+
+  .scene3d-hud-bottom {
+    bottom: 144px;
+    max-width: calc(100vw - 24px);
   }
 
   .scene3d-hud-top {
     top: 10px;
     left: 10px;
     right: 10px;
-    flex-wrap: wrap;
     gap: 8px;
   }
 
@@ -628,14 +625,51 @@
     gap: 6px;
   }
 
-  .scene3d-hud-nav {
-    justify-content: flex-start;
-  }
-
   .scene3d-pill {
     padding: 5px 10px;
     font-size: 0.76rem;
     gap: 6px;
+  }
+}
+
+@media (max-width: 720px) {
+  .scene3d-hud-top {
+    flex-wrap: wrap;
+  }
+
+  .scene3d-hud-nav {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-height: 500px) and (min-width: 620px) {
+  .scene3d-hud-bottom {
+    bottom: 16px;
+    max-width: calc(100vw - 404px);
+  }
+}
+
+@media (max-width: 520px) {
+  .scene3d-zoom-ctrl {
+    left: 12px;
+    bottom: 146px;
+  }
+
+  .scene3d-scanner-btn {
+    width: 66px;
+    height: 66px;
+    right: 12px;
+    bottom: 146px;
+  }
+
+  .scene3d-scanner-knob {
+    width: 46px;
+    height: 46px;
+  }
+
+  .scene3d-hud-bottom {
+    bottom: 140px;
+    max-width: calc(100vw - 172px);
   }
 }
 
@@ -1007,5 +1041,17 @@
 
   .scene3d-scanner-readout {
     max-width: 220px;
+  }
+}
+
+@media (max-width: 520px) {
+  .scene3d-sensor-box {
+    width: 58px;
+    height: 36px;
+  }
+
+  .scene3d-scanner-readout {
+    max-width: 100%;
+    white-space: normal;
   }
 }
