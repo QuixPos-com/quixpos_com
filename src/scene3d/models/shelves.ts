@@ -1161,6 +1161,48 @@ export function buildWallsAndShelves(
     scheduleFullShelfSync()
   }
 
+  const getProductsSnapshot = (): ShelfProductInput[] =>
+    activeProducts.map((p) => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      image: p.imageUrl,
+      stock: p.stock,
+      slotId: p.slotId,
+      wall: p.wall,
+      imageAspectRatio: p.aspectRatio,
+      boxColor: p.boxColor,
+      maxVisible: p.maxVisible,
+    }))
+
+  const exportCachedProductImages = async (): Promise<Record<string, Blob>> => {
+    const out: Record<string, Blob> = {}
+    for (const [url, entry] of imageCache.entries()) {
+      if (url.startsWith('blob:') || url.startsWith('data:')) continue
+      if (entry.status !== 'loaded' || !entry.texture) continue
+      const canvas = entry.texture.image as HTMLCanvasElement | undefined
+      if (!canvas || typeof canvas.toBlob !== 'function') continue
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((b) => resolve(b), 'image/webp', 0.86)
+      })
+      if (blob) {
+        out[url] = blob
+      }
+    }
+    return out
+  }
+
+  const flushPendingNow = () => {
+    while (pendingBoxTasks.length > 0) {
+      const task = pendingBoxTasks.shift()!
+      if (task.generation !== renderGeneration) continue
+      spawnOneBoxFromTask(task)
+    }
+    if (summaryDirty) {
+      emitSummaryNow()
+    }
+  }
+
   markFocusSharp(roomGroup)
   webglScene.add(roomGroup)
 
@@ -1190,5 +1232,8 @@ export function buildWallsAndShelves(
     upsertProduct,
     clearProducts,
     getSummary: () => activeSummary,
+    getProductsSnapshot,
+    exportCachedProductImages,
+    flushPendingNow,
   }
 }

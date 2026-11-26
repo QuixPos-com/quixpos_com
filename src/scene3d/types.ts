@@ -1,5 +1,14 @@
 import type { RefObject } from 'preact'
 import type { SceneBroadcastChannel } from './iframeChannel'
+import type {
+  NormalizedUvRect,
+  RecordedFrameTuple,
+  RecordedInitialSnapshot,
+  RecordedSceneEvent,
+  RecordedTabletGeometry,
+  ReplayCameraFollowMode,
+  UnpackedRecordingSession,
+} from './recorder/recordingTypes'
 
 export type ThreeModule = typeof import('three')
 export type CSS3DObjectConstructor =
@@ -257,6 +266,42 @@ export interface SceneCallbacks {
   onBarcodeScan?: (scan: BarcodeScanEvent) => void
 }
 
+export interface SceneRecordingStartOptions {
+  startedAtPerfNow: number
+  getHudExclusionRects: () => NormalizedUvRect[]
+  paintSyncStamp?: (frameIndex: number) => void
+  onStats?: (stats: {
+    durationMs: number
+    frameCount: number
+    eventCount: number
+  }) => void
+}
+
+export interface SceneRecordingStopResult {
+  initialSnapshot: RecordedInitialSnapshot
+  tablets: RecordedTabletGeometry[]
+  frames: RecordedFrameTuple[]
+  events: RecordedSceneEvent[]
+  shelfImageBlobs: Record<string, Blob>
+}
+
+export interface SceneReplayCallbacks {
+  onProgress?: (currentTimeMs: number, durationMs: number, playing: boolean) => void
+  onCameraFollowChange?: (mode: ReplayCameraFollowMode) => void
+  onReelPickerModalChange?: (open: boolean) => void
+  onAudioMuteChange?: (muted: boolean) => void
+}
+
+export interface SceneReplayHandle {
+  play: () => Promise<void>
+  pause: () => void
+  seek: (timeMs: number) => void
+  setPlaybackRate: (rate: number) => void
+  setMuted: (muted: boolean) => void
+  setCameraFollowMode: (mode: ReplayCameraFollowMode) => void
+  exit: () => void
+}
+
 export interface SceneController {
   channel: SceneBroadcastChannel
   navigateToView: (view: NavPresetId) => void
@@ -278,5 +323,17 @@ export interface SceneController {
     product: Partial<ShelfProductInput> & { id: string | number },
   ) => ShelfProductSummary[]
   clearShelves: () => void
+  startRecordingSession?: (options: SceneRecordingStartOptions) => boolean
+  recordCustomEvent?: (
+    event:
+      | { type: 'zebra:pickerModal'; open: boolean }
+      | { type: 'audio:mute'; muted: boolean }
+      | { type: 'hud:rects'; rects: NormalizedUvRect[] },
+  ) => void
+  stopRecordingSession?: () => Promise<SceneRecordingStopResult | null>
+  enterReplayMode?: (
+    session: UnpackedRecordingSession,
+    callbacks?: SceneReplayCallbacks,
+  ) => SceneReplayHandle | null
   dispose: () => void
 }

@@ -43,6 +43,27 @@ import { buildTablets } from './models/tablets'
 import { buildZebraPrinter } from './models/zebraPrinter'
 import { createPrintManager } from './printers/printManager'
 import {
+  FRAME_FLAG_AIM_ENGAGED,
+  FRAME_FLAG_DRAG_TURNING,
+  FRAME_FLAG_HAS_CURSOR,
+  FRAME_FLAG_MOVE_ENGAGED,
+  FRAME_FLAG_POINTER_LOCKED,
+  FRAME_FLAG_SCANNER_FLASH,
+  FRAME_FLAG_ZOOM_ENGAGED,
+  type NormalizedUvRect,
+  type RecordedFrameTuple,
+  type RecordedInitialSnapshot,
+  type RecordedSceneEvent,
+  type RecordedTabletGeometry,
+  type ReplayCameraFollowMode,
+  type UnpackedRecordingSession,
+} from './recorder/recordingTypes'
+import {
+  createTabletVideoProjector,
+  type InterpolatedFrameSample,
+  type TabletVideoProjector,
+} from './recorder/tabletVideoProjector'
+import {
   decodeSpotPixels,
   paintSpotPreview,
   playScannerBeep,
@@ -55,6 +76,10 @@ import type {
   NavPresetId,
   SceneCallbacks,
   SceneController,
+  SceneRecordingStartOptions,
+  SceneRecordingStopResult,
+  SceneReplayCallbacks,
+  SceneReplayHandle,
   SceneRuntimeState,
   ScreenPowerSummary,
   ShelfProductInput,
@@ -128,6 +153,26 @@ export function mountSceneEngine({
     ) => ShelfProductSummary[])
     | null = null
   let clearShelvesImpl: (() => void) | null = null
+  let startRecordingImpl:
+    | ((options: SceneRecordingStartOptions) => boolean)
+    | null = null
+  let recordCustomEventImpl:
+    | ((
+        event:
+          | { type: 'zebra:pickerModal'; open: boolean }
+          | { type: 'audio:mute'; muted: boolean }
+          | { type: 'hud:rects'; rects: NormalizedUvRect[] },
+      ) => void)
+    | null = null
+  let stopRecordingImpl:
+    | (() => Promise<SceneRecordingStopResult | null>)
+    | null = null
+  let enterReplayImpl:
+    | ((
+        session: UnpackedRecordingSession,
+        replayCallbacks?: SceneReplayCallbacks,
+      ) => SceneReplayHandle | null)
+    | null = null
 
   const scanListeners = new Set<(scan: BarcodeScanEvent) => void>()
 
@@ -288,6 +333,7 @@ export function mountSceneEngine({
       drawerTargets,
       setCashAmount,
       setCashCents,
+      getCashBreakdown,
       updateCoinPhysics,
       drawerSurfaceMeshes,
     } = buildCashDrawer(THREE, webglScene, disposables)
@@ -398,6 +444,64 @@ export function mountSceneEngine({
 
     let refreshInputShield: (() => void) | null = null
 
+    // Recording & Replay state
+    let recordingActive = false
+    let recordStartPerfNow = 0
+    let recordInitialSnapshot: RecordedInitialSnapshot | null = null
+    let recordTabletsGeo: RecordedTabletGeometry[] = []
+    let recordedFrames: RecordedFrameTuple[] = []
+    let recordedEvents: RecordedSceneEvent[] = []
+    let recordOnStats: SceneRecordingStartOptions['onStats']
+    let recordPaintSyncStamp: SceneRecordingStartOptions['paintSyncStamp']
+    let lastRecordStatsMs = 0
+    let lastRecordedActiveView: NavPresetId | null = 'total'
+    let lastRecordedFullscreenId: string | null = null
+
+    interface ActiveReplayState {
+      session: UnpackedRecordingSession
+      projector: TabletVideoProjector
+      callbacks?: SceneReplayCallbacks
+      cameraFollow: ReplayCameraFollowMode
+      currentTimeMs: number
+      appliedEventIndex: number
+      appliedTimeMs: number
+      appliedCashCents: number
+      recPoseCam: InstanceType<typeof THREE.PerspectiveCamera>
+      fallbackSample: InterpolatedFrameSample
+      savedLiveState: {
+        activeView: NavPresetId | null
+        fullscreenTabletId: string | null
+        camX: number
+        camY: number
+        camZ: number
+        yaw: number
+        pitch: number
+        zoomNorm: number
+        drawerOpen: boolean
+        cashCents: number
+        zebraReelId: ZebraReelId
+        shelfProducts: ShelfProductInput[]
+        screens: Array<{
+          id: string
+          poweredOn: boolean
+          enabledByMain: boolean
+        }>
+      }
+    }
+    let replayState: ActiveReplayState | null = null
+
+    type DistributiveOmitT<U> = U extends unknown ? Omit<U, 't'> : never
+    const getRecordElapsedMs = () =>
+      Math.max(0, Math.round(performance.now() - recordStartPerfNow))
+
+    const pushRecordedEvent = (ev: DistributiveOmitT<RecordedSceneEvent>) => {
+      if (!recordingActive || replayState !== null) return
+      recordedEvents.push({
+        ...(ev as Record<string, unknown>),
+        t: getRecordElapsedMs(),
+      } as RecordedSceneEvent)
+    }
+
     const setHeldMode = (nextMode: HeldItemMode) => {
       if (heldMode === nextMode) return
       heldMode = nextMode
@@ -411,9 +515,14 @@ export function mountSceneEngine({
     const pickUpZebraLabel = (
       target: InstanceType<typeof THREE.Object3D> | string,
     ): boolean => {
+      if (replayState) return false
       if (heldMode !== 'none') return false
       if (printManager.pickUpLabel(target)) {
         setHeldMode('label')
+        const info = printManager.getHeldLabelInfo()
+        if (info) {
+          pushRecordedEvent({ type: 'label:pickup', sheetId: info.sheetId })
+        }
         return true
       }
       return false
@@ -423,6 +532,7 @@ export function mountSceneEngine({
       clientX?: number,
       clientY?: number,
     ): boolean => {
+      if (replayState) return false
       if (heldMode !== 'label') return false
       if (typeof clientX === 'number' && typeof clientY === 'number') {
         const rect = stageEl.getBoundingClientRect()
@@ -445,30 +555,51 @@ export function mountSceneEngine({
           )
         }
       }
-      if (printManager.placeHeldLabel()) {
+      const placed = printManager.placeHeldLabel()
+      if (placed) {
         setHeldMode('none')
+        pushRecordedEvent({
+          type: 'label:place',
+          ...placed,
+        })
         return true
       }
       return false
     }
 
+    const handleRotateHeldLabel = () => {
+      if (replayState) return
+      printManager.rotateHeldLabel()
+      const info = printManager.getHeldLabelInfo()
+      if (info) {
+        pushRecordedEvent({ type: 'label:rotate', yawOffset: info.yawOffset })
+      }
+    }
+
     const pickUpScanner = () => {
+      if (replayState) return
       if (heldMode === 'label') {
+        const info = printManager.getHeldLabelInfo()
         printManager.cancelHeldLabel()
+        pushRecordedEvent({ type: 'label:cancel', sheetId: info?.sheetId })
       }
       warmScannerDecoder()
       pendingScanTrigger = false
       scannerTriggerAnim = 0.65
       setHeldMode('scanner')
+      pushRecordedEvent({ type: 'scanner:pickup' })
     }
 
     const putDownScanner = () => {
+      if (replayState) return
       if (heldMode !== 'scanner') return
       pendingScanTrigger = false
       setHeldMode('none')
+      pushRecordedEvent({ type: 'scanner:putdown' })
     }
 
     const toggleScanner = () => {
+      if (replayState) return
       if (heldMode === 'scanner') {
         putDownScanner()
       } else {
@@ -477,21 +608,27 @@ export function mountSceneEngine({
     }
 
     const triggerScannerPulse = () => {
+      if (replayState) return
       if (heldMode !== 'scanner') return
       scannerTriggerAnim = 1
       pendingScanTrigger = true
+      pushRecordedEvent({ type: 'scanner:pulse' })
     }
 
     const cancelHeldItem = () => {
+      if (replayState) return
       if (heldMode === 'label') {
+        const info = printManager.getHeldLabelInfo()
         printManager.cancelHeldLabel()
         setHeldMode('none')
+        pushRecordedEvent({ type: 'label:cancel', sheetId: info?.sheetId })
       } else if (heldMode === 'scanner') {
         putDownScanner()
       }
     }
 
-    const setCashDrawerOpen = (nextOpen: boolean) => {
+    const setCashDrawerOpen = (nextOpen: boolean, fromReplay = false) => {
+      if (replayState && !fromReplay) return
       if (drawerOpen === nextOpen) return
       drawerOpen = nextOpen
       pendingDrawerKickDv += setDrawerMotionTarget(
@@ -502,14 +639,19 @@ export function mountSceneEngine({
       btnPressAnim = 1
       drawerBtnFaceMat.map = drawerOpen ? closeBtnTex : openBtnTex
       drawerBtnFaceMat.needsUpdate = true
+      if (!fromReplay) {
+        pushRecordedEvent({ type: 'drawer:state', open: drawerOpen })
+      }
       sceneCallbacks.onDrawerChange(drawerOpen)
     }
 
     const toggleCashDrawer = () => {
+      if (replayState) return
       setCashDrawerOpen(!drawerOpen)
     }
 
     const ensureCashDrawerOpen = () => {
+      if (replayState) return
       setCashDrawerOpen(true)
     }
 
@@ -551,6 +693,7 @@ export function mountSceneEngine({
 
     const triggerLoginFirstPrompt = (
       target: (typeof tabletInstances)[number],
+      fromReplay = false,
     ) => {
       target.powerPressAnim = 1
       target.reloadFlash = 0.55
@@ -559,10 +702,16 @@ export function mountSceneEngine({
       target.powerFaceMat.emissive.set('#f59e0b')
       target.powerFaceMat.emissiveIntensity = 0.75
       target.powerFaceMat.needsUpdate = true
-      channel.send('screen:powerBlocked', {
-        tabletId: target.spec.id,
-        reason: 'login_required',
-      })
+      if (!fromReplay) {
+        pushRecordedEvent({
+          type: 'tablet:powerBlocked',
+          tabletId: target.spec.id,
+        })
+        channel.send('screen:powerBlocked', {
+          tabletId: target.spec.id,
+          reason: 'login_required',
+        })
+      }
     }
 
     const setSingleTabletPower = (
@@ -571,6 +720,7 @@ export function mountSceneEngine({
       broadcast = true,
       nextEnabled?: boolean,
     ): boolean => {
+      if (replayState) return false
       const target = tabletInstances.find((t) => t.spec.id === tabletId)
       if (!target || target.spec.canControlScreens) return false
 
@@ -638,6 +788,13 @@ export function mountSceneEngine({
         }
       }
 
+      pushRecordedEvent({
+        type: 'tablet:power',
+        tabletId: target.spec.id,
+        poweredOn: target.poweredOn,
+        enabled: target.enabledByMain,
+      })
+
       if (broadcast) {
         channel.send('screens:changed', {
           tabletId: target.spec.id,
@@ -672,6 +829,7 @@ export function mountSceneEngine({
     }
 
     const reloadTablet = (tabletId: string) => {
+      if (replayState) return
       const target = tabletInstances.find((t) => t.spec.id === tabletId)
       if (!target || !target.poweredOn) return
       target.powerPressAnim = 1
@@ -681,6 +839,7 @@ export function mountSceneEngine({
       target.powerFaceMat.emissiveIntensity = 0.75
       target.powerFaceMat.needsUpdate = true
 
+      pushRecordedEvent({ type: 'tablet:reload', tabletId })
       channel.notifyTabletReloading(tabletId)
       if (target.spec.canControlScreens) {
         clearPendingPairing()
@@ -694,6 +853,7 @@ export function mountSceneEngine({
     }
 
     const handleBezelPowerButton = (tabletId: string) => {
+      if (replayState) return
       const target = tabletInstances.find((t) => t.spec.id === tabletId)
       if (!target) return
       if (target.spec.canControlScreens) {
@@ -742,7 +902,7 @@ export function mountSceneEngine({
       canPlaceHeldLabel: () => printManager.canPlaceHeldLabel(),
       pickUpZebraLabel,
       placeHeldLabel: commitHeldLabelPlacement,
-      rotateHeldLabel: () => printManager.rotateHeldLabel(),
+      rotateHeldLabel: handleRotateHeldLabel,
       cancelHeldItem,
       pickUpScanner,
       putDownScanner,
@@ -754,6 +914,8 @@ export function mountSceneEngine({
       ensureCashDrawerOpen,
       reloadTablet: handleBezelPowerButton,
       openZebraReelPicker: () => {
+        if (replayState) return
+        pushRecordedEvent({ type: 'zebra:pickerModal', open: true })
         callbacks.onZebraReelPickerOpen?.()
       },
     })
@@ -1092,6 +1254,7 @@ export function mountSceneEngine({
     })
 
     const applyDrawerCashFromChannel = (data: Record<string, unknown>) => {
+      if (replayState) return
       let breakdown = null
       if (typeof data.cents === 'number' && Number.isFinite(data.cents)) {
         breakdown = setCashCents(data.cents)
@@ -1112,6 +1275,7 @@ export function mountSceneEngine({
         }
       }
       if (!breakdown) return
+      pushRecordedEvent({ type: 'drawer:cash', cents: breakdown.cents })
       channel.send('drawer:cashChanged', {
         currency: 'EUR',
         amount: breakdown.amount,
@@ -1128,15 +1292,18 @@ export function mountSceneEngine({
       applyDrawerCashFromChannel(data)
     })
     channel.on('camera:focus', (data) => {
+      if (replayState) return
       const view = data.view as NavPresetId
       if (validFocusViews.has(view)) {
         navigateToFocusView(view)
       }
     })
     channel.on('camera:return', () => {
+      if (replayState) return
       returnToPreviousPose()
     })
     channel.on('tablet:reload', (data, meta) => {
+      if (replayState) return
       const targetId =
         typeof data.tabletId === 'string' && data.tabletId
           ? data.tabletId
@@ -1144,13 +1311,21 @@ export function mountSceneEngine({
       reloadTablet(targetId)
     })
 
-    const applyZebraReel = (reelId: ZebraReelId, broadcast = true) => {
+    const applyZebraReel = (
+      reelId: ZebraReelId,
+      broadcast = true,
+      fromReplay = false,
+    ) => {
+      if (replayState && !fromReplay) return
       const next = getZebraReelById(reelId)
       activeZebraMedia = next
       printManager.setZebraMedia(next)
       setZebraReelVisual(next.widthMm)
       callbacks.onZebraReelChange?.(next)
-      if (broadcast) {
+      if (!fromReplay) {
+        pushRecordedEvent({ type: 'zebra:reel', reelId: next.id })
+      }
+      if (broadcast && !fromReplay) {
         channel.send('printer:mediaChanged', {
           printer: 'zebra',
           ...next,
@@ -1180,6 +1355,7 @@ export function mountSceneEngine({
       origin?: string,
       messageName = 'printer:zpl',
     ) => {
+      if (replayState) return
       const rawZpl =
         typeof data.zpl === 'string'
           ? data.zpl
@@ -1196,6 +1372,13 @@ export function mountSceneEngine({
         origin,
         messageName,
         jobId,
+      })
+      pushRecordedEvent({
+        type: 'print:zpl',
+        sheetId: outcome.sheetId,
+        zpl: rawZpl,
+        jobId,
+        sender,
       })
       channel.send('printer:printed', {
         printer: 'zebra',
@@ -1215,6 +1398,7 @@ export function mountSceneEngine({
       origin?: string,
       messageName = 'printer:escpos',
     ) => {
+      if (replayState) return
       const hasPayload =
         typeof data.escpos === 'string' ||
         typeof data.base64 === 'string' ||
@@ -1231,6 +1415,14 @@ export function mountSceneEngine({
         origin,
         messageName,
         jobId,
+      })
+      pushRecordedEvent({
+        type: 'print:escpos',
+        sheetId: outcome.sheetId,
+        base64: outcome.escposBase64 ?? '',
+        jobId,
+        sender,
+        kickDrawer: outcome.kickDrawer,
       })
       if (outcome.kickDrawer) {
         setCashDrawerOpen(true)
@@ -1261,6 +1453,7 @@ export function mountSceneEngine({
     })
 
     const handleSetShelfProducts = (data: Record<string, unknown>) => {
+      if (replayState) return
       const list = Array.isArray(data.products)
         ? data.products
         : Array.isArray(data.items)
@@ -1269,9 +1462,14 @@ export function mountSceneEngine({
       if (!list) return
       const valid = list.filter(isPlainRecord) as unknown as ShelfProductInput[]
       shelvesController.setProducts(valid)
+      pushRecordedEvent({
+        type: 'shelves:setProducts',
+        products: shelvesController.getProductsSnapshot(),
+      })
     }
 
     const handleUpsertShelfProduct = (data: Record<string, unknown>) => {
+      if (replayState) return
       const raw = isPlainRecord(data.product) ? data.product : data
       if (raw.id === undefined && typeof raw.sku !== 'string') return
       const normalized = {
@@ -1282,6 +1480,10 @@ export function mountSceneEngine({
             : String(raw.sku),
       } as Partial<ShelfProductInput> & { id: string | number }
       shelvesController.upsertProduct(normalized)
+      pushRecordedEvent({
+        type: 'shelves:upsertProduct',
+        product: normalized,
+      })
     }
 
     channel.on('shelves:setProducts', (data) => {
@@ -1297,7 +1499,9 @@ export function mountSceneEngine({
       handleUpsertShelfProduct(data)
     })
     channel.on('shelves:clear', () => {
+      if (replayState) return
       shelvesController.clearProducts()
+      pushRecordedEvent({ type: 'shelves:clear' })
     })
     channel.on('shelves:getSlots', (_data, meta) => {
       meta.reply('shelves:slots', {
@@ -1307,10 +1511,18 @@ export function mountSceneEngine({
     })
 
     navigateImpl = (view: NavPresetId) => {
+      if (replayState && replayState.cameraFollow === 'recorded') {
+        replayState.cameraFollow = 'free'
+        replayState.callbacks?.onCameraFollowChange?.('free')
+      }
       navigateToFocusView(view)
     }
 
     returnPrevImpl = () => {
+      if (replayState && replayState.cameraFollow === 'recorded') {
+        replayState.cameraFollow = 'free'
+        replayState.callbacks?.onCameraFollowChange?.('free')
+      }
       returnToPreviousPose()
     }
 
@@ -1350,7 +1562,7 @@ export function mountSceneEngine({
     }
 
     rotateHeldLabelImpl = () => {
-      printManager.rotateHeldLabel()
+      handleRotateHeldLabel()
     }
 
     dropHeldItemImpl = () => {
@@ -1361,15 +1573,738 @@ export function mountSceneEngine({
       toggleScanner()
     }
 
-    setShelfProductsImpl = (products: ShelfProductInput[]) =>
-      shelvesController.setProducts(products)
+    setShelfProductsImpl = (products: ShelfProductInput[]) => {
+      if (replayState) return []
+      const res = shelvesController.setProducts(products)
+      pushRecordedEvent({
+        type: 'shelves:setProducts',
+        products: shelvesController.getProductsSnapshot(),
+      })
+      return res
+    }
 
     upsertShelfProductImpl = (
       product: Partial<ShelfProductInput> & { id: string | number },
-    ) => shelvesController.upsertProduct(product)
+    ) => {
+      if (replayState) return []
+      const res = shelvesController.upsertProduct(product)
+      pushRecordedEvent({
+        type: 'shelves:upsertProduct',
+        product,
+      })
+      return res
+    }
 
     clearShelvesImpl = () => {
+      if (replayState) return
       shelvesController.clearProducts()
+      pushRecordedEvent({ type: 'shelves:clear' })
+    }
+
+    // Recording & Replay lifecycle implementations
+    const setTabletVisualPowerForReplay = (
+      tabletId: string,
+      nextOn: boolean,
+      nextEnabled: boolean,
+    ) => {
+      const target = tabletInstances.find((t) => t.spec.id === tabletId)
+      if (!target || !replayState) return
+      const powerChanged = target.poweredOn !== nextOn
+      target.poweredOn = nextOn
+      target.enabledByMain = nextEnabled
+      target.powerUserData.poweredOn = nextOn
+      target.cutoutMesh.userData.poweredOn = nextOn
+
+      if (nextOn) {
+        target.loginPromptTimer = 0
+        target.loginOsdMesh.visible = false
+        target.loginOsdMat.opacity = 0
+        const projMat = replayState.projector.getScreenMaterial(tabletId)
+        target.cutoutMesh.material = projMat ?? cutoutOnMat
+        target.cutoutMesh.layers.enable(FOCUS_SHARP_LAYER)
+        target.camDot.material = camDotOnMat
+        if (powerChanged) {
+          replayState.projector.clearTabletCache(tabletId)
+        }
+      } else {
+        target.cutoutMesh.material = screenOffMat
+        if (!touchCapable) {
+          target.cutoutMesh.layers.disable(FOCUS_SHARP_LAYER)
+        }
+        target.camDot.material = camDotOffMat
+        replayState.projector.clearTabletCache(tabletId)
+      }
+      applyTabletPowerButtonVisual(target)
+    }
+
+    const remapProductsWithOfflineMap = (
+      products: ShelfProductInput[],
+      offlineMap: Record<string, string>,
+    ): ShelfProductInput[] =>
+      products.map((p) => {
+        const rawImg = p.image ?? p.imageUrl ?? p.picture
+        const mapped =
+          typeof rawImg === 'string' && offlineMap[rawImg]
+            ? offlineMap[rawImg]
+            : rawImg
+        return mapped ? { ...p, image: mapped } : { ...p }
+      })
+
+    const snapDrawerInstant = (open: boolean) => {
+      drawerOpen = open
+      drawerMotion.targetOpen = open
+      drawerMotion.z = open ? DRAWER_OPEN_OFFSET : 0
+      drawerMotion.velZ = 0
+      drawerMotion.accZ = 0
+      drawerMotion.settled = true
+      drawerMotion.bouncePhase = 0
+      drawerTrayGroup.position.z = drawerMotion.z
+      drawerBtnFaceMat.map = drawerOpen ? closeBtnTex : openBtnTex
+      drawerBtnFaceMat.needsUpdate = true
+      callbacks.onDrawerChange(drawerOpen)
+    }
+
+    const applyReplayEventsUpTo = (
+      rs: ActiveReplayState,
+      targetMs: number,
+      forceReset: boolean,
+    ) => {
+      const { manifest, offlineImageMap } = rs.session
+      const { initialSnapshot: snap, events } = manifest
+
+      if (
+        forceReset ||
+        rs.appliedEventIndex === -1 ||
+        targetMs < rs.appliedTimeMs - 40 ||
+        targetMs - rs.appliedTimeMs > 2000
+      ) {
+        // Full deterministic rebuild from initialSnapshot up to targetMs
+        state.activeView = snap.activeView
+        state.fullscreenTabletId = snap.fullscreenTabletId
+        callbacks.onActiveViewChange(snap.activeView)
+
+        for (const t of tabletInstances) {
+          const sc = snap.screens[t.spec.id] ?? {
+            poweredOn: t.spec.initialPower !== false,
+            enabled: Boolean(t.spec.canControlScreens || t.spec.initialPower !== false),
+          }
+          setTabletVisualPowerForReplay(t.spec.id, sc.poweredOn, sc.enabled)
+        }
+
+        snapDrawerInstant(snap.drawerOpen)
+
+        applyZebraReel(snap.zebraReelId, false, true)
+        printManager.resetAllSheets()
+        setHeldMode(snap.heldMode === 'scanner' ? 'scanner' : 'none')
+        scannerTriggerAnim = 0
+        scanSuccessFlash = 0
+        rs.projector.setHudExclusionRects(snap.hudExclusionRects ?? [])
+
+        let desiredCashCents = snap.drawerCashCents
+        let desiredShelfProducts: ShelfProductInput[] = snap.shelfProducts.map(
+          (p) => ({ ...p }),
+        )
+        let desiredReelModal = false
+        let desiredMuted = snap.audioMuted
+        let lastPrintSimMs = 0
+        let idx = 0
+
+        while (idx < events.length && events[idx].t <= targetMs) {
+          const ev = events[idx]
+          if (ev.t > lastPrintSimMs) {
+            printManager.fastForward((ev.t - lastPrintSimMs) / 1000)
+            lastPrintSimMs = ev.t
+          }
+          switch (ev.type) {
+            case 'view:change':
+              state.activeView = ev.activeView
+              state.fullscreenTabletId = ev.fullscreenTabletId
+              callbacks.onActiveViewChange(ev.activeView)
+              break
+            case 'tablet:power':
+              setTabletVisualPowerForReplay(
+                ev.tabletId,
+                ev.poweredOn,
+                ev.enabled,
+              )
+              break
+            case 'drawer:state':
+              snapDrawerInstant(ev.open)
+              break
+            case 'drawer:cash':
+              desiredCashCents = ev.cents
+              break
+            case 'zebra:reel':
+              applyZebraReel(ev.reelId, false, true)
+              break
+            case 'zebra:pickerModal':
+              desiredReelModal = ev.open
+              break
+            case 'print:zpl':
+              printManager.printZpl(
+                ev.zpl,
+                { sender: ev.sender ?? 'replay', jobId: ev.jobId },
+                ev.sheetId,
+              )
+              break
+            case 'print:escpos':
+              printManager.printEscPos(
+                { base64: ev.base64 },
+                { sender: ev.sender ?? 'replay', jobId: ev.jobId },
+                ev.sheetId,
+              )
+              break
+            case 'label:pickup':
+              if (printManager.pickUpLabel(ev.sheetId)) {
+                setHeldMode('label')
+              }
+              break
+            case 'label:rotate':
+              printManager.setHeldLabelYawOffset(ev.yawOffset)
+              break
+            case 'label:place':
+              if (printManager.placeLabelAtRecordedPose(ev)) {
+                setHeldMode('none')
+              }
+              break
+            case 'label:cancel':
+              printManager.cancelHeldLabel()
+              setHeldMode('none')
+              break
+            case 'scanner:pickup':
+              setHeldMode('scanner')
+              break
+            case 'scanner:putdown':
+              setHeldMode('none')
+              break
+            case 'scanner:decoded':
+              callbacks.onBarcodeScan?.({
+                code: ev.code,
+                format: ev.format,
+                tabletId: 'pos-center',
+                deliveredToTablet: ev.deliveredToTablet,
+                timestamp: Date.now(),
+              })
+              break
+            case 'shelves:setProducts':
+              desiredShelfProducts = ev.products.map((p) => ({ ...p }))
+              break
+            case 'shelves:upsertProduct': {
+              const idStr = String(ev.product.id).trim()
+              const pIdx = desiredShelfProducts.findIndex(
+                (p) => String(p.id).trim() === idStr,
+              )
+              if (pIdx >= 0) {
+                desiredShelfProducts[pIdx] = {
+                  ...desiredShelfProducts[pIdx],
+                  ...ev.product,
+                } as ShelfProductInput
+              } else {
+                desiredShelfProducts.push({
+                  stock: 0,
+                  ...ev.product,
+                } as ShelfProductInput)
+              }
+              break
+            }
+            case 'shelves:clear':
+              desiredShelfProducts = []
+              break
+            case 'audio:mute':
+              desiredMuted = ev.muted
+              break
+            case 'hud:rects':
+              rs.projector.setHudExclusionRects(ev.rects)
+              break
+          }
+          idx++
+        }
+
+        if (targetMs > lastPrintSimMs) {
+          printManager.fastForward((targetMs - lastPrintSimMs) / 1000)
+        }
+
+        if (rs.appliedCashCents !== desiredCashCents) {
+          setCashCents(desiredCashCents)
+          rs.appliedCashCents = desiredCashCents
+        }
+
+        shelvesController.setProducts(
+          remapProductsWithOfflineMap(desiredShelfProducts, offlineImageMap),
+        )
+        shelvesController.flushPendingNow()
+
+        rs.callbacks?.onReelPickerModalChange?.(desiredReelModal)
+        rs.callbacks?.onAudioMuteChange?.(desiredMuted)
+        rs.appliedEventIndex = idx
+        rs.appliedTimeMs = targetMs
+        return
+      }
+
+      // Incremental real-time step
+      while (
+        rs.appliedEventIndex < events.length &&
+        events[rs.appliedEventIndex].t <= targetMs
+      ) {
+        const ev = events[rs.appliedEventIndex]
+        switch (ev.type) {
+          case 'view:change':
+            state.activeView = ev.activeView
+            state.fullscreenTabletId = ev.fullscreenTabletId
+            callbacks.onActiveViewChange(ev.activeView)
+            break
+          case 'tablet:power': {
+            setTabletVisualPowerForReplay(
+              ev.tabletId,
+              ev.poweredOn,
+              ev.enabled,
+            )
+            const tInst = tabletInstances.find((t) => t.spec.id === ev.tabletId)
+            if (tInst) {
+              tInst.powerPressAnim = 1
+              if (ev.poweredOn) {
+                tInst.reloadFlash = 0.65
+                tInst.powerFaceMat.map = powerActiveTex
+                tInst.powerFaceMat.emissive.set('#f59e0b')
+                tInst.powerFaceMat.emissiveIntensity = 0.75
+                tInst.powerFaceMat.needsUpdate = true
+              }
+            }
+            break
+          }
+          case 'tablet:powerBlocked': {
+            const tInst = tabletInstances.find((t) => t.spec.id === ev.tabletId)
+            if (tInst) triggerLoginFirstPrompt(tInst, true)
+            break
+          }
+          case 'tablet:reload': {
+            const tInst = tabletInstances.find((t) => t.spec.id === ev.tabletId)
+            if (tInst) {
+              tInst.powerPressAnim = 1
+              tInst.reloadFlash = 1
+              tInst.powerFaceMat.map = powerActiveTex
+              tInst.powerFaceMat.emissive.set('#f59e0b')
+              tInst.powerFaceMat.emissiveIntensity = 0.75
+              tInst.powerFaceMat.needsUpdate = true
+            }
+            break
+          }
+          case 'drawer:state':
+            setCashDrawerOpen(ev.open, true)
+            break
+          case 'drawer:cash':
+            if (rs.appliedCashCents !== ev.cents) {
+              setCashCents(ev.cents)
+              rs.appliedCashCents = ev.cents
+            }
+            break
+          case 'zebra:reel':
+            applyZebraReel(ev.reelId, false, true)
+            break
+          case 'zebra:pickerModal':
+            rs.callbacks?.onReelPickerModalChange?.(ev.open)
+            break
+          case 'print:zpl':
+            printManager.printZpl(
+              ev.zpl,
+              { sender: ev.sender ?? 'replay', jobId: ev.jobId },
+              ev.sheetId,
+            )
+            break
+          case 'print:escpos': {
+            const out = printManager.printEscPos(
+              { base64: ev.base64 },
+              { sender: ev.sender ?? 'replay', jobId: ev.jobId },
+              ev.sheetId,
+            )
+            if (ev.kickDrawer || out.kickDrawer) {
+              setCashDrawerOpen(true, true)
+            }
+            break
+          }
+          case 'label:pickup':
+            if (printManager.pickUpLabel(ev.sheetId)) {
+              setHeldMode('label')
+            }
+            break
+          case 'label:rotate':
+            printManager.setHeldLabelYawOffset(ev.yawOffset)
+            break
+          case 'label:place':
+            if (printManager.placeLabelAtRecordedPose(ev)) {
+              setHeldMode('none')
+            }
+            break
+          case 'label:cancel':
+            printManager.cancelHeldLabel()
+            setHeldMode('none')
+            break
+          case 'scanner:pickup':
+            scannerTriggerAnim = 0.65
+            setHeldMode('scanner')
+            break
+          case 'scanner:putdown':
+            setHeldMode('none')
+            break
+          case 'scanner:pulse':
+            scannerTriggerAnim = 1
+            break
+          case 'scanner:decoded':
+            scanSuccessFlash = 1
+            if (!manifest.hasTabAudio) {
+              playScannerBeep(Boolean(isAudioMuted?.()))
+            }
+            callbacks.onBarcodeScan?.({
+              code: ev.code,
+              format: ev.format,
+              tabletId: 'pos-center',
+              deliveredToTablet: ev.deliveredToTablet,
+              timestamp: Date.now(),
+            })
+            break
+          case 'shelves:setProducts':
+            shelvesController.setProducts(
+              remapProductsWithOfflineMap(ev.products, offlineImageMap),
+            )
+            break
+          case 'shelves:upsertProduct': {
+            const [mapped] = remapProductsWithOfflineMap(
+              [{ stock: 0, ...ev.product } as ShelfProductInput],
+              offlineImageMap,
+            )
+            shelvesController.upsertProduct({
+              ...ev.product,
+              ...(mapped.image ? { image: mapped.image } : {}),
+            })
+            break
+          }
+          case 'shelves:clear':
+            shelvesController.clearProducts()
+            break
+          case 'audio:mute':
+            rs.callbacks?.onAudioMuteChange?.(ev.muted)
+            break
+          case 'hud:rects':
+            rs.projector.setHudExclusionRects(ev.rects)
+            break
+        }
+        rs.appliedEventIndex++
+      }
+      rs.appliedTimeMs = targetMs
+    }
+
+    startRecordingImpl = (options: SceneRecordingStartOptions): boolean => {
+      if (disposed || replayState) return false
+      recordingActive = true
+      recordStartPerfNow = options.startedAtPerfNow
+      recordOnStats = options.onStats
+      recordPaintSyncStamp = options.paintSyncStamp
+      lastRecordStatsMs = 0
+      recordedFrames = []
+      recordedEvents = []
+      lastRecordedActiveView = state.activeView
+      lastRecordedFullscreenId = state.fullscreenTabletId
+
+      const screensSnap: RecordedInitialSnapshot['screens'] = {}
+      recordTabletsGeo = []
+      for (const t of tabletInstances) {
+        screensSnap[t.spec.id] = {
+          poweredOn: t.poweredOn,
+          enabled: t.enabledByMain,
+        }
+        const visW = t.spec.crop ? t.spec.crop.w : t.spec.cssW
+        const visH = t.spec.crop ? t.spec.crop.h : t.spec.cssH
+        const screenW = Math.round(visW * t.spec.physicalScale)
+        const screenH = Math.round(visH * t.spec.physicalScale)
+        t.cutoutMesh.updateMatrixWorld(true)
+        recordTabletsGeo.push({
+          id: t.spec.id,
+          title: t.spec.title,
+          subtitle: t.spec.subtitle,
+          screenW,
+          screenH,
+          cutoutW: screenW + 12,
+          cutoutH: screenH + 12,
+          matrixWorld: t.cutoutMesh.matrixWorld.elements.slice(),
+        })
+      }
+
+      recordInitialSnapshot = {
+        camera: {
+          x: Number(camera.position.x.toFixed(2)),
+          y: Number(camera.position.y.toFixed(2)),
+          z: Number(camera.position.z.toFixed(2)),
+          yaw: Number(state.yaw.toFixed(5)),
+          pitch: Number(state.pitch.toFixed(5)),
+          fov: Number(camera.fov.toFixed(3)),
+          zoomNorm: Number(state.zoomNorm.toFixed(4)),
+          stageW: Math.max(1, stageEl.clientWidth),
+          stageH: Math.max(1, stageEl.clientHeight),
+        },
+        activeView: state.activeView,
+        fullscreenTabletId: state.fullscreenTabletId,
+        heldMode,
+        drawerOpen,
+        drawerCashCents: getCashBreakdown().cents,
+        zebraReelId: activeZebraMedia.id,
+        audioMuted: Boolean(isAudioMuted?.()),
+        screens: screensSnap,
+        shelfProducts: shelvesController.getProductsSnapshot(),
+        hudExclusionRects: options.getHudExclusionRects(),
+      }
+      return true
+    }
+
+    recordCustomEventImpl = (ev) => {
+      pushRecordedEvent(ev)
+    }
+
+    stopRecordingImpl = async (): Promise<SceneRecordingStopResult | null> => {
+      if (!recordingActive || !recordInitialSnapshot) return null
+      recordingActive = false
+      const snap = recordInitialSnapshot
+      const frames = recordedFrames
+      const events = recordedEvents
+      const tablets = recordTabletsGeo
+      recordInitialSnapshot = null
+      recordOnStats = undefined
+      recordPaintSyncStamp = undefined
+
+      const shelfImageBlobs = await shelvesController.exportCachedProductImages()
+      return {
+        initialSnapshot: snap,
+        tablets,
+        frames,
+        events,
+        shelfImageBlobs,
+      }
+    }
+
+    const exitActiveReplay = () => {
+      if (!replayState) return
+      const rs = replayState
+      replayState = null
+
+      rs.projector.dispose()
+      printManager.resetAllSheets()
+      setHeldMode('none')
+
+      const saved = rs.savedLiveState
+      for (const s of saved.screens) {
+        const t = tabletInstances.find((item) => item.spec.id === s.id)
+        if (!t) continue
+        t.poweredOn = s.poweredOn
+        t.enabledByMain = s.enabledByMain
+        t.powerUserData.poweredOn = s.poweredOn
+        t.cutoutMesh.userData.poweredOn = s.poweredOn
+        t.loginPromptTimer = 0
+        t.loginOsdMesh.visible = false
+        t.loginOsdMat.opacity = 0
+
+        if (s.poweredOn) {
+          t.cutoutMesh.material = cutoutOnMat
+          if (!touchCapable) {
+            t.cutoutMesh.layers.enable(FOCUS_SHARP_LAYER)
+          } else {
+            t.cutoutMesh.layers.disable(FOCUS_SHARP_LAYER)
+          }
+          t.camDot.material = camDotOnMat
+          t.cssObject.visible = true
+          t.wrapperEl.style.visibility = 'visible'
+        } else {
+          t.cutoutMesh.material = screenOffMat
+          t.cutoutMesh.layers.disable(FOCUS_SHARP_LAYER)
+          t.camDot.material = camDotOffMat
+          t.cssObject.visible = false
+          t.wrapperEl.style.visibility = 'hidden'
+          t.wrapperEl.style.pointerEvents = 'none'
+          t.iframeEl.style.pointerEvents = 'none'
+        }
+        applyTabletPowerButtonVisual(t)
+      }
+
+      snapDrawerInstant(saved.drawerOpen)
+
+      setCashCents(saved.cashCents)
+      applyZebraReel(saved.zebraReelId, false, true)
+      shelvesController.setProducts(saved.shelfProducts)
+
+      state.cameraTween = null
+      camera.position.set(saved.camX, saved.camY, saved.camZ)
+      state.yaw = saved.yaw
+      state.pitch = saved.pitch
+      state.targetYaw = saved.yaw
+      state.targetPitch = saved.pitch
+      state.zoomNorm = saved.zoomNorm
+      state.targetZoomNorm = saved.zoomNorm
+      camera.rotation.set(saved.pitch, saved.yaw, 0, 'YXZ')
+      state.activeView = saved.activeView
+      state.fullscreenTabletId = saved.fullscreenTabletId
+      callbacks.onActiveViewChange(saved.activeView)
+      refreshInputShield?.()
+    }
+
+    enterReplayImpl = (
+      session: UnpackedRecordingSession,
+      replayCallbacks?: SceneReplayCallbacks,
+    ): SceneReplayHandle | null => {
+      if (disposed) return null
+      if (recordingActive) {
+        recordingActive = false
+      }
+      if (replayState) {
+        exitActiveReplay()
+      }
+
+      if (document.pointerLockElement === stageEl) {
+        document.exitPointerLock()
+      }
+      cancelHeldItem()
+
+      const savedLiveState: ActiveReplayState['savedLiveState'] = {
+        activeView: state.activeView,
+        fullscreenTabletId: state.fullscreenTabletId,
+        camX: camera.position.x,
+        camY: camera.position.y,
+        camZ: camera.position.z,
+        yaw: state.yaw,
+        pitch: state.pitch,
+        zoomNorm: state.zoomNorm,
+        drawerOpen,
+        cashCents: getCashBreakdown().cents,
+        zebraReelId: activeZebraMedia.id,
+        shelfProducts: shelvesController.getProductsSnapshot(),
+        screens: tabletInstances.map((t) => ({
+          id: t.spec.id,
+          poweredOn: t.poweredOn,
+          enabledByMain: t.enabledByMain,
+        })),
+      }
+
+      const projector = createTabletVideoProjector(
+        THREE,
+        webglRenderer,
+        tabletInstances,
+        session.videoObjectUrl,
+        session.manifest,
+      )
+      projector.videoEl.muted = Boolean(isAudioMuted?.())
+
+      const snapCam = session.manifest.initialSnapshot.camera
+      const fallbackSample: InterpolatedFrameSample = {
+        tMs: 0,
+        camX: snapCam.x,
+        camY: snapCam.y,
+        camZ: snapCam.z,
+        yaw: snapCam.yaw,
+        pitch: snapCam.pitch,
+        fov: snapCam.fov,
+        stageW: snapCam.stageW,
+        stageH: snapCam.stageH,
+        cursorU: 0.5,
+        cursorV: 0.5,
+        moveKnobX: 0,
+        moveKnobY: 0,
+        aimKnobX: 0,
+        aimKnobY: 0,
+        zoomNorm: snapCam.zoomNorm,
+        flags: 0,
+      }
+
+      const recPoseCam = new THREE.PerspectiveCamera(58, 16 / 9, 120, 160000)
+      recPoseCam.rotation.order = 'YXZ'
+
+      const rs: ActiveReplayState = {
+        session,
+        projector,
+        callbacks: replayCallbacks,
+        cameraFollow: 'recorded',
+        currentTimeMs: 0,
+        appliedEventIndex: -1,
+        appliedTimeMs: 0,
+        appliedCashCents: -1,
+        recPoseCam,
+        fallbackSample,
+        savedLiveState,
+      }
+      replayState = rs
+
+      state.cameraTween = null
+      state.velX = 0
+      state.velZ = 0
+      applyReplayEventsUpTo(rs, 0, true)
+
+      const onVideoEnded = () => {
+        if (replayState !== rs) return
+        rs.currentTimeMs = session.manifest.durationMs
+        applyReplayEventsUpTo(rs, rs.currentTimeMs, false)
+        rs.callbacks?.onProgress?.(
+          rs.currentTimeMs,
+          session.manifest.durationMs,
+          false,
+        )
+      }
+      projector.videoEl.addEventListener('ended', onVideoEnded)
+
+      return {
+        play: async () => {
+          if (replayState !== rs) return
+          if (projector.videoEl.ended || rs.currentTimeMs >= session.manifest.durationMs - 30) {
+            projector.videoEl.currentTime = 0
+            rs.currentTimeMs = 0
+            applyReplayEventsUpTo(rs, 0, true)
+          }
+          await projector.videoEl.play().catch(() => {})
+        },
+        pause: () => {
+          if (replayState !== rs) return
+          projector.videoEl.pause()
+          rs.callbacks?.onProgress?.(
+            rs.currentTimeMs,
+            session.manifest.durationMs,
+            false,
+          )
+        },
+        seek: (timeMs: number) => {
+          if (replayState !== rs) return
+          const clamped = Math.max(
+            0,
+            Math.min(session.manifest.durationMs, timeMs),
+          )
+          rs.currentTimeMs = clamped
+          projector.videoEl.currentTime = clamped / 1000
+          applyReplayEventsUpTo(rs, clamped, true)
+          rs.callbacks?.onProgress?.(
+            clamped,
+            session.manifest.durationMs,
+            !projector.videoEl.paused,
+          )
+        },
+        setPlaybackRate: (rate: number) => {
+          if (replayState !== rs) return
+          projector.videoEl.playbackRate = Math.max(0.25, Math.min(4, rate))
+        },
+        setMuted: (muted: boolean) => {
+          if (replayState !== rs) return
+          projector.videoEl.muted = muted
+        },
+        setCameraFollowMode: (mode: ReplayCameraFollowMode) => {
+          if (replayState !== rs) return
+          rs.cameraFollow = mode
+          if (mode === 'recorded') {
+            state.cameraTween = null
+            state.velX = 0
+            state.velZ = 0
+          }
+          rs.callbacks?.onCameraFollowChange?.(mode)
+        },
+        exit: () => {
+          projector.videoEl.removeEventListener('ended', onVideoEnded)
+          if (replayState === rs) {
+            exitActiveReplay()
+          }
+        },
+      }
     }
 
     const onResize = () => {
@@ -1388,6 +2323,10 @@ export function mountSceneEngine({
     window.addEventListener('resize', onResize)
 
     cleanupFns.push(() => {
+      if (replayState) {
+        replayState.projector.dispose()
+        replayState = null
+      }
       cleanupInput()
       resizeObserver?.disconnect()
       window.removeEventListener('resize', onResize)
@@ -1436,6 +2375,78 @@ export function mountSceneEngine({
       }
 
       shelvesController.update(now)
+
+      // Advance replay timeline & resolve frame-synced sample directly from decoded video
+      let activeReplaySample: InterpolatedFrameSample | null = null
+      if (replayState) {
+        const { videoEl } = replayState.projector
+        const synced = replayState.projector.resolveCurrentFrameSample(
+          replayState.currentTimeMs,
+          replayState.fallbackSample,
+        )
+        activeReplaySample = synced.sample
+
+        if (!videoEl.paused && !videoEl.ended && !videoEl.seeking) {
+          replayState.currentTimeMs = Math.min(
+            replayState.session.manifest.durationMs,
+            synced.mediaTimeMs,
+          )
+          applyReplayEventsUpTo(replayState, replayState.currentTimeMs, false)
+          replayState.callbacks?.onProgress?.(
+            replayState.currentTimeMs,
+            replayState.session.manifest.durationMs,
+            true,
+          )
+        } else if (synced.hasExactStamp && !videoEl.seeking) {
+          // Even right after pause/scrub, align 3D events to the exact seeked video frame
+          replayState.currentTimeMs = Math.min(
+            replayState.session.manifest.durationMs,
+            synced.mediaTimeMs,
+          )
+        }
+
+        const recAspect = Math.max(
+          0.25,
+          activeReplaySample.stageW / Math.max(1, activeReplaySample.stageH),
+        )
+        replayState.recPoseCam.fov = activeReplaySample.fov
+        replayState.recPoseCam.aspect = recAspect
+        replayState.recPoseCam.updateProjectionMatrix()
+        replayState.recPoseCam.position.set(
+          activeReplaySample.camX,
+          activeReplaySample.camY,
+          activeReplaySample.camZ,
+        )
+        replayState.recPoseCam.rotation.set(
+          activeReplaySample.pitch,
+          activeReplaySample.yaw,
+          0,
+          'YXZ',
+        )
+        replayState.recPoseCam.updateMatrixWorld(true)
+
+        replayState.projector.update(
+          activeReplaySample,
+          heldMode === 'scanner',
+        )
+
+        if (replayState.cameraFollow === 'recorded') {
+          const stageRect = stageEl.getBoundingClientRect()
+          if (
+            (activeReplaySample.flags & FRAME_FLAG_HAS_CURSOR) !== 0 &&
+            stageRect.width > 0 &&
+            stageRect.height > 0
+          ) {
+            state.lastMouseX =
+              stageRect.left + activeReplaySample.cursorU * stageRect.width
+            state.lastMouseY =
+              stageRect.top + activeReplaySample.cursorV * stageRect.height
+          } else {
+            state.lastMouseX = -9999
+            state.lastMouseY = -9999
+          }
+        }
+      }
 
       // Proximity grow animations for the 4 navigation loupes & cash drawer button
       // Disabled while holding the barcode scanner so aiming/clicking never triggers loupes or buttons
@@ -1823,6 +2834,22 @@ export function mountSceneEngine({
       const moveRight = manualRight + state.touchMoveX
       const hasMoveInput = Math.abs(moveForward) > 0.005 || Math.abs(moveRight) > 0.005
 
+      if (
+        replayState &&
+        replayState.cameraFollow === 'recorded' &&
+        (hasMoveInput ||
+          state.dragTurning ||
+          state.pointerLocked ||
+          state.moveStickEngaged ||
+          state.aimStickEngaged ||
+          state.zoomEngaged ||
+          state.touchAimX !== 0 ||
+          state.touchAimY !== 0)
+      ) {
+        replayState.cameraFollow = 'free'
+        replayState.callbacks?.onCameraFollowChange?.('free')
+      }
+
       if (hasMoveInput) {
         clearActiveFocusForFreeMove()
         if (state.cameraTween) {
@@ -1876,24 +2903,86 @@ export function mountSceneEngine({
       }
 
       // Smooth optical camera zoom (mouse wheel & HUD zoom slider)
-      const zoomLerp = 1 - Math.exp(-16 * dt)
-      state.zoomNorm += (state.targetZoomNorm - state.zoomNorm) * zoomLerp
-      if (Math.abs(state.targetZoomNorm - state.zoomNorm) < 0.0005) {
-        state.zoomNorm = state.targetZoomNorm
+      if (
+        replayState &&
+        replayState.cameraFollow === 'recorded' &&
+        activeReplaySample
+      ) {
+        camera.position.set(
+          activeReplaySample.camX,
+          activeReplaySample.camY,
+          activeReplaySample.camZ,
+        )
+        state.yaw = activeReplaySample.yaw
+        state.pitch = activeReplaySample.pitch
+        state.targetYaw = activeReplaySample.yaw
+        state.targetPitch = activeReplaySample.pitch
+        camera.rotation.set(state.pitch, state.yaw, 0, 'YXZ')
+        state.velX = 0
+        state.velZ = 0
+
+        state.zoomNorm = activeReplaySample.zoomNorm
+        state.targetZoomNorm = activeReplaySample.zoomNorm
+        if (Math.abs(camera.fov - activeReplaySample.fov) > 0.005) {
+          camera.fov = activeReplaySample.fov
+          camera.updateProjectionMatrix()
+        }
+
+        if (stickRefs.moveKnobRef.current) {
+          stickRefs.moveKnobRef.current.style.transform = `translate(${activeReplaySample.moveKnobX.toFixed(1)}px, ${activeReplaySample.moveKnobY.toFixed(1)}px)`
+        }
+        stickRefs.moveStickRef.current?.classList.toggle(
+          'is-engaged',
+          (activeReplaySample.flags & FRAME_FLAG_MOVE_ENGAGED) !== 0 ||
+            Math.hypot(
+              activeReplaySample.moveKnobX,
+              activeReplaySample.moveKnobY,
+            ) > 1.8,
+        )
+
+        if (stickRefs.aimKnobRef.current) {
+          stickRefs.aimKnobRef.current.style.transform = `translate(${activeReplaySample.aimKnobX.toFixed(1)}px, ${activeReplaySample.aimKnobY.toFixed(1)}px)`
+        }
+        stickRefs.aimStickRef.current?.classList.toggle(
+          'is-engaged',
+          (activeReplaySample.flags & FRAME_FLAG_AIM_ENGAGED) !== 0 ||
+            Math.hypot(
+              activeReplaySample.aimKnobX,
+              activeReplaySample.aimKnobY,
+            ) > 1.8,
+        )
+
+        if (stickRefs.zoomKnobRef.current) {
+          const knobY = (0.5 - state.zoomNorm) * 2 * ZOOM_KNOB_TRAVEL_PX
+          stickRefs.zoomKnobRef.current.style.transform = `translateY(${knobY.toFixed(1)}px)`
+        }
+        stickRefs.zoomCtrlRef.current?.classList.toggle(
+          'is-engaged',
+          (activeReplaySample.flags & FRAME_FLAG_ZOOM_ENGAGED) !== 0 ||
+            Math.abs(state.zoomNorm - DEFAULT_ZOOM_NORM) > 0.03,
+        )
+      } else {
+        const zoomLerp = 1 - Math.exp(-16 * dt)
+        state.zoomNorm += (state.targetZoomNorm - state.zoomNorm) * zoomLerp
+        if (Math.abs(state.targetZoomNorm - state.zoomNorm) < 0.0005) {
+          state.zoomNorm = state.targetZoomNorm
+        }
+        const nextFov =
+          MAX_ZOOM_FOV - state.zoomNorm * (MAX_ZOOM_FOV - MIN_ZOOM_FOV)
+        if (Math.abs(camera.fov - nextFov) > 0.005) {
+          camera.fov = nextFov
+          camera.updateProjectionMatrix()
+        }
+        if (stickRefs.zoomKnobRef.current) {
+          const knobY = (0.5 - state.zoomNorm) * 2 * ZOOM_KNOB_TRAVEL_PX
+          stickRefs.zoomKnobRef.current.style.transform = `translateY(${knobY.toFixed(1)}px)`
+        }
+        stickRefs.zoomCtrlRef.current?.classList.toggle(
+          'is-engaged',
+          state.zoomEngaged ||
+            Math.abs(state.zoomNorm - DEFAULT_ZOOM_NORM) > 0.03,
+        )
       }
-      const nextFov = MAX_ZOOM_FOV - state.zoomNorm * (MAX_ZOOM_FOV - MIN_ZOOM_FOV)
-      if (Math.abs(camera.fov - nextFov) > 0.005) {
-        camera.fov = nextFov
-        camera.updateProjectionMatrix()
-      }
-      if (stickRefs.zoomKnobRef.current) {
-        const knobY = (0.5 - state.zoomNorm) * 2 * ZOOM_KNOB_TRAVEL_PX
-        stickRefs.zoomKnobRef.current.style.transform = `translateY(${knobY.toFixed(1)}px)`
-      }
-      stickRefs.zoomCtrlRef.current?.classList.toggle(
-        'is-engaged',
-        state.zoomEngaged || Math.abs(state.zoomNorm - DEFAULT_ZOOM_NORM) > 0.03,
-      )
 
       camera.updateMatrixWorld(true)
 
@@ -1902,27 +2991,41 @@ export function mountSceneEngine({
       const stageH = Math.max(1, stageEl.clientHeight)
       let aimStageX = stageW * 0.5
       let aimStageY = stageH * 0.5
-      if (
-        !state.pointerLocked &&
-        !touchCapable &&
-        state.lastMouseX >= 0 &&
-        state.lastMouseY >= 0
-      ) {
-        const stageRect = stageEl.getBoundingClientRect()
-        aimStageX = Math.max(
-          0,
-          Math.min(stageW, state.lastMouseX - stageRect.left),
+      if (replayState && activeReplaySample) {
+        aimStageX = activeReplaySample.cursorU * stageW
+        aimStageY = activeReplaySample.cursorV * stageH
+        aimNdc.set(
+          activeReplaySample.cursorU * 2 - 1,
+          -(activeReplaySample.cursorV * 2 - 1),
         )
-        aimStageY = Math.max(
-          0,
-          Math.min(stageH, state.lastMouseY - stageRect.top),
-        )
+      } else {
+        if (
+          !state.pointerLocked &&
+          !touchCapable &&
+          state.lastMouseX >= 0 &&
+          state.lastMouseY >= 0
+        ) {
+          const stageRect = stageEl.getBoundingClientRect()
+          aimStageX = Math.max(
+            0,
+            Math.min(stageW, state.lastMouseX - stageRect.left),
+          )
+          aimStageY = Math.max(
+            0,
+            Math.min(stageH, state.lastMouseY - stageRect.top),
+          )
+        }
+        aimNdc.set((aimStageX / stageW) * 2 - 1, -(aimStageY / stageH) * 2 + 1)
       }
-      aimNdc.set((aimStageX / stageW) * 2 - 1, -(aimStageY / stageH) * 2 + 1)
+
+      const operatorCamera =
+        replayState && activeReplaySample ? replayState.recPoseCam : camera
+      const operatorYaw =
+        replayState && activeReplaySample ? activeReplaySample.yaw : state.yaw
 
       // Update held Zebra label surface preview
       if (heldMode === 'label') {
-        raycaster.setFromCamera(aimNdc, camera)
+        raycaster.setFromCamera(aimNdc, operatorCamera)
         const surfaces = [
           ...placeableBaseSurfaces,
           ...shelvesController.getBoxSurfaceMeshes(),
@@ -1930,12 +3033,12 @@ export function mountSceneEngine({
         ]
         const canPlace = printManager.updateHeldLabelPreview(
           raycaster,
-          camera,
-          state.yaw,
+          operatorCamera,
+          operatorYaw,
           surfaces,
           dt,
         )
-        if (!state.pointerLocked && !state.dragTurning) {
+        if (!replayState && !state.pointerLocked && !state.dragTurning) {
           stageEl.style.cursor = canPlace ? 'copy' : 'grabbing'
         }
       }
@@ -1947,12 +3050,16 @@ export function mountSceneEngine({
       if (heldMode === 'scanner') {
         if (laserReticleRef?.current) {
           const reticleEl = laserReticleRef.current
-          reticleEl.style.transform = `translate3d(${aimStageX.toFixed(1)}px, ${aimStageY.toFixed(1)}px, 0) translate(-50%, -50%)`
-          reticleEl.classList.add('is-visible')
-          reticleEl.classList.toggle('is-hit', scanSuccessFlash > 0.05)
+          if (!replayState || replayState.cameraFollow === 'recorded') {
+            reticleEl.style.transform = `translate3d(${aimStageX.toFixed(1)}px, ${aimStageY.toFixed(1)}px, 0) translate(-50%, -50%)`
+            reticleEl.classList.add('is-visible')
+            reticleEl.classList.toggle('is-hit', scanSuccessFlash > 0.05)
+          } else {
+            reticleEl.classList.remove('is-visible', 'is-hit')
+          }
         }
 
-        raycaster.setFromCamera(aimNdc, camera)
+        raycaster.setFromCamera(aimNdc, operatorCamera)
         const laserTargets = [
           ...printManager.getAllSheetMeshes(),
           ...placeableBaseSurfaces,
@@ -1968,7 +3075,7 @@ export function mountSceneEngine({
               .copy(lh.face.normal)
               .transformDirection(lh.object.matrixWorld)
               .normalize()
-            tmpToCam.copy(camera.position).sub(lh.point)
+            tmpToCam.copy(operatorCamera.position).sub(lh.point)
             if (tmpScannerHitNormal.dot(tmpToCam) < 0) {
               tmpScannerHitNormal.negate()
             }
@@ -1986,8 +3093,8 @@ export function mountSceneEngine({
       updateScannerPose({
         held: heldMode === 'scanner',
         dt,
-        camera,
-        aspect: camera.aspect,
+        camera: operatorCamera,
+        aspect: operatorCamera.aspect,
         aimWorldPoint: scannerAimWorld,
         hitNormal: scannerHitNormal,
         hoverAmount: scannerHover,
@@ -2001,7 +3108,10 @@ export function mountSceneEngine({
       // Capture spot around the laser crosshair: live HUD viewfinder while aiming,
       // and decode via zxing-wasm ONLY on actual click/trigger; auto-return to dock after one successful scan.
       const shouldDecodeSpot =
-        heldMode === 'scanner' && pendingScanTrigger && !scanDecodeBusy
+        !replayState &&
+        heldMode === 'scanner' &&
+        pendingScanTrigger &&
+        !scanDecodeBusy
       const shouldUpdatePreview =
         heldMode === 'scanner' &&
         !shouldDecodeSpot &&
@@ -2022,17 +3132,34 @@ export function mountSceneEngine({
         scannerGroup.visible = false
         laserVisualsGroup.visible = false
 
-        camera.layers.set(0)
-        camera.setViewOffset(
-          stageW,
-          stageH,
-          aimStageX - SCAN_SPOT_CSS_W * 0.5,
-          aimStageY - SCAN_SPOT_CSS_H * 0.5,
+        const spotStageW =
+          replayState && activeReplaySample
+            ? Math.max(1, activeReplaySample.stageW)
+            : stageW
+        const spotStageH =
+          replayState && activeReplaySample
+            ? Math.max(1, activeReplaySample.stageH)
+            : stageH
+        const spotAimX =
+          replayState && activeReplaySample
+            ? activeReplaySample.cursorU * spotStageW
+            : aimStageX
+        const spotAimY =
+          replayState && activeReplaySample
+            ? activeReplaySample.cursorV * spotStageH
+            : aimStageY
+
+        operatorCamera.layers.set(0)
+        operatorCamera.setViewOffset(
+          spotStageW,
+          spotStageH,
+          spotAimX - SCAN_SPOT_CSS_W * 0.5,
+          spotAimY - SCAN_SPOT_CSS_H * 0.5,
           SCAN_SPOT_CSS_W,
           SCAN_SPOT_CSS_H,
         )
         webglRenderer.setRenderTarget(scanRT)
-        webglRenderer.render(webglScene, camera)
+        webglRenderer.render(webglScene, operatorCamera)
         webglRenderer.readRenderTargetPixels(
           scanRT,
           0,
@@ -2042,7 +3169,7 @@ export function mountSceneEngine({
           scanPixelBuf,
         )
 
-        camera.clearViewOffset()
+        operatorCamera.clearViewOffset()
         webglRenderer.setRenderTarget(null)
         scannerGroup.visible = prevScannerVis
         laserVisualsGroup.visible = prevLaserVis
@@ -2059,7 +3186,9 @@ export function mountSceneEngine({
           decodeSpotPixels(scanPixelBuf, SCAN_RT_W, SCAN_RT_H, previewCtx)
             .then((decoded) => {
               scanDecodeBusy = false
-              if (disposed || heldMode !== 'scanner' || !decoded) return
+              if (disposed || replayState || heldMode !== 'scanner' || !decoded) {
+                return
+              }
 
               scanSuccessFlash = 1
               playScannerBeep(Boolean(isAudioMuted?.()))
@@ -2069,6 +3198,13 @@ export function mountSceneEngine({
               )
               const deliveredToTablet = Boolean(posCenterTablet?.poweredOn)
               const timestamp = Date.now()
+
+              pushRecordedEvent({
+                type: 'scanner:decoded',
+                code: decoded.code,
+                format: decoded.format,
+                deliveredToTablet,
+              })
 
               // Emit scanned string to the 12" wide center POS tablet ('pos-center')
               channel.sendTo('pos-center', 'scanner:scan', {
@@ -2098,31 +3234,122 @@ export function mountSceneEngine({
         }
       }
 
-      // Front-face check & pointer-events routing for the real iframes
-      for (const t of tabletInstances) {
-        t.cutoutMesh.getWorldPosition(tmpWorldPos)
-        t.cutoutMesh.getWorldQuaternion(tmpWorldQuat)
-        tmpNormal.set(0, 0, 1).applyQuaternion(tmpWorldQuat)
-        tmpToCam.copy(camera.position).sub(tmpWorldPos)
+      // Front-face check & pointer-events routing for the real iframes (hidden during offline WebGL Replay)
+      if (replayState) {
+        for (const t of tabletInstances) {
+          t.cssObject.visible = false
+          t.wrapperEl.style.visibility = 'hidden'
+          t.wrapperEl.style.pointerEvents = 'none'
+          t.iframeEl.style.pointerEvents = 'none'
+        }
+      } else {
+        for (const t of tabletInstances) {
+          t.cutoutMesh.getWorldPosition(tmpWorldPos)
+          t.cutoutMesh.getWorldQuaternion(tmpWorldQuat)
+          tmpNormal.set(0, 0, 1).applyQuaternion(tmpWorldQuat)
+          tmpToCam.copy(camera.position).sub(tmpWorldPos)
 
-        const isFrontFacing = tmpNormal.dot(tmpToCam) > 0
-        t.cssObject.visible = t.poweredOn
-        if (!t.poweredOn) {
-          t.wrapperEl.style.visibility = 'hidden'
-          t.wrapperEl.style.pointerEvents = 'none'
-          t.iframeEl.style.pointerEvents = 'none'
-        } else if (!isFrontFacing) {
-          t.wrapperEl.style.visibility = 'hidden'
-          t.wrapperEl.style.pointerEvents = 'none'
-          t.iframeEl.style.pointerEvents = 'none'
-        } else {
-          t.wrapperEl.style.visibility = 'visible'
-          const interactive =
-            !state.pointerLocked && !state.dragTurning && heldMode === 'none'
-              ? 'auto'
-              : 'none'
-          t.wrapperEl.style.pointerEvents = interactive
-          t.iframeEl.style.pointerEvents = interactive
+          const isFrontFacing = tmpNormal.dot(tmpToCam) > 0
+          t.cssObject.visible = t.poweredOn
+          if (!t.poweredOn) {
+            t.wrapperEl.style.visibility = 'hidden'
+            t.wrapperEl.style.pointerEvents = 'none'
+            t.iframeEl.style.pointerEvents = 'none'
+          } else if (!isFrontFacing) {
+            t.wrapperEl.style.visibility = 'hidden'
+            t.wrapperEl.style.pointerEvents = 'none'
+            t.iframeEl.style.pointerEvents = 'none'
+          } else {
+            t.wrapperEl.style.visibility = 'visible'
+            const interactive =
+              !state.pointerLocked && !state.dragTurning && heldMode === 'none'
+                ? 'auto'
+                : 'none'
+            t.wrapperEl.style.pointerEvents = interactive
+            t.iframeEl.style.pointerEvents = interactive
+          }
+        }
+      }
+
+      if (recordingActive && !replayState) {
+        if (
+          state.activeView !== lastRecordedActiveView ||
+          state.fullscreenTabletId !== lastRecordedFullscreenId
+        ) {
+          lastRecordedActiveView = state.activeView
+          lastRecordedFullscreenId = state.fullscreenTabletId
+          pushRecordedEvent({
+            type: 'view:change',
+            activeView: state.activeView,
+            fullscreenTabletId: state.fullscreenTabletId,
+          })
+        }
+
+        const recT = Math.max(0, Math.round(now - recordStartPerfNow))
+        let flags = 0
+        if (state.pointerLocked) flags |= FRAME_FLAG_POINTER_LOCKED
+        if (state.dragTurning) flags |= FRAME_FLAG_DRAG_TURNING
+        if (state.lastMouseX >= 0 && state.lastMouseY >= 0) {
+          flags |= FRAME_FLAG_HAS_CURSOR
+        }
+        if (state.moveStickEngaged) flags |= FRAME_FLAG_MOVE_ENGAGED
+        if (state.aimStickEngaged) flags |= FRAME_FLAG_AIM_ENGAGED
+        if (state.zoomEngaged) flags |= FRAME_FLAG_ZOOM_ENGAGED
+        if (scanSuccessFlash > 0.05) flags |= FRAME_FLAG_SCANNER_FLASH
+
+        let recMoveKnobX = keyStickVisualX
+        let recMoveKnobY = keyStickVisualY
+        if (state.moveStickEngaged && stickRefs.moveKnobRef.current) {
+          const m = stickRefs.moveKnobRef.current.style.transform.match(
+            /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/,
+          )
+          if (m) {
+            recMoveKnobX = Number(m[1]) || 0
+            recMoveKnobY = Number(m[2]) || 0
+          }
+        }
+
+        let recAimKnobX = mouseStickVisualX
+        let recAimKnobY = mouseStickVisualY
+        if (state.aimStickEngaged && stickRefs.aimKnobRef.current) {
+          const m = stickRefs.aimKnobRef.current.style.transform.match(
+            /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/,
+          )
+          if (m) {
+            recAimKnobX = Number(m[1]) || 0
+            recAimKnobY = Number(m[2]) || 0
+          }
+        }
+
+        const frameIndex = recordedFrames.length
+        recordedFrames.push([
+          recT,
+          Math.round(camera.position.x * 2) / 2,
+          Math.round(camera.position.y * 2) / 2,
+          Math.round(camera.position.z * 2) / 2,
+          Number(state.yaw.toFixed(5)),
+          Number(state.pitch.toFixed(5)),
+          Number(camera.fov.toFixed(3)),
+          stageW,
+          stageH,
+          Number((aimStageX / stageW).toFixed(4)),
+          Number((aimStageY / stageH).toFixed(4)),
+          Number(recMoveKnobX.toFixed(1)),
+          Number(recMoveKnobY.toFixed(1)),
+          Number(recAimKnobX.toFixed(1)),
+          Number(recAimKnobY.toFixed(1)),
+          Number(state.zoomNorm.toFixed(4)),
+          flags,
+        ])
+        recordPaintSyncStamp?.(frameIndex)
+
+        if (recordOnStats && now - lastRecordStatsMs >= 200) {
+          lastRecordStatsMs = now
+          recordOnStats({
+            durationMs: recT,
+            frameCount: recordedFrames.length,
+            eventCount: recordedEvents.length,
+          })
         }
       }
 
@@ -2174,6 +3401,13 @@ export function mountSceneEngine({
     setShelfProducts: (products) => setShelfProductsImpl?.(products) ?? [],
     upsertShelfProduct: (product) => upsertShelfProductImpl?.(product) ?? [],
     clearShelves: () => clearShelvesImpl?.(),
+    startRecordingSession: (options) =>
+      startRecordingImpl ? startRecordingImpl(options) : false,
+    recordCustomEvent: (ev) => recordCustomEventImpl?.(ev),
+    stopRecordingSession: async () =>
+      stopRecordingImpl ? stopRecordingImpl() : null,
+    enterReplayMode: (session, replayCallbacks) =>
+      enterReplayImpl ? enterReplayImpl(session, replayCallbacks) : null,
     dispose: () => {
       disposed = true
       if (animId) cancelAnimationFrame(animId)

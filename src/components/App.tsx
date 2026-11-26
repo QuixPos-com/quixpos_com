@@ -5,6 +5,7 @@ import DocsRoute from '../routes/docs'
 import AccountRoute from '../routes/account'
 import OAuthAuthorizeRoute from '../routes/oauth-authorize'
 import ThreeDRoute from '../routes/3d'
+import ThreeDRecRoute from '../routes/3d_rec'
 import PrivacyPolicyRoute from '../routes/privacypolicy'
 import TermsRoute from '../routes/terms'
 import '../fonts.css'
@@ -26,6 +27,7 @@ export class App extends Component<AppProps> {
           <Route path="/docs" component={DocsRoute} />
           <Route path="/docs/:pageId" component={DocsRoute} />
           <Route path="/3d" component={ThreeDRoute} />
+          <Route path="/3d_rec" component={ThreeDRecRoute} />
           <Route path="/account" component={AccountRoute} />
           <Route path="/oauth/authorize" component={OAuthAuthorizeRoute} />
           <Route path="/privacypolicy" component={PrivacyPolicyRoute} />

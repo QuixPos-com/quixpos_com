@@ -73,7 +73,7 @@ function buildSocialMetaTags(opts: {
 
 export function getRoutes(): string[] {
   const pages = getAllPages()
-  const routes = ['/', '/docs', '/3d', '/account', '/oauth/authorize', '/privacypolicy', '/terms']
+  const routes = ['/', '/docs', '/3d', '/3d_rec', '/account', '/oauth/authorize', '/privacypolicy', '/terms']
   for (const p of pages) {
     routes.push(`/docs/${p.id}`)
   }
@@ -93,8 +93,8 @@ export function render(url: string): RenderResult {
   if (cleanUrl === '/oauth/authorize') {
     title = 'Anmelden – QuixPOS OAuth'
     description = 'Melde dich mit deinem QuixPOS-Profil auf deiner Instanz an.'
-  } else if (cleanUrl === '/3d') {
-    title = '3D Demo – QuixPOS'
+  } else if (cleanUrl === '/3d' || cleanUrl === '/3d_rec') {
+    title = cleanUrl === '/3d_rec' ? '3D Recorder – QuixPOS' : '3D Demo – QuixPOS'
     description =
       'QuixPOS 3D-Arbeitsplatz mit interaktiven Tablets für POS Demo, Artikelverwaltung und SumUp Virtual Solo.'
     socialImage = {

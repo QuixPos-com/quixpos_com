@@ -82,13 +82,23 @@ interface PrintedSheet {
   placedBackup: PlacedBackup | null
 }
 
+export interface PlacedLabelRecord {
+  sheetId: string
+  targetKind: 'scene' | 'drawer'
+  pos: [number, number, number]
+  quat: [number, number, number, number]
+  yawOffset: number
+}
+
 export interface PrintJobOutcome {
   printer: PrinterKind
+  sheetId: string
   droppedPrevious: boolean
   kickDrawer: boolean
   dpi: number
   widthPx: number
   heightPx: number
+  escposBase64?: string
 }
 
 export interface PrintManagerOptions {
@@ -99,7 +109,11 @@ export interface PrintManagerOptions {
 export interface PrintManager extends Disposable {
   setZebraMedia: (media: ZebraMediaInfo) => void
   getZebraMedia: () => ZebraMediaInfo
-  printZpl: (zpl: string, logMeta?: PrintLogMeta) => PrintJobOutcome
+  printZpl: (
+    zpl: string,
+    logMeta?: PrintLogMeta,
+    explicitSheetId?: string,
+  ) => PrintJobOutcome
   printEscPos: (
     input: {
       escpos?: unknown
@@ -110,11 +124,14 @@ export interface PrintManager extends Disposable {
       encoding?: unknown
     },
     logMeta?: PrintLogMeta,
+    explicitSheetId?: string,
   ) => PrintJobOutcome
   getZebraLabelTargets: () => Array<InstanceType<ThreeModule['Mesh']>>
   getPlacedLabelSurfaces: () => Array<InstanceType<ThreeModule['Mesh']>>
   getAllSheetMeshes: () => Array<InstanceType<ThreeModule['Mesh']>>
   hasHeldLabel: () => boolean
+  getHeldLabelInfo: () => { sheetId: string; yawOffset: number } | null
+  setHeldLabelYawOffset: (yawOffset: number) => void
   canPlaceHeldLabel: () => boolean
   pickUpLabel: (
     target: InstanceType<ThreeModule['Object3D']> | string,
@@ -127,8 +144,11 @@ export interface PrintManager extends Disposable {
     placeableSurfaces: Array<InstanceType<ThreeModule['Object3D']>>,
     dt: number,
   ) => boolean
-  placeHeldLabel: () => boolean
+  placeHeldLabel: () => PlacedLabelRecord | null
+  placeLabelAtRecordedPose: (record: PlacedLabelRecord) => boolean
   cancelHeldLabel: () => void
+  fastForward: (durationSec: number) => void
+  resetAllSheets: () => void
   update: (dt: number) => void
 }
 
@@ -276,8 +296,9 @@ export function createPrintManager(
   function spawnSheetFromCanvas(
     printer: PrinterKind,
     canvas: HTMLCanvasElement,
-  ): boolean {
-    if (disposed) return false
+    explicitSheetId?: string,
+  ): { droppedPrevious: boolean; sheetId: string } {
+    if (disposed) return { droppedPrevious: false, sheetId: '' }
 
     const prev = activeSheets[printer]
     const droppedPrevious = prev !== null
@@ -312,7 +333,7 @@ export function createPrintManager(
       clippingPlanes: [clipPlanes[printer]],
     })
 
-    const id = `${printer}-sheet-${++sheetIdCounter}`
+    const id = explicitSheetId || `${printer}-sheet-${++sheetIdCounter}`
     const mesh = new THREE.Mesh(geo, mat)
     mesh.castShadow = true
     mesh.receiveShadow = true
@@ -374,7 +395,7 @@ export function createPrintManager(
       placedBackup: null,
     }
 
-    return droppedPrevious
+    return { droppedPrevious, sheetId: id }
   }
 
   const getZebraLabelTargets = (): Array<InstanceType<ThreeModule['Mesh']>> => {
@@ -425,6 +446,13 @@ export function createPrintManager(
   }
 
   const hasHeldLabel = () => heldLabel !== null
+  const getHeldLabelInfo = () =>
+    heldLabel ? { sheetId: heldLabel.id, yawOffset: heldLabel.yawOffset } : null
+  const setHeldLabelYawOffset = (yawOffset: number) => {
+    if (heldLabel) {
+      heldLabel.yawOffset = yawOffset
+    }
+  }
   const canPlaceHeldLabel = () => heldLabel !== null && heldSurfaceValid
 
   const attachPreviewBorder = (sheet: PrintedSheet) => {
@@ -605,8 +633,8 @@ export function createPrintManager(
     return false
   }
 
-  const placeHeldLabel = (): boolean => {
-    if (!heldLabel || !heldSurfaceValid) return false
+  const placeHeldLabel = (): PlacedLabelRecord | null => {
+    if (!heldLabel || !heldSurfaceValid) return null
     const sheet = heldLabel
     heldLabel = null
     heldSurfaceValid = false
@@ -623,7 +651,10 @@ export function createPrintManager(
     sheet.mesh.quaternion.copy(heldCommitQuat)
     sheet.mesh.updateMatrixWorld(true)
 
-    if (drawerTrayGroup && isDescendantOf(heldCommitObject, drawerTrayGroup)) {
+    const inDrawer = Boolean(
+      drawerTrayGroup && isDescendantOf(heldCommitObject, drawerTrayGroup),
+    )
+    if (inDrawer && drawerTrayGroup) {
       drawerTrayGroup.attach(sheet.mesh)
     } else {
       webglScene.attach(sheet.mesh)
@@ -650,6 +681,96 @@ export function createPrintManager(
     }
 
     heldCommitObject = null
+    return {
+      sheetId: sheet.id,
+      targetKind: inDrawer ? 'drawer' : 'scene',
+      pos: [
+        Number(sheet.mesh.position.x.toFixed(2)),
+        Number(sheet.mesh.position.y.toFixed(2)),
+        Number(sheet.mesh.position.z.toFixed(2)),
+      ],
+      quat: [
+        Number(sheet.mesh.quaternion.x.toFixed(6)),
+        Number(sheet.mesh.quaternion.y.toFixed(6)),
+        Number(sheet.mesh.quaternion.z.toFixed(6)),
+        Number(sheet.mesh.quaternion.w.toFixed(6)),
+      ],
+      yawOffset: Number(sheet.yawOffset.toFixed(5)),
+    }
+  }
+
+  const placeLabelAtRecordedPose = (record: PlacedLabelRecord): boolean => {
+    if (disposed) return false
+
+    let sheet: PrintedSheet | null = null
+    if (heldLabel && heldLabel.id === record.sheetId) {
+      sheet = heldLabel
+      heldLabel = null
+      heldSurfaceValid = false
+      heldCommitObject = null
+    } else if (activeSheets.zebra?.id === record.sheetId) {
+      sheet = activeSheets.zebra
+      activeSheets.zebra = null
+    } else {
+      const pIdx = placedLabels.findIndex((s) => s.id === record.sheetId)
+      if (pIdx >= 0) {
+        sheet = placedLabels.splice(pIdx, 1)[0]
+      } else {
+        const dIdx = droppingSheets.findIndex((s) => s.id === record.sheetId)
+        if (dIdx >= 0) {
+          sheet = droppingSheets.splice(dIdx, 1)[0]
+        } else {
+          const lIdx = landedSheets.findIndex((s) => s.id === record.sheetId)
+          if (lIdx >= 0) {
+            sheet = landedSheets.splice(lIdx, 1)[0]
+          } else if (heldLabel) {
+            sheet = heldLabel
+            heldLabel = null
+            heldSurfaceValid = false
+            heldCommitObject = null
+          }
+        }
+      }
+    }
+
+    if (!sheet) return false
+
+    detachPreviewBorder(sheet)
+    sheet.mat.clippingPlanes = null
+    sheet.mat.polygonOffset = true
+    sheet.mat.polygonOffsetFactor = -2
+    sheet.mat.polygonOffsetUnits = -2
+    sheet.mat.needsUpdate = true
+    sheet.mesh.castShadow = false
+    sheet.mesh.receiveShadow = true
+    sheet.yawOffset = record.yawOffset
+    sheet.placedBackup = null
+
+    const parent =
+      record.targetKind === 'drawer' && drawerTrayGroup
+        ? drawerTrayGroup
+        : webglScene
+    parent.add(sheet.mesh)
+    sheet.mesh.position.set(record.pos[0], record.pos[1], record.pos[2])
+    sheet.mesh.quaternion.set(
+      record.quat[0],
+      record.quat[1],
+      record.quat[2],
+      record.quat[3],
+    )
+    sheet.mesh.updateMatrixWorld(true)
+    sheet.mesh.userData = {
+      tabletTitle: 'Zebra-Etikett',
+      tabletId: sheet.id,
+      labelId: sheet.id,
+      kind: 'zebra-label' as const,
+    }
+
+    placedLabels.push(sheet)
+    while (placedLabels.length > MAX_PLACED_LABELS) {
+      const oldest = placedLabels.shift()
+      if (oldest) disposeSheet(oldest)
+    }
     return true
   }
 
@@ -691,49 +812,57 @@ export function createPrintManager(
   const printZpl = (
     zpl: string,
     logMeta?: PrintLogMeta,
+    explicitSheetId?: string,
   ): PrintJobOutcome => {
     const rendered = renderZplToCanvas(zpl, {
       defaultWidthDots: activeZebraMedia.widthPx,
       defaultHeightDots: activeZebraMedia.heightPx,
     })
-    const droppedPrevious = spawnSheetFromCanvas('zebra', rendered.canvas)
-
-    const metaSummary = {
-      printer: 'zebra' as const,
-      protocol: 'zpl' as const,
-      sender: logMeta?.sender ?? 'unknown',
-      origin: logMeta?.origin,
-      messageName: logMeta?.messageName,
-      jobId: logMeta?.jobId,
-      timestamp: new Date().toISOString(),
-      charLength: zpl.length,
-      dpi: activeZebraMedia.dpi,
-      reel: activeZebraMedia.id,
-      renderedSizeDots: {
-        width: rendered.widthDots,
-        height: rendered.heightDots,
-      },
-      droppedPrevious,
-      commandsUsed: rendered.commandsUsed,
-      unhandledCommands: rendered.unhandledCommands,
-    }
-
-    console.group(
-      `[scene3d:print] ZPL -> Zebra ZD420 (from ${metaSummary.sender}${metaSummary.jobId ? `, jobId=${metaSummary.jobId}` : ''
-      })`,
+    const { droppedPrevious, sheetId } = spawnSheetFromCanvas(
+      'zebra',
+      rendered.canvas,
+      explicitSheetId,
     )
-    console.log('meta:', metaSummary)
-    console.log('zpl content:\n' + zpl)
-    if (rendered.unhandledCommands.length > 0) {
-      console.warn(
-        'unhandled ZPL commands (candidates for emulation):',
-        rendered.unhandledCommands,
+
+    if (!explicitSheetId) {
+      const metaSummary = {
+        printer: 'zebra' as const,
+        protocol: 'zpl' as const,
+        sender: logMeta?.sender ?? 'unknown',
+        origin: logMeta?.origin,
+        messageName: logMeta?.messageName,
+        jobId: logMeta?.jobId,
+        timestamp: new Date().toISOString(),
+        charLength: zpl.length,
+        dpi: activeZebraMedia.dpi,
+        reel: activeZebraMedia.id,
+        renderedSizeDots: {
+          width: rendered.widthDots,
+          height: rendered.heightDots,
+        },
+        droppedPrevious,
+        commandsUsed: rendered.commandsUsed,
+        unhandledCommands: rendered.unhandledCommands,
+      }
+
+      console.group(
+        `[scene3d:print] ZPL -> Zebra ZD420 (from ${metaSummary.sender}${metaSummary.jobId ? `, jobId=${metaSummary.jobId}` : ''
+        })`,
       )
+      console.log('meta:', metaSummary)
+      console.log('zpl content:\n' + zpl)
+      if (rendered.unhandledCommands.length > 0) {
+        console.warn(
+          'unhandled ZPL commands (candidates for emulation):',
+          rendered.unhandledCommands,
+        )
+      }
+      console.groupEnd()
     }
-    console.groupEnd()
 
     return {
       printer: 'zebra',
+      sheetId,
       droppedPrevious,
       kickDrawer: false,
       dpi: activeZebraMedia.dpi,
@@ -742,65 +871,78 @@ export function createPrintManager(
     }
   }
 
-  const printEscPos: PrintManager['printEscPos'] = (input, logMeta) => {
+  const printEscPos: PrintManager['printEscPos'] = (
+    input,
+    logMeta,
+    explicitSheetId,
+  ) => {
     const bytes = normalizeEscPosBytes(input)
     const rendered = renderEscPosToCanvas(bytes)
-    const droppedPrevious = spawnSheetFromCanvas('epson', rendered.canvas)
-
-    const inputFormat =
-      input.bytes instanceof Uint8Array || Array.isArray(input.bytes) || Array.isArray(input.data)
-        ? 'bytes'
-        : typeof input.base64 === 'string' || input.encoding === 'base64'
-          ? 'base64'
-          : 'string'
-
-    const metaSummary = {
-      printer: 'epson' as const,
-      protocol: 'escpos' as const,
-      sender: logMeta?.sender ?? 'unknown',
-      origin: logMeta?.origin,
-      messageName: logMeta?.messageName,
-      jobId: logMeta?.jobId,
-      timestamp: new Date().toISOString(),
-      inputFormat,
-      encoding: typeof input.encoding === 'string' ? input.encoding : undefined,
-      byteLength: bytes.length,
-      renderedSizeDots: {
-        width: rendered.widthDots,
-        height: rendered.heightDots,
-      },
-      kickDrawer: rendered.kickDrawer,
-      droppedPrevious,
-      commandsUsed: rendered.commandsUsed,
-      unhandledCommands: rendered.unhandledCommands,
-    }
-
-    console.group(
-      `[scene3d:print] ESC/POS -> Epson TM-m30III (from ${metaSummary.sender}, ${bytes.length} bytes${metaSummary.jobId ? `, jobId=${metaSummary.jobId}` : ''
-      })`,
+    const { droppedPrevious, sheetId } = spawnSheetFromCanvas(
+      'epson',
+      rendered.canvas,
+      explicitSheetId,
     )
-    console.log('meta:', metaSummary)
-    console.log('readable content:\n' + formatEscPosReadable(bytes))
-    console.log('raw payload:', {
-      base64: escPosBytesToBase64(bytes),
-      bytes,
-      originalData: input,
-    })
-    if (rendered.unhandledCommands.length > 0) {
-      console.warn(
-        'unhandled ESC/POS commands (candidates for emulation):',
-        rendered.unhandledCommands,
+    const escposBase64 = escPosBytesToBase64(bytes)
+
+    if (!explicitSheetId) {
+      const inputFormat =
+        input.bytes instanceof Uint8Array || Array.isArray(input.bytes) || Array.isArray(input.data)
+          ? 'bytes'
+          : typeof input.base64 === 'string' || input.encoding === 'base64'
+            ? 'base64'
+            : 'string'
+
+      const metaSummary = {
+        printer: 'epson' as const,
+        protocol: 'escpos' as const,
+        sender: logMeta?.sender ?? 'unknown',
+        origin: logMeta?.origin,
+        messageName: logMeta?.messageName,
+        jobId: logMeta?.jobId,
+        timestamp: new Date().toISOString(),
+        inputFormat,
+        encoding: typeof input.encoding === 'string' ? input.encoding : undefined,
+        byteLength: bytes.length,
+        renderedSizeDots: {
+          width: rendered.widthDots,
+          height: rendered.heightDots,
+        },
+        kickDrawer: rendered.kickDrawer,
+        droppedPrevious,
+        commandsUsed: rendered.commandsUsed,
+        unhandledCommands: rendered.unhandledCommands,
+      }
+
+      console.group(
+        `[scene3d:print] ESC/POS -> Epson TM-m30III (from ${metaSummary.sender}, ${bytes.length} bytes${metaSummary.jobId ? `, jobId=${metaSummary.jobId}` : ''
+        })`,
       )
+      console.log('meta:', metaSummary)
+      console.log('readable content:\n' + formatEscPosReadable(bytes))
+      console.log('raw payload:', {
+        base64: escposBase64,
+        bytes,
+        originalData: input,
+      })
+      if (rendered.unhandledCommands.length > 0) {
+        console.warn(
+          'unhandled ESC/POS commands (candidates for emulation):',
+          rendered.unhandledCommands,
+        )
+      }
+      console.groupEnd()
     }
-    console.groupEnd()
 
     return {
       printer: 'epson',
+      sheetId,
       droppedPrevious,
       kickDrawer: rendered.kickDrawer,
       dpi: ZEBRA_DPI,
       widthPx: rendered.widthDots,
       heightPx: rendered.heightDots,
+      escposBase64,
     }
   }
 
@@ -899,13 +1041,13 @@ export function createPrintManager(
       }
     }
 
-    const dispose = () => {
-      if (disposed) return
-      disposed = true
+    const resetAllSheets = () => {
       if (heldLabel) {
         disposeSheet(heldLabel)
         heldLabel = null
       }
+      heldSurfaceValid = false
+      heldCommitObject = null
       for (const kind of ['zebra', 'epson'] as const) {
         const s = activeSheets[kind]
         if (s) {
@@ -919,6 +1061,29 @@ export function createPrintManager(
       landedSheets.length = 0
       for (const s of placedLabels) disposeSheet(s)
       placedLabels.length = 0
+      floorStackCounter = 0
+      placedStackCounter = 0
+    }
+
+    const fastForward = (durationSec: number) => {
+      let rem = Math.min(12, Math.max(0, durationSec))
+      while (rem > 0.001) {
+        const step = Math.min(0.05, rem)
+        update(step)
+        rem -= step
+        const anyActiveFeed =
+          (activeSheets.zebra &&
+            activeSheets.zebra.emerged < activeSheets.zebra.targetEmerged) ||
+          (activeSheets.epson &&
+            activeSheets.epson.emerged < activeSheets.epson.targetEmerged)
+        if (!anyActiveFeed && droppingSheets.length === 0) break
+      }
+    }
+
+    const dispose = () => {
+      if (disposed) return
+      disposed = true
+      resetAllSheets()
       previewBorderGeo.dispose()
       previewBorderMat.dispose()
     }
@@ -932,12 +1097,17 @@ export function createPrintManager(
       getPlacedLabelSurfaces,
       getAllSheetMeshes,
       hasHeldLabel,
+      getHeldLabelInfo,
+      setHeldLabelYawOffset,
       canPlaceHeldLabel,
       pickUpLabel,
       rotateHeldLabel,
       updateHeldLabelPreview,
       placeHeldLabel,
+      placeLabelAtRecordedPose,
       cancelHeldLabel,
+      fastForward,
+      resetAllSheets,
       update,
       dispose,
     }
