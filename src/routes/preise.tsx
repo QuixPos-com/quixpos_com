@@ -42,6 +42,12 @@ export function PreiseRoute() {
               Sofort startklar auf unserer geteilten Cloud-Infrastruktur zum
               Kennenlernen und für den schnellen Einstieg.
             </p>
+            <div class="pricing-card-cta">
+              <Link class="btn btn-primary pricing-card-btn" href="/account">
+                Loslegen
+                <span class="btn-arrow" aria-hidden="true">→</span>
+              </Link>
+            </div>
           </article>
 
           <article class="pricing-card pricing-card-featured">
@@ -55,6 +61,13 @@ export function PreiseRoute() {
               Eigene isolierte Cloud-Instanz mit fest reservierten
               Compute-Ressourcen und planbaren Updates.
             </p>
+            <div class="pricing-card-cta">
+              <Link class="btn pricing-card-btn pricing-card-btn-featured" href="/account">
+                Kaufen für 9,90 / Monat
+                <span class="btn-arrow" aria-hidden="true">→</span>
+              </Link>
+              <span class="pricing-cta-note">Jederzeit kündbar.</span>
+            </div>
           </article>
 
           <article class="pricing-card">
@@ -70,6 +83,12 @@ export function PreiseRoute() {
             <p class="pricing-desc">
               Installation auf AWS t3.small, Raspberry oder Windows Service.
             </p>
+            <div class="pricing-card-cta">
+              <Link class="btn btn-primary pricing-card-btn" href="/account">
+                Kaufen für 99,-
+                <span class="btn-arrow" aria-hidden="true">→</span>
+              </Link>
+            </div>
           </article>
         </section>
 
@@ -140,30 +159,23 @@ export function PreiseRoute() {
                     <span class="matrix-value">Planbar</span>
                   </td>
                 </tr>
+                <tr>
+                  <th scope="row">
+                    <span class="matrix-row-label">Preisstufenwechsel</span>
+                    <span class="matrix-row-sub">Wechsel zwischen allen Preisstufen jederzeit möglich</span>
+                  </th>
+                  <td>
+                    <span class="matrix-value">Jederzeit, jede Richtung</span>
+                  </td>
+                  <td class="col-featured">
+                    <span class="matrix-value">Jederzeit, jede Richtung</span>
+                  </td>
+                  <td>
+                    <span class="matrix-value">Jederzeit, jede Richtung</span>
+                  </td>
+                </tr>
               </tbody>
             </table>
-          </div>
-
-          <div class="pricing-actions">
-            <p>
-              <strong>Direkt ausprobieren?</strong> Starte kostenlos mit einer
-              Test-Instanz oder öffne die Live-Demo im Browser.
-            </p>
-            <div class="cta-group">
-              <Link class="btn btn-primary" href="/account">
-                Kostenlos starten
-                <span class="btn-arrow" aria-hidden="true">→</span>
-              </Link>
-              <a
-                class="btn btn-secondary"
-                href="https://posdemo.quixpos.com"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Demo POS
-                <span class="btn-arrow" aria-hidden="true">→</span>
-              </a>
-            </div>
           </div>
         </section>
       </main>

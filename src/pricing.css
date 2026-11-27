@@ -175,6 +175,44 @@
   color: rgba(238, 243, 247, 0.78);
 }
 
+.pricing-card-cta {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+.pricing-card-btn {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+
+.pricing-card-btn-featured {
+  background: var(--teal-bright);
+  color: var(--ink);
+  box-shadow: 0 10px 26px rgba(30, 201, 168, 0.25);
+}
+
+.pricing-card-btn-featured:hover {
+  background: #27dfb9;
+  color: var(--ink);
+  transform: translateY(-2px);
+}
+
+.pricing-cta-note {
+  font-size: 0.84rem;
+  font-weight: 500;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.pricing-card-featured .pricing-cta-note {
+  color: rgba(238, 243, 247, 0.72);
+}
+
 /* —— Comparison Matrix —— */
 .pricing-matrix-section {
   opacity: 0;
@@ -297,30 +335,6 @@
   color: var(--ink);
 }
 
-.pricing-actions {
-  margin-top: 2.5rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.4rem 1.6rem;
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.65);
-  border: 1px solid var(--line);
-}
-
-.pricing-actions p {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.98rem;
-}
-
-.pricing-actions strong {
-  color: var(--ink);
-  font-family: var(--font-display);
-}
-
 @media (min-width: 860px) {
   .pricing-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -340,12 +354,6 @@
   .pricing-matrix th,
   .pricing-matrix td {
     padding: 0.9rem 0.85rem;
-  }
-
-  .pricing-actions {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 1.2rem;
   }
 }
 
