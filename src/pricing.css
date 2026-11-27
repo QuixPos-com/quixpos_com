@@ -156,6 +156,14 @@
   color: rgba(238, 243, 247, 0.82);
 }
 
+.pricing-period-sub {
+  flex-basis: 100%;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--teal-deep);
+  line-height: 1.4;
+}
+
 .pricing-desc {
   margin: 0;
   font-size: 0.96rem;

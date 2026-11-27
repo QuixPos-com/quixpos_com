@@ -62,7 +62,10 @@ export function PreiseRoute() {
             <h2 class="pricing-tier-name">On-Premise</h2>
             <div class="pricing-price-block">
               <span class="pricing-amount">99 €</span>
-              <span class="pricing-period">+ 1 Jahr Updates</span>
+              <span class="pricing-period">einmalig,</span>
+              <span class="pricing-period-sub">
+                beinhaltet 1 Jahr Updates und persönlichen Support
+              </span>
             </div>
             <p class="pricing-desc">
               Installation auf AWS t3.small, Raspberry oder Windows Service.

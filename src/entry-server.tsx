@@ -93,7 +93,7 @@ export function render(url: string): RenderResult {
   if (cleanUrl === '/preise' || cleanUrl === '/pricing') {
     title = 'Preise – QuixPOS'
     description =
-      'QuixPOS Preise und Versionen im Vergleich: Geteilte Cloud-Instanz (kostenlos), Eigene Cloud-Instanz (9,90 € / Monat) und On-Premise (99 € + 1 Jahr Updates).'
+      'QuixPOS Preise und Versionen im Vergleich: Geteilte Cloud-Instanz (kostenlos), Eigene Cloud-Instanz (9,90 € / Monat) und On-Premise (99 € einmalig, beinhaltet 1 Jahr Updates und persönlichen Support).'
   } else if (cleanUrl === '/oauth/authorize') {
     title = 'Anmelden – QuixPOS OAuth'
     description = 'Melde dich mit deinem QuixPOS-Profil auf deiner Instanz an.'
