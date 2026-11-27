@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Generated SEO / LLM index files (built by npm run build)
+public/llms.txt
+public/llms-full.txt
+public/sitemap.xml
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -31,7 +31,7 @@ const SITE_URL         = 'https://quixpos.com';
 // -- Helpers
 
 function stripBom(str) {
-  return str.replace(/^\uFEFF/, '');
+  return str.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
 }
 
 function parseFrontmatter(raw) {

@@ -14,6 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const CONTENT_DIR = path.join(ROOT, 'src', 'docs', 'content');
@@ -23,7 +24,24 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 const SITE_URL = 'https://quixpos.com';
 
 function stripBom(str) {
-  return str.replace(/^\uFEFF/, '');
+  return str.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+}
+
+function getGitLastMod(targetPath, fallbackDate) {
+  try {
+    const rel = path.relative(ROOT, targetPath).replace(/\\/g, '/');
+    const out = execFileSync(
+      'git',
+      ['log', '-1', '--format=%cs', '--', rel],
+      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(out)) {
+      return out;
+    }
+  } catch {
+    // fallback below
+  }
+  return fallbackDate;
 }
 
 function parseFrontmatterId(raw) {
@@ -64,7 +82,8 @@ function writeToTargets(filename, content) {
 }
 
 function build() {
-  const today = new Date().toISOString().split('T')[0];
+  const fallbackToday = new Date().toISOString().split('T')[0];
+  const headDate = getGitLastMod(ROOT, fallbackToday);
 
   const staticUrls = [
     { loc: `${SITE_URL}/`, priority: '1.0', changefreq: 'weekly' },
@@ -95,13 +114,7 @@ function build() {
       const id = parseFrontmatterId(raw);
       if (!id) continue;
 
-      let lastmod = today;
-      try {
-        const stat = fs.statSync(filePath);
-        lastmod = stat.mtime.toISOString().split('T')[0];
-      } catch {
-        // fallback to today
-      }
+      const lastmod = getGitLastMod(filePath, headDate);
 
       docUrls.push({
         loc: `${SITE_URL}/docs/${id}`,
@@ -112,7 +125,7 @@ function build() {
     }
   }
 
-  const allUrls = [...staticUrls.map((u) => ({ ...u, lastmod: today })), ...docUrls];
+  const allUrls = [...staticUrls.map((u) => ({ ...u, lastmod: headDate })), ...docUrls];
 
   const xmlLines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
