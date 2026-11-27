@@ -7,10 +7,25 @@ export interface ApiUser {
   picture?: string
 }
 
+export type Tier = 'free' | 'cloud' | 'onprem'
+
 export interface Subscription {
   id: number
-  tier: string
+  tier: Tier
   validUntil: string
+  autoRenew?: boolean
+  hasSavedCard?: boolean
+  cardLast4?: string | null
+  cardType?: string | null
+  licenseKey?: string | null
+  onpremUpdatesUntil?: string | null
+}
+
+export interface SubscriptionSnapshot {
+  subscription: Subscription | null
+  instance: Instance | null
+  dashfreeCreated?: boolean
+  sumupConfigured?: boolean
 }
 
 export interface Instance {
@@ -65,8 +80,31 @@ export const logout = () => request<unknown>('/auth/logout', { method: 'POST' })
 export const checkName = (name: string) =>
   request<{ name: string; available: boolean }>(`/instance/check-name?name=${encodeURIComponent(name)}`)
 
-export const getSubscription = () =>
-  request<{ subscription: Subscription | null; instance: Instance | null; dashfreeCreated?: boolean }>('/subscription')
+export const getSubscription = () => request<SubscriptionSnapshot>('/subscription')
+
+export const createBillingCheckout = (plan: 'cloud' | 'onprem', name?: string) =>
+  request<{ checkoutId: string; plan: 'cloud' | 'onprem'; amount: string; currency: string; recurring: boolean }>(
+    '/billing/checkout',
+    { method: 'POST', body: JSON.stringify({ plan, name }) },
+  )
+
+export const confirmBillingCheckout = (checkoutId: string) =>
+  request<{ status: 'PAID' | 'PENDING' } & Partial<SubscriptionSnapshot>>('/billing/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ checkoutId }),
+  })
+
+export const switchToFree = (name?: string) =>
+  request<{ message: string } & SubscriptionSnapshot>('/subscription/switch-free', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+
+export const cancelAutoRenew = () =>
+  request<{ message: string; subscription: Subscription }>('/subscription/cancel', { method: 'POST' })
+
+export const resumeAutoRenew = () =>
+  request<{ message: string; subscription: Subscription }>('/subscription/resume', { method: 'POST' })
 
 export const bookFree = (name: string) =>
   request<{ subscription: Subscription; instance: Instance; dashfreeCreated?: boolean }>('/subscription', {

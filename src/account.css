@@ -99,7 +99,131 @@
   color: var(--teal-deep);
 }
 
+.acc-nav-link {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+}
+
+.acc-nav-link:hover {
+  color: var(--teal-deep);
+  background: rgba(15, 159, 134, 0.1);
+}
+
+.acc-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.acc-card-head h2 {
+  margin: 0;
+}
+
+.acc-sub-meta {
+  margin-top: 0.5rem;
+}
+
+.acc-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.acc-license-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.acc-license-code {
+  display: inline-block;
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.acc-plan-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.acc-plan-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.acc-plan-tab:hover:not(:disabled) {
+  border-color: rgba(15, 159, 134, 0.5);
+}
+
+.acc-plan-tab.is-selected {
+  border-color: var(--teal);
+  background: rgba(15, 159, 134, 0.08);
+}
+
+.acc-plan-tab:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.acc-plan-tab-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.acc-plan-tab-price {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.acc-checkout-box {
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+.acc-checkout-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.acc-sumup-mount {
+  min-height: 160px;
+}
+
 @media (max-width: 560px) {
+  .acc-plan-tabs {
+    grid-template-columns: 1fr;
+  }
+  .acc-checkout-head {
+    flex-direction: column;
+  }
   .account-header {
     padding: 0.85rem 1rem;
     gap: 0.5rem;

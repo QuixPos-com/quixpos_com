@@ -43,7 +43,7 @@ export function PreiseRoute() {
               Kennenlernen und für den schnellen Einstieg.
             </p>
             <div class="pricing-card-cta">
-              <Link class="btn btn-primary pricing-card-btn" href="/account">
+              <Link class="btn btn-primary pricing-card-btn" href="/account?plan=free">
                 Loslegen
                 <span class="btn-arrow" aria-hidden="true">→</span>
               </Link>
@@ -62,7 +62,7 @@ export function PreiseRoute() {
               Compute-Ressourcen und planbaren Updates.
             </p>
             <div class="pricing-card-cta">
-              <Link class="btn pricing-card-btn pricing-card-btn-featured" href="/account">
+              <Link class="btn pricing-card-btn pricing-card-btn-featured" href="/account?plan=cloud">
                 Kaufen für 9,90 / Monat
                 <span class="btn-arrow" aria-hidden="true">→</span>
               </Link>
@@ -87,7 +87,7 @@ export function PreiseRoute() {
               Installation auf AWS t3.small, Raspberry oder Windows Service.
             </p>
             <div class="pricing-card-cta">
-              <Link class="btn btn-primary pricing-card-btn" href="/account">
+              <Link class="btn btn-primary pricing-card-btn" href="/account?plan=onprem">
                 Kaufen für 99,-
                 <span class="btn-arrow" aria-hidden="true">→</span>
               </Link>
