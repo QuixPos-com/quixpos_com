@@ -72,7 +72,10 @@ export function PreiseRoute() {
 
           <article class="pricing-card">
             <span class="pricing-tier-tag">Selbst gehostet</span>
-            <h2 class="pricing-tier-name">On-Premise</h2>
+            <h2 class="pricing-tier-name">
+              On-Premise{' '}
+              <span class="pricing-tier-os">Windows, Linux oder Mac</span>
+            </h2>
             <div class="pricing-price-block">
               <span class="pricing-amount">99 €</span>
               <span class="pricing-period">einmalig,</span>

@@ -118,11 +118,24 @@
 
 .pricing-tier-name {
   margin: 0 0 1rem;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.5rem;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.35rem;
   letter-spacing: -0.025em;
   line-height: 1.25;
+}
+
+.pricing-tier-os {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .pricing-price-block {
@@ -188,6 +201,8 @@
   width: 100%;
   justify-content: center;
   text-align: center;
+  padding-inline: 1rem;
+  white-space: nowrap;
 }
 
 .pricing-card-btn-featured {
@@ -204,6 +219,7 @@
 
 .pricing-cta-note {
   font-size: 0.84rem;
+  line-height: 1.3rem;
   font-weight: 500;
   text-align: center;
   color: var(--ink-soft);
@@ -335,10 +351,16 @@
   color: var(--ink);
 }
 
-@media (min-width: 860px) {
+@media (min-width: 900px) {
   .pricing-grid {
     grid-template-columns: repeat(3, 1fr);
     align-items: stretch;
+  }
+
+  .pricing-card-cta {
+    display: grid;
+    grid-template-rows: auto 1.3rem;
+    row-gap: 0.45rem;
   }
 }
 
