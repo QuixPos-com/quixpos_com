@@ -26,16 +26,75 @@ export class DocsArticle extends Component<DocsArticleProps, DocsArticleState> {
 
   componentDidMount() {
     this.updateAllFigures()
+    void this.resolvePosApkLinks()
   }
 
   componentDidUpdate(prevProps: DocsArticleProps, prevState: DocsArticleState) {
     if (prevProps.page.id !== this.props.page.id) {
       this.updateAllFigures()
+      void this.resolvePosApkLinks()
     } else if (
       prevState.preferredDevice !== this.state.preferredDevice ||
       prevState.preferredOrientation !== this.state.preferredOrientation
     ) {
       this.updateAllFigures()
+    }
+  }
+
+  private async resolvePosApkLinks() {
+    const root = this.containerRef.current
+    if (!root || typeof window === 'undefined') return
+    const links = root.querySelectorAll<HTMLAnchorElement>('a[data-pos-apk-link]')
+    if (links.length === 0) return
+
+    const endpoints = [
+      {
+        manifestUrl: '/pos-apk-manifest.json',
+        baseOrigin: 'https://pos.quixpos.com',
+      },
+      {
+        manifestUrl: 'https://pos.quixpos.com/android-apk.json',
+        baseOrigin: 'https://pos.quixpos.com',
+      },
+      {
+        manifestUrl: 'https://posdemo.quixpos.com/android-apk.json',
+        baseOrigin: 'https://posdemo.quixpos.com',
+      },
+    ]
+
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(ep.manifestUrl, { cache: 'no-cache' })
+        if (!res.ok) continue
+        const contentType = res.headers.get('content-type') || ''
+        if (contentType.includes('text/html')) continue
+        const data = (await res.json()) as {
+          file?: unknown
+          url?: unknown
+        }
+        const file = typeof data?.file === 'string' ? data.file.trim() : ''
+        const rawUrl =
+          typeof data?.url === 'string' && data.url.trim()
+            ? data.url.trim()
+            : file
+              ? `/${file}`
+              : ''
+        if (!file || !rawUrl || !file.toLowerCase().endsWith('.apk')) continue
+
+        const resolvedHref = new URL(rawUrl, ep.baseOrigin).href
+        if (!this.containerRef.current) return
+        const currentLinks =
+          this.containerRef.current.querySelectorAll<HTMLAnchorElement>(
+            'a[data-pos-apk-link]',
+          )
+        currentLinks.forEach((a) => {
+          a.href = resolvedHref
+          a.title = file
+        })
+        return
+      } catch {
+        // Try next endpoint
+      }
     }
   }
 

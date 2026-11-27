@@ -11,7 +11,7 @@ Hier findest du alle aktuellen Installationspakete, Release-Builds und Direktdow
 
 | Paket | Plattform | Beschreibung | Download-Link |
 | :--- | :--- | :--- | :--- |
-| **QuixPOS Android App** | Android (ab 11) | APK-Paket für POS-Tablets, Handhelds & Smartphones | [QuixPOS APK](https://pos.quixpos.com/quixpos-latest.apk) |
+| **QuixPOS Android App** | Android (ab 11) | APK-Paket für POS-Tablets, Handhelds & Smartphones | [QuixPOS APK](https://pos.quixpos.com/QuixPOS-arm64-v8a-2611271304.apk) |
 | **QuixPOS2JTL Windows Setup** | Windows 10/11 / Server | Standalone Installer (`.exe`) mit Windows-Dienst & Tray-App | [QuixPOS2JTL Installer Download](https://github.com/sebseb7/quixpos2jtl/releases) |
 | **QuixPOS Web Kasse** | Jeder Browser | Sofort im Browser kassieren ohne Installation | [pos.quixpos.com](https://pos.quixpos.com) |
 | **CloudTSE** | Linux | Verbindet TSE SD Karte oder USB Stick | [CloudTSE GitHub](https://github.com/sebseb7/cloudtse/tree/main) |

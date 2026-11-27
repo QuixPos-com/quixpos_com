@@ -37,7 +37,7 @@ function stripBom(str) {
 function parseFrontmatter(raw) {
   const fm = {};
   let body = raw;
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (match) {
     for (const line of match[1].split(/\r?\n/)) {
       const colon = line.indexOf(':');

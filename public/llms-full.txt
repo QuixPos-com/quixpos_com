@@ -8,12 +8,9 @@ Source: https://quixpos.com/docs
 
 ## Installation & Downloads
 
-### [](https://quixpos.com/docs/)
+### [Systemübersicht](https://quixpos.com/docs/systemuebersicht)
 
-id: systemuebersicht
-title: Systemübersicht
-description: Überblick über alle Komponenten des QuixPOS-Systems – von der Datenbank bis zum Drucker.
-
+Überblick über alle Komponenten des QuixPOS-Systems – von der Datenbank bis zum Drucker.
 
 Übersicht
 
@@ -86,11 +83,9 @@ Hier erreichst du direkt die Entwickler und kannst dich mit anderen QuixPOS-Nutz
 
 ---
 
-### [](https://quixpos.com/docs/)
+### [Downloads & Releases](https://quixpos.com/docs/downloads-releases)
 
-id: downloads-releases
-title: Downloads & Releases
-description: Offizielle Releases herunterladen: Android APK, Windows Installer und Web-App.
+Offizielle Releases herunterladen: Android APK, Windows Installer und Web-App.
 
 Downloads & GitHub Releases
 

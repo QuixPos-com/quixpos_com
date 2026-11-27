@@ -11,8 +11,8 @@ Source: https://quixpos.com/docs
 
 ## Installation & Downloads
 
-- [](https://quixpos.com/docs/)
-- [](https://quixpos.com/docs/)
+- [Systemübersicht](https://quixpos.com/docs/systemuebersicht): Überblick über alle Komponenten des QuixPOS-Systems – von der Datenbank bis zum Drucker.
+- [Downloads & Releases](https://quixpos.com/docs/downloads-releases): Offizielle Releases herunterladen: Android APK, Windows Installer und Web-App.
 
 ## QuixPOS2JTL
 

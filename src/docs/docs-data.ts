@@ -64,7 +64,7 @@ function parseFrontmatter(rawInput: string): {
   const raw = rawInput.replace(/^\uFEFF/, '')
   let body = raw
 
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/)
   if (match) {
     const lines = match[1].split(/\r?\n/)
     for (const line of lines) {

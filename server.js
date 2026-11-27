@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import http from 'node:http'
+import https from 'node:https'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 
@@ -16,6 +17,45 @@ async function startServer() {
 
   const server = http.createServer((req, res) => {
     const url = req.url || '/'
+
+    // Same-origin proxy for live POS Android APK manifest (avoids cross-origin CORS issues)
+    if (url === '/pos-apk-manifest.json' || url.startsWith('/pos-apk-manifest.json?')) {
+      const localManifest = path.resolve(__dirname, '../Pos420/web/public/android-apk.json')
+      const upstreamReq = https.get('https://pos.quixpos.com/android-apk.json', { timeout: 4000 }, (upRes) => {
+        if (upRes.statusCode === 200) {
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          })
+          upRes.pipe(res)
+          return
+        }
+        upRes.resume()
+        if (fs.existsSync(localManifest)) {
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          })
+          res.end(fs.readFileSync(localManifest, 'utf-8'))
+        } else {
+          res.statusCode = 404
+          res.end('{}')
+        }
+      })
+      upstreamReq.on('error', () => {
+        if (fs.existsSync(localManifest)) {
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          })
+          res.end(fs.readFileSync(localManifest, 'utf-8'))
+        } else {
+          res.statusCode = 502
+          res.end('{}')
+        }
+      })
+      return
+    }
 
     // Proxy /api and /.well-known to the backend
     if (url === '/api' || url.startsWith('/api/') || url.startsWith('/.well-known')) {

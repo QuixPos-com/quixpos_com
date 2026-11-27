@@ -230,9 +230,17 @@ export function renderMarkdown(markdown: string): RenderResult {
 
     // Inline links: [label](url)
     text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-      const isExt = url.startsWith('http')
+      const trimmedUrl = url.trim()
+      const isExt = trimmedUrl.startsWith('http')
       const target = isExt ? ' target="_blank" rel="noopener noreferrer"' : ''
-      return `<a href="${url}" class="docs-link"${target}>${label}${isExt ? ' ↗' : ''}</a>`
+      const isPosApk =
+        /^https:\/\/pos(?:demo)?\.quixpos\.com\/(?:QuixPOS-[^/]+\.apk|quixpos-latest\.apk|android-apk\.json)$/i.test(
+          trimmedUrl,
+        )
+      const apkAttr = isPosApk
+        ? ' data-pos-apk-link="https://pos.quixpos.com"'
+        : ''
+      return `<a href="${trimmedUrl}" class="docs-link"${target}${apkAttr}>${label}${isExt ? ' ↗' : ''}</a>`
     })
 
     // Bold + Italic: ***text***
