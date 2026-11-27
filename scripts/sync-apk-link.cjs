@@ -12,6 +12,7 @@ const DOC_FILE = path.join(
   '01-installation',
   '01-downloads-releases.md',
 );
+const APK_HELPER_FILE = path.join(ROOT, 'src', 'apkDownload.ts');
 
 const MANIFEST_CANDIDATES = [
   path.resolve(ROOT, '../Pos420/web/public/android-apk.json'),
@@ -45,6 +46,18 @@ function syncApkLink() {
       console.log(`[sync-apk-link] Updated APK link -> ${targetUrl}`);
     } else {
       console.log(`[sync-apk-link] APK link up to date (${targetUrl})`);
+    }
+
+    if (fs.existsSync(APK_HELPER_FILE)) {
+      const rawHelper = fs.readFileSync(APK_HELPER_FILE, 'utf8');
+      const updatedHelper = rawHelper.replace(
+        /FALLBACK_ANDROID_APK_FILE = '[^']+'/,
+        `FALLBACK_ANDROID_APK_FILE = '${file}'`,
+      );
+      if (updatedHelper !== rawHelper) {
+        fs.writeFileSync(APK_HELPER_FILE, updatedHelper, 'utf8');
+        console.log(`[sync-apk-link] Updated FALLBACK_ANDROID_APK_FILE -> ${file}`);
+      }
     }
   } catch (err) {
     console.warn('[sync-apk-link] Skipped:', err.message);

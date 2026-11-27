@@ -548,6 +548,7 @@ img {
 
 .footer-links {
   display: flex;
+  align-items: center;
   gap: 1.25rem;
   margin: 0;
 }
@@ -559,6 +560,35 @@ img {
 
 .footer-links a:hover {
   color: var(--teal-deep);
+}
+
+.footer-apk-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(15, 159, 134, 0.1);
+  border: 1px solid rgba(15, 159, 134, 0.24);
+  transition:
+    color 0.2s var(--ease),
+    background 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.footer-apk-link:hover {
+  color: var(--teal-deep);
+  background: rgba(15, 159, 134, 0.2);
+  border-color: rgba(15, 159, 134, 0.5);
+  transform: translateY(-1px);
+}
+
+.footer-android-icon {
+  display: block;
+  flex-shrink: 0;
 }
 
 /* —— Motion entrance —— */

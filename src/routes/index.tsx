@@ -1,4 +1,9 @@
 import { Component } from 'preact'
+import {
+  FALLBACK_ANDROID_APK_FILE,
+  FALLBACK_ANDROID_APK_URL,
+  resolveLatestAndroidApk,
+} from '../apkDownload'
 import { Link } from '../components/Router'
 
 const INFOGRAPHICS = [
@@ -12,14 +17,28 @@ const INFOGRAPHICS = [
   },
 ]
 
-export class IndexRoute extends Component<object, { zoom: number | null }> {
-  state = { zoom: null as number | null }
+interface IndexRouteState {
+  zoom: number | null
+  apkUrl: string
+  apkFile: string
+  apkResolved: boolean
+}
+
+export class IndexRoute extends Component<object, IndexRouteState> {
+  state: IndexRouteState = {
+    zoom: null,
+    apkUrl: FALLBACK_ANDROID_APK_URL,
+    apkFile: FALLBACK_ANDROID_APK_FILE,
+    apkResolved: false,
+  }
+
+  private unmounted = false
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') this.setState({ zoom: null })
   }
 
-  componentDidUpdate(_: object, prev: { zoom: number | null }) {
+  componentDidUpdate(_: object, prev: IndexRouteState) {
     if (typeof document === 'undefined' || prev.zoom === this.state.zoom) return
     const open = this.state.zoom !== null
     const wasOpen = prev.zoom !== null
@@ -39,7 +58,17 @@ export class IndexRoute extends Component<object, { zoom: number | null }> {
   private observer: IntersectionObserver | null = null
 
   componentDidMount() {
+    this.unmounted = false
     window.addEventListener('keydown', this.onKeyDown)
+    void resolveLatestAndroidApk().then((apk) => {
+      if (!this.unmounted) {
+        this.setState({
+          apkUrl: apk.href,
+          apkFile: apk.file,
+          apkResolved: true,
+        })
+      }
+    })
     if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
       return
     }
@@ -65,6 +94,7 @@ export class IndexRoute extends Component<object, { zoom: number | null }> {
   }
 
   componentWillUnmount() {
+    this.unmounted = true
     window.removeEventListener('keydown', this.onKeyDown)
     document.documentElement.style.overflow = ''
     document.body.style.paddingRight = ''
@@ -259,6 +289,39 @@ export class IndexRoute extends Component<object, { zoom: number | null }> {
         <footer class="site-footer">
           <p><span class="logo-inline">QuixPOS</span> · Kassensystem</p>
           <p class="footer-links">
+            <a
+              class="footer-apk-link"
+              href={this.state.apkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`QuixPOS Android APK herunterladen (${this.state.apkFile})`}
+              title={`QuixPOS Android APK herunterladen (${this.state.apkFile})`}
+              onClick={async (e) => {
+                if (!this.state.apkResolved) {
+                  e.preventDefault()
+                  const apk = await resolveLatestAndroidApk()
+                  if (!this.unmounted) {
+                    this.setState({
+                      apkUrl: apk.href,
+                      apkFile: apk.file,
+                      apkResolved: true,
+                    })
+                  }
+                  window.location.href = apk.href
+                }
+              }}
+            >
+              <svg
+                class="footer-android-icon"
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85a.637.637 0 0 0-.83.22l-1.88 3.24a11.463 11.463 0 0 0-8.94 0L5.65 5.67a.643.643 0 0 0-.87-.2c-.28.18-.37.54-.22.83L6.4 9.48A10.78 10.78 0 0 0 1 18h22a10.78 10.78 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z" />
+              </svg>
+            </a>
             <Link href="/privacypolicy">Datenschutzerklärung</Link>
             <Link href="/terms">Nutzungsbedingungen</Link>
           </p>
