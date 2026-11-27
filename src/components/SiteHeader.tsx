@@ -1,12 +1,6 @@
 import { Link } from './Router'
 
-export interface SiteHeaderProps {
-  currentPath?: string
-}
-
-export function SiteHeader({ currentPath = '/' }: SiteHeaderProps) {
-  const isPricing = currentPath === '/preise' || currentPath === '/pricing'
-
+export function SiteHeader() {
   return (
     <header class="site-header">
       <Link class="logo" href="/" aria-label="QuixPOS Startseite">
@@ -14,10 +8,7 @@ export function SiteHeader({ currentPath = '/' }: SiteHeaderProps) {
         QuixPOS
       </Link>
       <nav class="nav" aria-label="Hauptnavigation">
-        <Link
-          class={`nav-link-docs${isPricing ? ' nav-link-active' : ''}`}
-          href="/preise"
-        >
+        <Link class="nav-link-docs" href="/preise">
           Preise
         </Link>
         <Link class="nav-link-docs" href="/docs">
