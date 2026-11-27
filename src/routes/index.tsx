@@ -5,6 +5,7 @@ import {
   resolveLatestAndroidApk,
 } from '../apkDownload'
 import { Link } from '../components/Router'
+import { SiteHeader } from '../components/SiteHeader'
 
 const INFOGRAPHICS = [
   {
@@ -109,23 +110,7 @@ export class IndexRoute extends Component<object, IndexRouteState> {
       <div class="landing-container">
         <div class="atmosphere" aria-hidden="true" />
 
-        <header class="site-header">
-          <Link class="logo" href="/" aria-label="QuixPOS Startseite">
-            <span class="logo-mark" aria-hidden="true" />
-            QuixPOS
-          </Link>
-          <nav class="nav">
-            <Link class="nav-link-docs" href="/docs">
-              Dokumentation
-            </Link>
-            <Link class="nav-link-docs" href="/3d">
-              3D
-            </Link>
-            <Link class="nav-link-docs" href="/account">
-              Konto
-            </Link>
-          </nav>
-        </header>
+        <SiteHeader currentPath="/" />
 
         <main>
           <section class="hero" aria-labelledby="brand">

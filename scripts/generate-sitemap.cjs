@@ -87,6 +87,7 @@ function build() {
 
   const staticUrls = [
     { loc: `${SITE_URL}/`, priority: '1.0', changefreq: 'weekly' },
+    { loc: `${SITE_URL}/preise`, priority: '0.9', changefreq: 'monthly' },
     { loc: `${SITE_URL}/docs`, priority: '0.9', changefreq: 'weekly' },
     { loc: `${SITE_URL}/3d`, priority: '0.7', changefreq: 'monthly' },
     { loc: `${SITE_URL}/account`, priority: '0.6', changefreq: 'monthly' },

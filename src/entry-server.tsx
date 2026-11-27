@@ -73,7 +73,7 @@ function buildSocialMetaTags(opts: {
 
 export function getRoutes(): string[] {
   const pages = getAllPages()
-  const routes = ['/', '/docs', '/3d', '/3d_rec', '/account', '/oauth/authorize', '/privacypolicy', '/terms']
+  const routes = ['/', '/preise', '/docs', '/3d', '/3d_rec', '/account', '/oauth/authorize', '/privacypolicy', '/terms']
   for (const p of pages) {
     routes.push(`/docs/${p.id}`)
   }
@@ -90,7 +90,11 @@ export function render(url: string): RenderResult {
     'QuixPOS - das deutsche Kassensystem für den Ladenalltag. Demo am POS testen oder Artikel kostenlos verwalten.'
   let socialImage: SocialImageMeta | undefined
 
-  if (cleanUrl === '/oauth/authorize') {
+  if (cleanUrl === '/preise' || cleanUrl === '/pricing') {
+    title = 'Preise – QuixPOS'
+    description =
+      'QuixPOS Preise und Versionen im Vergleich: Geteilte Cloud-Instanz (kostenlos), Eigene Cloud-Instanz (9,90 € / Monat) und On-Premise (99 € + 1 Jahr Updates).'
+  } else if (cleanUrl === '/oauth/authorize') {
     title = 'Anmelden – QuixPOS OAuth'
     description = 'Melde dich mit deinem QuixPOS-Profil auf deiner Instanz an.'
   } else if (cleanUrl === '/3d' || cleanUrl === '/3d_rec') {

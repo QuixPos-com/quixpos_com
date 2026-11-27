@@ -145,6 +145,7 @@ function build() {
   indexLines.push('## Übersicht & Einstieg');
   indexLines.push('');
   indexLines.push(`- [Startseite](${SITE_URL}/): QuixPOS – Das Kassensystem für den Ladenalltag.`);
+  indexLines.push(`- [Preise](${SITE_URL}/preise): Editionen und Versionsvergleich (Geteilte Cloud-Instanz, Eigene Cloud-Instanz, On-Premise).`);
   indexLines.push(`- [Dokumentation](${SITE_URL}/docs): Handbücher, Anleitungen und Schnellstart.`);
   indexLines.push('');
 

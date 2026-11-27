@@ -8,6 +8,7 @@ import ThreeDRoute from '../routes/3d'
 import ThreeDRecRoute from '../routes/3d_rec'
 import PrivacyPolicyRoute from '../routes/privacypolicy'
 import TermsRoute from '../routes/terms'
+import PreiseRoute from '../routes/preise'
 import '../fonts.css'
 import '../style.css'
 import '../docs/docs.css'
@@ -24,6 +25,8 @@ export class App extends Component<AppProps> {
       <div class="app-root">
         <Router url={url}>
           <Route path="/" component={IndexRoute} />
+          <Route path="/preise" component={PreiseRoute} />
+          <Route path="/pricing" component={PreiseRoute} />
           <Route path="/docs" component={DocsRoute} />
           <Route path="/docs/:pageId" component={DocsRoute} />
           <Route path="/3d" component={ThreeDRoute} />
